@@ -1,5 +1,5 @@
 # Environment preparation constraints; record actual versions with the runner.
 torch>=2.4,<3
-transformers>=4.51,<5
+transformers>=4.51,<6
 peft>=0.14,<1
 accelerate>=1,<2

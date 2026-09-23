@@ -1,7 +1,7 @@
-"""Freeze source bytes once, verify them before each release experiment.
+"""Record actual runtime source; optionally freeze and audit archived releases.
 
 The source commit identifies the candidate; later documentation/evidence commits
-may have different HEADs. Their executable source set must remain byte-identical.
+may have different HEADs. Explicit archive verification requires byte-identical executable sources.
 Image and trace hashes are recorded separately by the experiment runners.
 """
 from __future__ import annotations
@@ -69,9 +69,32 @@ def verify(path: Path, root=ROOT):
     return {k: lock[k] for k in ("schema_version", "source_commit", "source_sha256", "status")}
 
 
+def runtime_identity(root=None):
+    """Record the executable working tree without requiring a frozen release."""
+    root = ROOT if root is None else Path(root)
+    names = git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', *PATHS).split('\0')
+    records = {}
+    for name in sorted(set(names)):
+        if not name or name.endswith(('.md', '.jsonl', '.csv')) or name == 'release/candidate-lock.json':
+            continue
+        path = root / name
+        if path.is_symlink():
+            records[name] = {'symlink': os.readlink(path)}
+        elif path.is_file():
+            records[name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+        else:
+            records[name] = {'missing': True}
+    return dict(schema_version=1, status='working-tree', source_commit=git(root, 'rev-parse', 'HEAD'),
+                source_sha256=fingerprint(records))
+
+
 def from_environment():
-    path = os.environ.get("DELTABOX_RELEASE_LOCK")
-    return verify(Path(path).resolve()) if path else None
+    """Legacy producer API: capture actual source, never gate a run on an old lock.
+
+    DELTABOX_RELEASE_LOCK no longer controls runtime admission. Explicit archive
+    audits can still use the standalone ``verify`` command.
+    """
+    return runtime_identity()
 
 
 def main():

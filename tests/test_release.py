@@ -114,6 +114,32 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertEqual(historical["DELTABOX_ASYNC_TEMPLATE_FULL_DUMP"], "1")
         self.assertEqual(checkpoint_environment(mode="slow")["DELTABOX_FORCE_CRIU_RESTORE"], "1")
 
+    def test_runtime_identity_accepts_dirty_source_and_ignores_stale_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def git(*args):
+                subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True)
+            git('init', '-q')
+            (root / 'agent').mkdir()
+            source = root / 'agent/run.py'
+            source.write_text('pass\n')
+            git('add', '.')
+            git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'test')
+            initial = lock.runtime_identity(root)
+            source.write_text('print("changed")\n')
+            changed = lock.runtime_identity(root)
+            self.assertNotEqual(initial['source_sha256'], changed['source_sha256'])
+            self.assertEqual(initial['source_commit'], changed['source_commit'])
+            (root / 'agent/new.py').write_text('pass\n')
+            added = lock.runtime_identity(root)
+            self.assertNotEqual(changed['source_sha256'], added['source_sha256'])
+            source.unlink()
+            self.assertNotEqual(added['source_sha256'], lock.runtime_identity(root)['source_sha256'])
+            with patch.object(lock, 'ROOT', root), \
+                 patch.dict(os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/old-lock.json'}), \
+                 patch.object(lock, 'verify', side_effect=AssertionError('No runtime lock verification')):
+                self.assertEqual(lock.from_environment(), lock.runtime_identity(root))
+
     def test_source_lock_accepts_docs_but_rejects_modified_or_extra_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

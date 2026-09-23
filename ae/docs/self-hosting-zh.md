@@ -86,20 +86,11 @@ bash ae/run_test.sh --config "$AE_CONFIG"
 
 <a id="gpu-setup"></a>
 
-完整一键运行还需要同节点四张可用 GPU、Qwen2.5-7B-Instruct 本地权重以及生成/训练依赖。硬件与依赖要求见 [GPU 指南](../paper/figure-08/README.md#gpu-机器需要提供什么)。将下面字段写入 `ae/work/gpu-local.json`，替换成本机实际路径和已分配的设备；其余实验参数沿用 `ae/configs/figure08-gpu.json`：
+一键流程仅使用 auto 模式，通过 SSH 在 `allinai2plus` 探测 GPU 0–7；运行本机无需 GPU。复制并调整 `ae/configs/figure08-remote.json`，在主 `AE_CONFIG` 中设置 `"gpu_remote_config": "/absolute/path/to/remote.json"`。相对路径以主配置目录为基准。配置包含 SSH 主机、远端目录、模型和 Python 路径、空闲阈值及顶层版本约束；不再使用 `gpu.config` 或 `gpu.enabled`。
 
-```json
-{
-  "model_path": "/models/Qwen2.5-7B-Instruct",
-  "devices": ["0", "1", "2", "3"],
-  "generation_python": "/envs/vllm/bin/python",
-  "training_python": "/envs/lora/bin/python"
-}
-```
+准备非交互 SSH、两端 rsync、本地绘图依赖和远端 GPU 环境。默认复用已部署的 py312，不自动安装软件；版本漂移会被预检记录。完整参数和准备说明见 [Figure 8 指南](../paper/figure-08/README.md)。
 
-在主配置 `AE_CONFIG` 中添加 `"gpu": {"config": "/absolute/path/to/ae/work/gpu-local.json"}`。`gpu.config` 的相对路径以主配置文件所在目录为基准。托管机器由作者在固定配置中设置这些路径和设备；评审者无需传入模型或设备参数。不要保留旧的 `gpu.enabled=false` 设置。
-
-`bash ae/run_all.sh` 默认运行 CPU 和 GPU；`--group cpu` 只选 CPU，`--group gpu` 只选生成/训练，`--group figure-08` 包含 CPU fan-out、GPU 和理论计算。`bash ae/run_test.sh` 保持最小 CPU 快速检查。GPU 预检失败不启动训练，也不会终止其他独立 CPU 实验；整轮仍为失败并保留日志。续跑时会校验并复用已成功的 GPU 矩阵；失败矩阵在新 attempt 中重试，原失败记录保留。
+`--group cpu` 只选 CPU，`--group gpu` 自动运行远端生成/训练，`--group figure-08` 还包含 CPU fan-out，并在八个 GPU 案例与全部 CPU 输入齐全时推导 (c)。全忙跳过，1–3 张空闲卡运行六案例，四张运行八案例。GPU 失败不影响 CPU 退出码，状态与缺项写入 `result.md`；resume 使用新 GPU attempt，分析已有数据不启动 SSH 测量。
 
 ## 4. 专用配置与内存盘入口
 

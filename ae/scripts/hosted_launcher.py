@@ -19,6 +19,7 @@ import re
 import stat
 import struct
 import sys
+import subprocess
 
 POLICY_PATH = Path('/etc/deltabox-ae/launcher.json')
 POLICY_FIELDS = {'runtime_root', 'python', 'config', 'environment_file',
@@ -331,13 +332,19 @@ def result_path(policy, selected, caller, *, resume=False, trust=None):
     return path
 
 
+def runtime_commit(policy):
+    # The runtime tree is validated by main; do not inherit caller Git settings.
+    return subprocess.check_output(
+        ['/usr/bin/git', '-c', 'safe.directory=' + str(policy['runtime_root']),
+         '-C', str(policy['runtime_root']), 'rev-parse', 'HEAD'], text=True,
+        env={'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent',
+             'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}, timeout=15).strip()
+
+
 def default_result(policy, args, *, trust=None):
-    # Read data only after main() has checked the complete runtime tree.
-    path = trusted_path(policy['runtime_root'] / 'release/candidate-lock.json', trust=trust)
-    lock = json.loads(path.read_text())
-    commit = lock.get('source_commit', '')
+    commit = runtime_commit(policy)
     if not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit):
-        raise ValueError('The release lock must identify the full source commit')
+        raise ValueError('The runtime checkout must identify the full source commit')
     root = Path(commit[:12])
     if args.quick_check:
         return root / 'checks/quick-check'

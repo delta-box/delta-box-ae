@@ -39,6 +39,17 @@ class CleanupTests(unittest.TestCase):
                 self.assertTrue(all(s.killed for s in created))
         return result
 
+    def test_cube_waits_for_capacity_only_before_source_creation(self):
+        from unittest.mock import Mock
+        create = Mock(side_effect=[RuntimeError('code 130597: no more resource'), 'source'])
+        with patch.object(bench.time, 'sleep') as sleep:
+            self.assertEqual(bench.cube_create_after_cleanup(create), ('source', 2))
+        sleep.assert_called_once()
+        with self.assertRaisesRegex(RuntimeError, 'unrelated'):
+            bench.cube_create_after_cleanup(Mock(side_effect=RuntimeError('unrelated')))
+        with self.assertRaisesRegex(RuntimeError, '130597'):
+            bench.cube_create_after_cleanup(Mock(side_effect=RuntimeError('130597')), timeout_s=0)
+
     def test_clone_failure_preserves_error_and_cleans_source(self):
         result = self.run_cube_failure(RuntimeError('injected clone failure'), [1])
         self.assertFalse(result[0]['success'])

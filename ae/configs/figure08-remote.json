@@ -1,0 +1,27 @@
+{
+  "host": "allinai2plus",
+  "remote_root": "/mnt/nvme2/dyp/deltabox-ae-remote",
+  "python": "/usr/bin/python3",
+  "model_path": "/mnt/nvme2/dyp/local_models/Qwen2.5-7B-Instruct",
+  "generation_python": "/mnt/nvme2/dyp/conda_envs/py312/bin/python",
+  "training_python": "/mnt/nvme2/dyp/conda_envs/py312/bin/python",
+  "generation_env": {},
+  "training_env": {},
+  "devices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "max_memory_mib": 512,
+  "max_utilization_pct": 5,
+  "samples": 3,
+  "sample_interval_s": 1,
+  "connect_timeout_s": 10,
+  "timeout_s": 18000,
+  "version_constraints": "ae/requirements-figure08-allinai2plus.txt"
+}

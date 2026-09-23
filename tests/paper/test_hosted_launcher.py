@@ -29,6 +29,9 @@ class HostedTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
+        commit_patch = patch.object(hosted, 'runtime_commit', return_value='a' * 40)
+        self.runtime_commit = commit_patch.start()
+        self.addCleanup(commit_patch.stop)
         self.root = Path(self.temporary.name).resolve()
         self.runtime = self.root / 'runtime'
         (self.runtime / 'ae/scripts').mkdir(parents=True)
@@ -63,8 +66,14 @@ class HostedTests(unittest.TestCase):
         self.assertEqual(quick_check, Path('aaaaaaaaaaaa/checks/quick-check'))
         self.assertEqual(full.parts[0], quick_check.parts[0])
 
+    def test_default_result_does_not_require_a_release_lock(self):
+        (self.runtime / 'release/candidate-lock.json').unlink()
+        with self.owned_fixture():
+            result = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
+        self.assertEqual(result.parts[0], 'aaaaaaaaaaaa')
+
     def test_default_result_rejects_path_content_in_source_identity(self):
-        (self.runtime / 'release/candidate-lock.json').write_text(json.dumps({'source_commit': '../outside'}))
+        self.runtime_commit.return_value = '../outside'
         with self.owned_fixture(), self.assertRaisesRegex(ValueError, 'full source commit'):
             hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
 

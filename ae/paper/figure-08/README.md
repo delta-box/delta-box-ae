@@ -1,6 +1,6 @@
 # Figure 8：fan-out、GPU 时延与理论占用率
 
-完整一键命令 `bash ae/run_all.sh` 或 `bash ae/run_all.sh --group figure-08` 会依次完成 CPU fan-out、GPU 生成/训练和理论计算，并汇入同一份中英文对比页。下面保留各阶段的底层入口，供自建环境与定向诊断使用：
+完整一键命令 `bash ae/run_all.sh` 或 `bash ae/run_all.sh --group figure-08` 会执行 CPU fan-out、自动接纳远端 GPU 生成/训练，并在输入完整时进行理论计算，并汇入同一份中英文对比页。下面保留各阶段的底层入口，供自建环境与定向诊断使用：
 
 | 面板 | 含义 | 资源与入口 |
 |---|---|---|
@@ -8,9 +8,49 @@
 | (b) | Qwen2.5-7B 的生成与 LoRA 训练时延 | 需要真实 GPU；`ae/runners/gpu_timing.py` |
 | (c) | 按论文 Equation 1 计算的预期同步占用率 | 仅需 CPU；`ae/repro/gpu_occupation.py` |
 
-**CPU (a) 已完成重测：**`c775a9215718` 批次的 DeltaBox、Cube、E2B 在 N=1/4/16/64 均通过内容校验，图表和原始归档见[统一结果目录](https://github.com/delta-box/deltabox-runtime/blob/main/ae/results/c775a9215718/README.md)。GPU (b) 已在 allinai2plus 的 H20 完成单卡生成及 B1/B4 训练，B16/B64 四卡训练仍缺失；最新测量与协议偏差见[统一总账](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md#figure-8b-gpu)。
+本次运行的覆盖以 `result.md` 为准：CPU 应包含三系统各 N=1/4/16/64 的内容校验，GPU 完整覆盖为八案例。历史图表不用于填补本轮缺项。
 
-以下命令均从仓库根目录执行。GPU 设备、模型与 Python 环境通过主配置的 `gpu.config` 指定，配置方法见[自建环境指南](../../docs/self-hosting-zh.md#gpu-setup)。GPU 资源不足或繁忙时，联系作者分配资源后续跑。
+以下命令均从仓库根目录执行。
+
+## 一键远程运行：仅 auto 模式
+
+```sh
+bash ae/run_all.sh
+# 或只选择 Figure 8 的 CPU 与 GPU 部分
+bash ae/run_all.sh --group figure-08
+```
+
+本机不需要 GPU。CPU 实验结束后、统一分析前，入口通过 SSH 自动探测 `allinai2plus` 的物理 GPU 0–7：
+
+| 可用卡数 | 自动行为 |
+|---|---|
+| 0 | 跳过 8(b)，在 `result.md` / `SUMMARY.md` / `review.json` 中说明原因 |
+| 1–3 | 测量生成 B1/4/16/64、训练 B1/4；四卡训练保留缺项 |
+| ≥4 | 测量完整八案例；按物理编号选择前四张符合条件且成功加锁的卡 |
+
+只提供 auto，不设 off/required 模式。SSH 不通、环境缺失、GPU 全忙均可跳过；执行后失败与未执行分开记录。GPU 的 `complete` / `partial` / `skipped` / `failed` 状态不改变 CPU 实验退出码；CPU 成功不代表 GPU 完整。`--test`（兼容 `--smoke`）、`--max-events`、不含 GPU 的分组和 `--analyze-existing` 不启动 GPU 测量。`--resume` 使用新的 GPU attempt 目录，不复用旧测量填补本轮缺项。
+
+默认连采三次，每次间隔一秒，必须始终没有计算进程、显存占用 ≤512 MiB、利用率 ≤5%，并保持相同 GPU UUID。接纳后和每个 worker 启动前再次检查。共享锁只协调本工具的任务，无法预留其他用户的 GPU；不会停止其他任务。没有后台排队等待资源，也未实现 GPU 拓扑优化。
+
+配置集中在 [`ae/configs/figure08-remote.json`](../../configs/figure08-remote.json)：SSH 别名、远端目录、本地模型路径、Python 路径、候选卡和超时。CPU 配置中的 `gpu_remote_config` 可指定替代文件，相对路径按 CPU 配置目录解释。默认复用 allinai2plus 的 py312 环境；顶层包版本由 [`requirements-figure08-allinai2plus.txt`](../../requirements-figure08-allinai2plus.txt) 校验，漂移则跳过并记录，不自动安装或修改共享环境。该文件只约束顶层包版本，不是完整传递依赖锁；四卡执行结果以本轮原始记录为准。
+
+运行端需要可用的非交互 SSH 身份、`ssh`、`rsync` 和本地绘图依赖；远端需要 `python3`、`git`、`tar`、`timeout`、`rsync`、`nvidia-smi`、已准备的模型和 GPU Python 环境。sudo/托管入口使用原调用用户的 SSH 身份；该用户必须有主机别名与免交互访问权限。
+
+每次上传源码子集及 SHA-256，在远端独立目录建立快照 Git 提交；保留原仓库身份，远端快照不冒充完整 release lock。模型不传输。结果回收到 `gpu/attempt-NNN/`，先校验配置、原始结果、GPU UUID、源码与模型身份，再本地生成图表。失败 suite 的原始文件保留但不进入图表。`result.md` 链接本轮 manifest、日志和图，缺测不使用历史结果补齐。SSH 中断时远端任务有超时上限，原始证据保留在 manifest 指明的远端目录。
+
+只检查远端连通、源码传输、连续 GPU 探测及结果回收，不加载模型：
+
+```sh
+python3 ae/scripts/figure08_remote.py --probe-only --output ae/work/figure08-admission-check
+```
+
+也可单独运行自动 GPU 阶段：
+
+```sh
+python3 ae/scripts/figure08_remote.py --output ae/results/figure08-remote
+```
+
+输出目录必须不存在。以下原有手动入口仍可用于指定设备和诊断。
 
 ## 先运行理论计算，不需要 GPU
 

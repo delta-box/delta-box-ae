@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
-from repro.review_gpu import GPU, FANOUT, run_gpu, finish_gpu
+from repro.review_gpu import GPU, FANOUT, finish_gpu
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -54,7 +54,7 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     selection = p.add_mutually_exclusive_group()
     selection.add_argument('--available', action='store_true', help='Explicit partial run for self-built/debug environments; report missing prerequisites')
-    selection.add_argument('--all', action='store_true', help='Require the complete CPU and GPU catalog (default); unavailable jobs make the final exit nonzero')
+    selection.add_argument('--all', action='store_true', help='Require the CPU catalog with optional automatic remote GPU measurement (default)')
     selection.add_argument('--test', dest='quick_check', action='store_true', help='Quick check: one DeltaBox instance and three checkpoint/restore events')
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
@@ -74,6 +74,32 @@ def parser():
     p.add_argument('--probe-plan', type=Path, help=argparse.SUPPRESS)
     p.add_argument('--publish-output', type=Path, nargs='+', help=argparse.SUPPRESS)
     return p
+
+
+def load_runtime_environment(config, experiments):
+    """Load explicitly configured service credentials in memory, never into result JSON."""
+    if not any(name.endswith('-e2b') for name in experiments) or os.environ.get('E2B_API_KEY'):
+        return
+    filename = config.get('environment_file')
+    if not filename:
+        return
+    path = Path(filename)
+    if not path.is_absolute():
+        path = Path(config['_config_dir']) / path
+    try:
+        raw = path.read_text()
+    except PermissionError:
+        process = subprocess.run(['sudo', '-n', 'cat', str(path)], capture_output=True, text=True, timeout=15)
+        if process.returncode:
+            raise ValueError('Cannot read configured service environment file: ' + str(path))
+        raw = process.stdout
+    values = json.loads(raw)
+    allowed = {'E2B_API_KEY', 'E2B_API_URL', 'E2B_SANDBOX_URL', 'E2B_TEMPLATE', 'E2B_TEMPLATE_ID'}
+    if not isinstance(values, dict) or any(not isinstance(v, str) for k, v in values.items() if k in allowed):
+        raise ValueError('Service environment must contain string values')
+    for name in allowed:
+        if values.get(name):
+            os.environ.setdefault(name, values[name])
 
 
 def deep_merge(base, override):
@@ -126,14 +152,6 @@ def default_output(args):
     if args.max_events is not None:
         return root / 'checks/selected'
     return root / 'full'
-
-
-def select_measurement_lock():
-    """Use the shipped release lock unless the caller explicitly selects another."""
-    selected = os.environ.get('DELTABOX_RELEASE_LOCK') or REPO / 'release/candidate-lock.json'
-    # Child tools run with cwd=REPO. Preserve the caller's meaning for a relative
-    # explicit path before handing the lock to every measured backend.
-    os.environ['DELTABOX_RELEASE_LOCK'] = str(Path(selected).expanduser().resolve())
 
 
 def make_output_accessible(root):
@@ -412,6 +430,8 @@ class Review:
         for group in args.group or []:
             selected += GROUPS[group]
         self.experiments = ['table-02-deltabox'] if args.quick_check else list(dict.fromkeys(selected or EXPERIMENTS))
+        if GPU in self.experiments:
+            self.experiments = [name for name in self.experiments if name != GPU] + [GPU]
         self.available = args.available
         self.overrides = {}
         for override in args.experiment_config:
@@ -419,7 +439,7 @@ class Review:
             if not sep or name not in EXPERIMENTS or not path or name in self.overrides:
                 raise ValueError('--experiment-config requires a unique EXPERIMENT=PATH')
             if name == GPU:
-                raise ValueError('Configure GPU with gpu.config; --experiment-config selects CPU configurations')
+                raise ValueError('Configure GPU with gpu_remote_config; --experiment-config selects CPU configurations')
             self.overrides[name] = Path(path).resolve()
         self.limits = ['--limit', '1', '--max-events', '3'] if args.quick_check else []
         if not args.quick_check:
@@ -432,7 +452,9 @@ class Review:
                            run_purpose='quick-check' if self.limits else 'available-cohorts' if self.available else 'full-cohorts',
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
-                           declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=SKIPPED, coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
+                           declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
+        self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
+                                  reason='GPU stage not reached or not selected')
         self.previous_record = {}
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
@@ -461,7 +483,7 @@ class Review:
         lines += ['', '| Step | Status | Log |', '|---|---|---|']
         for step in self.record['steps']:
             lines.append(f'| {step["name"]} | {step["status"]} | [log]({step["log"]}) |')
-        lines += ['', 'The full run includes Figure 8(b) GPU timings and derives Figure 8(c) from this run. Unavailable jobs are not passes.',
+        lines += ['', 'Figure 8(b) uses automatic remote GPU admission; Figure 8(c) is derived when complete fresh CPU/GPU inputs are available. Unavailable jobs are not passes.',
                   'Only successful fresh manifests and their hash-bound measurements are analyzed.',
                   'Missing panels remain unavailable; archived values never fill a measurement gap.', '']
         comparison_pages = []
@@ -471,7 +493,10 @@ class Review:
                 comparison_pages.append(f'[{label}]({path.as_posix()})')
         if comparison_pages:
             lines += ['Paper comparison / 论文对比：' + ' · '.join(comparison_pages), '']
-        (self.output / 'SUMMARY.md').write_text('\n'.join(lines))
+        from ae.scripts.figure08_remote import report_lines
+        lines += report_lines(self.record['gpu'], self.record.get('gpu_output'))
+        for name in ('SUMMARY.md', 'result.md'):
+            (self.output / name).write_text('\n'.join(lines))
 
     def terminal_error(self, error):
         interrupted = isinstance(error, KeyboardInterrupt)
@@ -515,7 +540,7 @@ class Review:
 
     def run_experiment(self, name):
         if name == GPU:
-            return run_gpu(self)
+            return self.run_gpu()
         source_config = self.overrides.get(name, self.args.config.resolve())
         config = load_config(source_config)
         if name not in self.overrides:
@@ -699,7 +724,11 @@ class Review:
             if self.step('plot-dependencies', [self.python, '-c', 'import matplotlib']):
                 self.step('plot', [*self.cli, 'plot', '--input', str(analysis_dir / 'summary.json'), '--output', str(plot_dir)])
         self.record['outputs'] = dict(analysis=str(analysis_dir), plots=str(plot_dir), comparison=str(self.output / 'comparison' / self.attempt))
-        figure08 = finish_gpu(self, analysis_dir, analyzed)
+        if self.record.get('gpu_output'):
+            from ae.scripts.figure08_remote import finish_remote
+            figure08 = finish_remote(self, analysis_dir, analyzed)
+        else:
+            figure08 = finish_gpu(self, analysis_dir, analyzed)
         # The live review continues changing as plotting finishes. Bind plots to
         # an immutable coverage snapshot so their manifest SHA remains valid.
         coverage_path = self.output / 'coverage' / self.attempt / 'review.json'
@@ -715,6 +744,39 @@ class Review:
             command += ['--figure08', str(figure08)]
         self.step('paper-comparison', command)
 
+    def run_gpu(self):
+        # Selected CPU groups and smoke checks must not unexpectedly load GPU models.
+        selected = GPU in self.experiments
+        if self.args.quick_check or self.args.max_events is not None or not selected:
+            self.record['gpu']['reason'] = 'Figure 8(b) outside this selected CPU/smoke scope'
+            self.save()
+            return
+        from ae.scripts.figure08_remote import DEFAULT_CONFIG, run_auto
+        relative = Path('gpu') / self.attempt
+        self.record['gpu_output'] = relative.as_posix()
+        self.record['gpu'] = dict(mode='auto', status='running', successful_cases=0, reason='Remote GPU admission and measurement')
+        self.save()
+        print('[figure-08-gpu] automatic remote admission; log ' + str(self.output / relative / 'ssh.log'), flush=True)
+        try:
+            config_path = self.config.get('gpu_remote_config')
+            if config_path:
+                config_path = Path(config_path)
+                if not config_path.is_absolute():
+                    config_path = Path(self.config['_config_dir']) / config_path
+            else:
+                config_path = DEFAULT_CONFIG
+            self.record['gpu'] = run_auto(self.output / relative, config_path)
+        except Exception as error:
+            self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
+                                      reason=f'{type(error).__name__}: {error}')
+        gpu = self.record['gpu']
+        self.record['coverage'].append(dict(experiment=GPU, optional=True,
+            status={'complete': 'ok', 'skipped': 'unavailable'}.get(gpu['status'], gpu['status']),
+            planned_jobs=8, available_jobs=gpu.get('successful_cases', 0),
+            successful_jobs=gpu.get('successful_cases', 0), reasons=[gpu.get('reason', '')]))
+        self.save()
+        print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
+
     def run(self):
         self.save()
         try:
@@ -727,8 +789,23 @@ class Review:
                     self.record['source_review'] = file_record(previous)
                     self.record['release'] = json.loads(previous.read_text()).get('release', {})
                     self.record['measurement_run_purpose'] = json.loads(previous.read_text()).get('run_purpose')
+                    # Analysis-only never opens SSH or starts a new GPU measurement.
+                    prior = json.loads(previous.read_text())
+                    self.record['gpu'] = prior.get('gpu', self.record['gpu'])
+                    if prior.get('gpu_output'):
+                        relative = Path('gpu') / 'imported'
+                        gpu_source = (source / prior['gpu_output']).resolve()
+                        if not gpu_source.is_relative_to(source):
+                            raise ValueError('GPU evidence path escapes source review')
+                        try:
+                            shutil.copytree(gpu_source, self.output / relative)
+                            self.record['gpu_output'] = relative.as_posix()
+                        except OSError as error:
+                            self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
+                                                      reason=f'Could not copy prior GPU evidence: {error}')
                 self.analyze(source / 'runs' if (source / 'runs').is_dir() else source)
             else:
+                load_runtime_environment(self.config, self.experiments)
                 if not self.step('prepare', [*self.cli, 'prepare']):
                     return 1
                 if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
@@ -750,12 +827,13 @@ class Review:
             raise
         finally:
             failures = any(step['status'] not in ('ok', 'unavailable') for step in self.record['steps'])
-            coverage = self.record['coverage']
+            coverage = [row for row in self.record['coverage'] if not row.get('optional')]
             failures |= any(row['status'] == 'failed' for row in coverage) if not self.args.analyze_existing else False
             if not self.available and not self.args.analyze_existing:
                 failures |= any(row['status'] in ('partial', 'unavailable') for row in coverage)
             if not self.args.analyze_existing:
-                failures |= not any(row.get('successful_jobs', 0) > 0 for row in coverage)
+                if any(name in CPU_EXPERIMENTS for name in self.experiments):
+                    failures |= not any(row.get('successful_jobs', 0) > 0 for row in coverage)
             complete = any(step['name'] == 'paper-comparison' and step['status'] == 'ok' for step in self.record['steps'])
             self.record['status'] = 'interrupted' if self.record['status'] == 'interrupted' else 'failed' if failures or not complete else ('ok-with-unavailable' if any(row['status'] in ('partial', 'unavailable', 'failed') for row in coverage) else 'ok')
             self.record['finished_at'] = datetime.now(timezone.utc).isoformat()
@@ -768,10 +846,8 @@ def main(argv=None):
     p = parser()
     args = p.parse_args(argv)
     if args.list:
-        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'skipped': SKIPPED}, indent=2))
+        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; optional, reported in result.md'}}, indent=2))
         return 0
-    if not (args.analyze_existing or args.probe_plan or args.publish_output):
-        select_measurement_lock()
     if args.execute_plan:
         return execute_plan(args.execute_plan)
     if args.probe_plan:
@@ -800,7 +876,7 @@ def main(argv=None):
     if args.resume:
         history = output / 'attempt-history' / runner.attempt
         history.mkdir(parents=True, exist_ok=False)
-        for name in ('review.json', 'SUMMARY.md'):
+        for name in ('review.json', 'SUMMARY.md', 'result.md'):
             if (output / name).exists():
                 shutil.copy2(output / name, history / name)
     print(f'Output: {output}', flush=True)
