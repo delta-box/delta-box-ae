@@ -1,0 +1,4 @@
+# Environment preparation constraints, not a recovered historical GPU lock.
+# vLLM selects a compatible torch/CUDA wheel; verify the GPU host's driver.
+vllm>=0.8,<1
+transformers>=4.51,<6

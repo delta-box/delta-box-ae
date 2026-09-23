@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "kind": "gpu-occupation-inputs",
+  "source_kind": "historical",
+  "model_label": "Qwen2.5-7B-Instruct",
+  "batches": [
+    16,
+    64
+  ],
+  "backends": [
+    "deltabox",
+    "cube",
+    "e2b"
+  ],
+  "gpu_timings": [
+    {
+      "n": 16,
+      "t_gen_s": 1.8221147855122883,
+      "t_train_s": 1.1438718795776368,
+      "generation_gpus": 1,
+      "training_gpus": 4,
+      "source": {
+        "generation": {
+          "file": "paper/figure-08/data/records/gpu/result_Qwen2.5-7B-Instruct_B16.json",
+          "sha256": "e9a06efb54e9287482593133ed3475a6fce97d05220c463711624bc0fbf38d5d",
+          "role": "gpu-measurement"
+        },
+        "training": {
+          "file": "paper/figure-08/data/records/gpu/result_expC_7B_eff16_4gpu_FSDP.json",
+          "sha256": "7f7f841c19ced6acfe1d0fc55fff94ec762629a419579ac91cba6216437c7449",
+          "role": "gpu-measurement"
+        }
+      }
+    },
+    {
+      "n": 64,
+      "t_gen_s": 3.2891847292582193,
+      "t_train_s": 4.508851861953735,
+      "generation_gpus": 1,
+      "training_gpus": 4,
+      "source": {
+        "generation": {
+          "file": "paper/figure-08/data/records/gpu/result_Qwen2.5-7B-Instruct_B64.json",
+          "sha256": "9cc4e220b3da7cce8e83b112c09f29dd926e0ad204bcb72ee112f8600f49ec4f",
+          "role": "gpu-measurement"
+        },
+        "training": {
+          "file": "paper/figure-08/data/records/gpu/result_expC_7B_eff64_4gpu_FSDP.json",
+          "sha256": "ca90c8aef28b2a6c9991d1f1b846364081581d0a23e92847030a59c59f7e0154",
+          "role": "gpu-measurement"
+        }
+      }
+    }
+  ],
+  "sandbox_timings": [
+    {
+      "backend": "deltabox",
+      "n": 16,
+      "t_sandbox_s": 0.091333042,
+      "estimated": false,
+      "source": {
+        "file": "paper/figure-08/data/records/substrate/deltabox_official_fork_readtouch_20260605_223523.json",
+        "sha256": "5508104aed60c52b6e7787f3e3da466ece36e3930aacc814acbcb848767942cb",
+        "role": "synthetic-fanout-record"
+      }
+    },
+    {
+      "backend": "deltabox",
+      "n": 64,
+      "t_sandbox_s": 0.36877813600000003,
+      "estimated": false,
+      "source": {
+        "file": "paper/figure-08/data/records/substrate/deltabox_official_fork_readtouch_20260605_223523.json",
+        "sha256": "5508104aed60c52b6e7787f3e3da466ece36e3930aacc814acbcb848767942cb",
+        "role": "synthetic-fanout-record"
+      }
+    },
+    {
+      "backend": "cube",
+      "n": 16,
+      "t_sandbox_s": 0.7497098559886217,
+      "estimated": false,
+      "source": {
+        "file": "paper/figure-08/data/records/substrate/cube_official_fork_20260605_210626.json",
+        "sha256": "050c02861ba230581a121050c8843413ac991c2e056bbb538a9dd2dcf1c30acf",
+        "role": "synthetic-fanout-record"
+      }
+    },
+    {
+      "backend": "cube",
+      "n": 64,
+      "t_sandbox_s": 2.3274145119935272,
+      "estimated": false,
+      "source": {
+        "file": "paper/figure-08/data/records/substrate/cube_official_fork_20260605_210626.json",
+        "sha256": "050c02861ba230581a121050c8843413ac991c2e056bbb538a9dd2dcf1c30acf",
+        "role": "synthetic-fanout-record"
+      }
+    },
+    {
+      "backend": "e2b",
+      "n": 16,
+      "t_sandbox_s": 5.18734356996417,
+      "estimated": false,
+      "source": {
+        "file": "paper/figure-08/data/records/substrate/e2b_official_fork_20260605_211829.json",
+        "sha256": "645eae70f6a56b57e89f9d422deb2c266673cec60e583f2f24230a388eed19ab",
+        "role": "synthetic-fanout-record"
+      }
+    },
+    {
+      "backend": "e2b",
+      "n": 64,
+      "t_sandbox_s": 19.457918505966664,
+      "estimated": true,
+      "source": {
+        "formula": "4 * mean(two measured N16 ready_e2e_s values)",
+        "inputs": [
+          {
+            "file": "paper/figure-08/data/records/substrate/e2b_official_fork_20260605_211829.json",
+            "sha256": "645eae70f6a56b57e89f9d422deb2c266673cec60e583f2f24230a388eed19ab",
+            "role": "synthetic-fanout-record"
+          },
+          {
+            "file": "paper/figure-08/data/records/substrate/e2b_official_fork16_c16_x4_20260605_215731.json",
+            "sha256": "1c9accb0422ebed683f33a595a8a7a885c5cb7eda237aa1facee1eb5fe814b93",
+            "role": "synthetic-fanout-record"
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Equation 1 CPU calculation from archived measurements; not a new GPU measurement.",
+    "Generation used a single H20; training N16/N64 used four H20s, microbatch4 and accumulation1/4.",
+    "Historical generation requested max_tokens512 but emitted about307\u2013308 tokens due to the832-token model context.",
+    "E2B N64 is the published estimate from two N16 measurements; no native-success N64 value is substituted."
+  ],
+  "provenance": {
+    "paper_sha256": "1cc012a6ba4afdd127372a236333983ad6d17934ac63680b37faa3e6f65bb95e",
+    "formula": "(T_gen + T_train) / (T_sandbox + T_gen + T_train)",
+    "source_plot": "rollbackable-sandbox-paper/plot/plot_fig_rl_combo.py",
+    "plot_sha256": "ee2287fc4b2d512ccf53197d8fa2d8609192b8506fe569da81a2d0fdd50685cd"
+  }
+}

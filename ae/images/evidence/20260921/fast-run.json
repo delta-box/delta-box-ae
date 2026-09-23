@@ -1,0 +1,763 @@
+{
+  "analysis_mode": "fresh-measurement",
+  "host": {
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "python": "3.10.12",
+    "cpu_count": 96,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95
+    ],
+    "cpu_model": "Intel(R) Xeon(R) Gold 6418H",
+    "scaling_governor": "schedutil",
+    "scaling_min_freq": "800000",
+    "scaling_max_freq": "4000000",
+    "numa_allowed": "0-5"
+  },
+  "memory_policy": null,
+  "experiment": "table-02-deltabox",
+  "instance": "django__django-14997",
+  "conversion_policy": "all-standard",
+  "repository_commit": "0d4e575c96d408e0efb4dfd0cbfc864219776950",
+  "trace_dir": "/mnt/disk2/dyp/ae-dump-lifetime-20260921/ae/paper/table-02/data/inputs/deltabox/django__django-14997",
+  "n_ckpt": 2,
+  "n_restore": 1,
+  "original_events": 57,
+  "max_events": 3,
+  "run_purpose": "smoke",
+  "mode": "fast",
+  "adaptive": false,
+  "kernel": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/kernel/vmlinux",
+  "base_xfs": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks/base.xfs",
+  "data_xfs": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks/data-django.xfs",
+  "images": {
+    "kernel": {
+      "path": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/kernel/vmlinux",
+      "device": 66304,
+      "inode": 698266,
+      "size": 45348080,
+      "mtime_ns": 1790004697826908340,
+      "ctime_ns": 1790004697826908340,
+      "sha256": "d51d169089c3d3b9dfe3cb6b2e6ffb3a9bceeab52adf58e2ae1dfe5fc2681d89"
+    },
+    "base_xfs": {
+      "path": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks/base.xfs",
+      "device": 66304,
+      "inode": 698275,
+      "size": 3221225472,
+      "mtime_ns": 1790004819065002849,
+      "ctime_ns": 1790004819065002849,
+      "sha256": "a4c1e6c5d834ee459599365b3b99397196d30b4de4dfeca67929fcbb93686a98"
+    },
+    "data_xfs": {
+      "path": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks/data-django.xfs",
+      "device": 66304,
+      "inode": 698276,
+      "size": 9663676416,
+      "mtime_ns": 1790004864423286960,
+      "ctime_ns": 1790004864423286960,
+      "sha256": "1d26ab3348b2ce35736df418011215548c3a9048352b121df4325f2eeff38709"
+    }
+  },
+  "inputs": [
+    {
+      "path": "/mnt/disk2/dyp/ae-dump-lifetime-20260921/ae/traces/objects/f6b5d943ef2da249ae77ca876cc7590964014713b586cbc9ad6aeb5fa49ade02",
+      "device": 66304,
+      "inode": 2128337,
+      "size": 2748558,
+      "mtime_ns": 1789982312533593389,
+      "ctime_ns": 1789982312533593389,
+      "sha256": "f6b5d943ef2da249ae77ca876cc7590964014713b586cbc9ad6aeb5fa49ade02"
+    },
+    {
+      "path": "/mnt/disk2/dyp/ae-dump-lifetime-20260921/ae/traces/objects/07a12984b00031100a76f1133abb85ed9bd740964ddadbae4258328767582245",
+      "device": 66304,
+      "inode": 2125813,
+      "size": 4588,
+      "mtime_ns": 1789982309020654674,
+      "ctime_ns": 1789982309020654674,
+      "sha256": "07a12984b00031100a76f1133abb85ed9bd740964ddadbae4258328767582245"
+    }
+  ],
+  "source_provenance": {
+    "git_commit": "ee77dd1f7c06db89c4b1419d39c21d40cd95488c",
+    "tracked_worktree_dirty": false,
+    "files": {
+      "adaptive_checkpoint.py": {
+        "source": "backends/deltabox/gsd/adaptive_checkpoint.py",
+        "sha256": "c94e1f1c468bc99f77fa3c83569ffb00205caf275e6388506f1aa19cd5891baf",
+        "size": 27536
+      },
+      "agent.py": {
+        "source": "ae/runners/deltabox/guest/agent.py",
+        "sha256": "7ffc9e6fd5a9b3ec4bef0563d53a7ccc915e88ba000c2244b39e7fec1e6132c7",
+        "size": 58649
+      },
+      "bringup.py": {
+        "source": "ae/runners/deltabox/guest/bringup.py",
+        "sha256": "d92a395b94b90897bd3bc99bd5bc09700fcbf250f70e73d623ec7b15a2084aff",
+        "size": 3060
+      },
+      "dump_diagnostics.py": {
+        "source": "ae/runners/deltabox/guest/dump_diagnostics.py",
+        "sha256": "18bcb08b470702ab9167cbfa97b360edead5510f05b562fb2965beb06c564560",
+        "size": 4031
+      },
+      "entry.py": {
+        "source": "ae/runners/deltabox/guest/entry.py",
+        "sha256": "d45b163064df67710b2369a9c1ffca8190abe5963b60bb7a3addf84eaa3a75f0",
+        "size": 2667
+      },
+      "index_sidecar.py": {
+        "source": "ae/runners/deltabox/guest/index_sidecar.py",
+        "sha256": "c45a1730cc69d33339aafa08e2e70cb6c7c5e58abcae5d4da16546cab863ad8f",
+        "size": 16601
+      },
+      "measurements.py": {
+        "source": "ae/runners/deltabox/guest/measurements.py",
+        "sha256": "63cd3672e7d6a7ded3389c280e36bb5be48677ff986c2890e955f5958b33bd3e",
+        "size": 936
+      },
+      "memory_classifier.py": {
+        "source": "backends/deltabox/gsd/memory_classifier.py",
+        "sha256": "c757b1a6b3140980d2615cd5c4b94a26bede12348ca15e5e5cb601a909b15493",
+        "size": 6145
+      },
+      "mock_npd.py": {
+        "source": "ae/runners/deltabox/guest/mock_npd.py",
+        "sha256": "92312fbcca8873273e52ca189529dfcb5a5c10f94520c0b75e21ce2fa0dca374",
+        "size": 4934
+      },
+      "namespace_launcher.py": {
+        "source": "backends/deltabox/gsd/namespace_launcher.py",
+        "sha256": "72daf220a9d94c4ad2d6b2a4bc9f69ddf68fe7f75a35dedea4e32a512fd5e98e",
+        "size": 24271
+      },
+      "paper_memory_policy.py": {
+        "source": "ae/runners/deltabox/guest/paper_memory_policy.py",
+        "sha256": "3ec32f085e7599a8548255c9fb951471e9920d87eb1fd59d651a4e6231655467",
+        "size": 30922
+      },
+      "prewarm.py": {
+        "source": "backends/deltabox/gsd/prewarm.py",
+        "sha256": "2529523b9cac43d052062b377dc072c8ece77f6c359cc977e0379c8d6d20817a",
+        "size": 8224
+      },
+      "process_wait.py": {
+        "source": "backends/deltabox/gsd/process_wait.py",
+        "sha256": "c116659e46c5e53a39725900e9bb249f3e5b5d459f7b79a74f5c137922fb1cee",
+        "size": 6072
+      },
+      "pycriu/__init__.py": {
+        "source": "pycriu/__init__.py",
+        "sha256": "f1c390ed488ce6a27f481c233026c7ab3cb4eb87b2edcf1053053210aa1863bc",
+        "size": 70
+      },
+      "pycriu/cli.py": {
+        "source": "pycriu/cli.py",
+        "sha256": "64b331e763591d5b237cbb07580f5a06e6f5d1a6c02c2e6a6b34827ad32e3ecb",
+        "size": 11846
+      },
+      "pycriu/criu.py": {
+        "source": "pycriu/criu.py",
+        "sha256": "b0441abfa04e23a1088c14660d2ba2df8ce7a382df2ef9be62a5c64e18ff542c",
+        "size": 8460
+      },
+      "pycriu/images/__init__.py": {
+        "source": "pycriu/images/__init__.py",
+        "sha256": "b4f0fa22d91a0070541b1d03e113e69ad6b6550d8003cf516cd5b26485271b08",
+        "size": 137
+      },
+      "pycriu/images/apparmor_pb2.py": {
+        "source": "pycriu/images/apparmor_pb2.py",
+        "sha256": "5843f7785fde95f5935cef933361b3a99b43b7c8da8c9d1e5473a48c29c533ec",
+        "size": 5943
+      },
+      "pycriu/images/autofs_pb2.py": {
+        "source": "pycriu/images/autofs_pb2.py",
+        "sha256": "7b89d3346fc8ba9409e2f83042d304c89f99b5201a8247b619b9ae4874e9fb18",
+        "size": 5365
+      },
+      "pycriu/images/binfmt_misc_pb2.py": {
+        "source": "pycriu/images/binfmt_misc_pb2.py",
+        "sha256": "b7c8bec8cae352a085c86f65fad2866d4a0b10e82db7d5eedad4bc95e96e5d4c",
+        "size": 5178
+      },
+      "pycriu/images/bpfmap_data_pb2.py": {
+        "source": "pycriu/images/bpfmap_data_pb2.py",
+        "sha256": "4f6b567fc79faf378fc100759c9a4feed1bc5be7461845ffaa471d5f27cce343",
+        "size": 3333
+      },
+      "pycriu/images/bpfmap_file_pb2.py": {
+        "source": "pycriu/images/bpfmap_file_pb2.py",
+        "sha256": "69eed3d9b233712e0ed5153e7a4897ad12921b67894f890e9bfd0356fa9b889f",
+        "size": 8586
+      },
+      "pycriu/images/cgroup_pb2.py": {
+        "source": "pycriu/images/cgroup_pb2.py",
+        "sha256": "9ef48711167128b706a33d90cf8d2bfabe812d9ab3dec0b94df4458a019d7462",
+        "size": 15505
+      },
+      "pycriu/images/core_aarch64_pb2.py": {
+        "source": "pycriu/images/core_aarch64_pb2.py",
+        "sha256": "8b0f528d51b3fb9ffc3ac869285214e945d67a2f41561109bb7133f082216be3",
+        "size": 8928
+      },
+      "pycriu/images/core_arm_pb2.py": {
+        "source": "pycriu/images/core_arm_pb2.py",
+        "sha256": "ff3438a0c5b778637171a6b6c4f8f8c87f59668307d3fe132adfaa322ddf5d23",
+        "size": 15490
+      },
+      "pycriu/images/core_mips_pb2.py": {
+        "source": "pycriu/images/core_mips_pb2.py",
+        "sha256": "0522814102e03ba385a1bbc858534aa9f062850260163d72841462901cb7213d",
+        "size": 37784
+      },
+      "pycriu/images/core_pb2.py": {
+        "source": "pycriu/images/core_pb2.py",
+        "sha256": "80cd7d88d0eaa028ec8d381c24c34abf09aab9122d013e834c17701df36adb2e",
+        "size": 37574
+      },
+      "pycriu/images/core_ppc64_pb2.py": {
+        "source": "pycriu/images/core_ppc64_pb2.py",
+        "sha256": "14c99b834f7a4b8f35a2762d05bcc7d469a42dffc0167437a7849ed53487dde0",
+        "size": 19001
+      },
+      "pycriu/images/core_s390_pb2.py": {
+        "source": "pycriu/images/core_s390_pb2.py",
+        "sha256": "d72da91c5b01744da2c92269887ad0a4d1f0f658eee5a87c4060c204496533a0",
+        "size": 17786
+      },
+      "pycriu/images/core_x86_pb2.py": {
+        "source": "pycriu/images/core_x86_pb2.py",
+        "sha256": "56cac4713f67ffcde239f5c6f678a27ff76c036fa569c3ea710855c81e26409d",
+        "size": 33984
+      },
+      "pycriu/images/cpuinfo_pb2.py": {
+        "source": "pycriu/images/cpuinfo_pb2.py",
+        "sha256": "60bed5127613a933c588b9dbdd2cf1b803df453faf4b65629f7e0b01faea9ee7",
+        "size": 13787
+      },
+      "pycriu/images/creds_pb2.py": {
+        "source": "pycriu/images/creds_pb2.py",
+        "sha256": "849921c4301579d0d6a6f6e7858fadfed34f2351adaffab86110cbe1d2363381",
+        "size": 8911
+      },
+      "pycriu/images/eventfd_pb2.py": {
+        "source": "pycriu/images/eventfd_pb2.py",
+        "sha256": "b9a0da7cce12e5d689d3912772014321552ed710a83bd9d116e9106d3c1a9835",
+        "size": 3480
+      },
+      "pycriu/images/eventpoll_pb2.py": {
+        "source": "pycriu/images/eventpoll_pb2.py",
+        "sha256": "0e6dadb3e147dacb49960e3aa2d26e655a5ae76d030da68b7a5c93ab5cdf98b5",
+        "size": 7513
+      },
+      "pycriu/images/ext_file_pb2.py": {
+        "source": "pycriu/images/ext_file_pb2.py",
+        "sha256": "e339588cd53ccfd366812fd1531db02f4bbff16edc0a96293b433fa55f6799fa",
+        "size": 2551
+      },
+      "pycriu/images/fdinfo_pb2.py": {
+        "source": "pycriu/images/fdinfo_pb2.py",
+        "sha256": "6070d343e7eb006d0bb73f8c9d56e292a1911a2b2c7014752825b8aa282ffec1",
+        "size": 22336
+      },
+      "pycriu/images/fh_pb2.py": {
+        "source": "pycriu/images/fh_pb2.py",
+        "sha256": "737d8df02a17b79d489fb9a616eb7221edf96447334b8752f31388b3ccecc843",
+        "size": 6704
+      },
+      "pycriu/images/fifo_pb2.py": {
+        "source": "pycriu/images/fifo_pb2.py",
+        "sha256": "2de78b905b491cb9fc17ac8028f27331d0bb69080fe15ca1774ee6ac17401f05",
+        "size": 2724
+      },
+      "pycriu/images/file_lock_pb2.py": {
+        "source": "pycriu/images/file_lock_pb2.py",
+        "sha256": "e2e27e88dba9afffb84c700ed908c7a17874a513a4f6cc2a754e5e608fb68c43",
+        "size": 4102
+      },
+      "pycriu/images/fown_pb2.py": {
+        "source": "pycriu/images/fown_pb2.py",
+        "sha256": "755c851f7869ddf330ee40644ff8cd60d376135fe512624783252321d16a7c0b",
+        "size": 3578
+      },
+      "pycriu/images/fs_pb2.py": {
+        "source": "pycriu/images/fs_pb2.py",
+        "sha256": "4b89767f65e40ec5b7b2400baaaf9c0920a332b4f5b986814d1ef398820cb996",
+        "size": 2707
+      },
+      "pycriu/images/fsnotify_pb2.py": {
+        "source": "pycriu/images/fsnotify_pb2.py",
+        "sha256": "95768a4a0fdeadf788382d3fe6e044711d31b6fd006eb3e11790f3ce4f1b24d6",
+        "size": 21813
+      },
+      "pycriu/images/ghost_file_pb2.py": {
+        "source": "pycriu/images/ghost_file_pb2.py",
+        "sha256": "43c7d2f04d3bba57e6467fb9aca9216f6f4ed080a3c66f494e10442139e32c2b",
+        "size": 8568
+      },
+      "pycriu/images/images.py": {
+        "source": "pycriu/images/images.py",
+        "sha256": "551ba8300d0114dc71b32d0461deb17e02cc3477095a74c7f6857855881be408",
+        "size": 20361
+      },
+      "pycriu/images/img_streamer_pb2.py": {
+        "source": "pycriu/images/img_streamer_pb2.py",
+        "sha256": "83b09f147c88adca23de5410407adb2d0f7fddd098a7248ea34c1ace69338ea3",
+        "size": 3488
+      },
+      "pycriu/images/inventory_pb2.py": {
+        "source": "pycriu/images/inventory_pb2.py",
+        "sha256": "be2748e24d30c23fbd0fc294e1754a5372ecc2946802666cbd50a13a3485750f",
+        "size": 7485
+      },
+      "pycriu/images/ipc_desc_pb2.py": {
+        "source": "pycriu/images/ipc_desc_pb2.py",
+        "sha256": "e12eeb4d872640833f8151aa912867ec8de73ab3801d3fe8ee747277583f8cb2",
+        "size": 4492
+      },
+      "pycriu/images/ipc_msg_pb2.py": {
+        "source": "pycriu/images/ipc_msg_pb2.py",
+        "sha256": "30bb1a340dea6f671a722eaea296c5d991ed9cf0c0edb0d254333b8bf7d3ca10",
+        "size": 4564
+      },
+      "pycriu/images/ipc_sem_pb2.py": {
+        "source": "pycriu/images/ipc_sem_pb2.py",
+        "sha256": "0cc49dfedb5231a7295e3e0087aedd8311034550c196bc4f55dfd20edbde564f",
+        "size": 2568
+      },
+      "pycriu/images/ipc_shm_pb2.py": {
+        "source": "pycriu/images/ipc_shm_pb2.py",
+        "sha256": "c45473577cab4d3c5b89181072e38224fc34f30900e7a9f4be2aee90ffcced02",
+        "size": 3022
+      },
+      "pycriu/images/ipc_var_pb2.py": {
+        "source": "pycriu/images/ipc_var_pb2.py",
+        "sha256": "287e9b0468ee7566f35fde686f670ca9e08c52d3f4b6cdabe7cf542fa35052e9",
+        "size": 9137
+      },
+      "pycriu/images/macvlan_pb2.py": {
+        "source": "pycriu/images/macvlan_pb2.py",
+        "sha256": "ad4bb236ce7d5f902e666ea5317ed3440836a03f97966a097cdb367d42708111",
+        "size": 2412
+      },
+      "pycriu/images/magic.py": {
+        "source": "pycriu/images/magic.py",
+        "sha256": "979f232871340de778ac5fa287daa076487792f1af322677aba9769b351a83ec",
+        "size": 4649
+      },
+      "pycriu/images/memfd_pb2.py": {
+        "source": "pycriu/images/memfd_pb2.py",
+        "sha256": "238e6d527b0416f8a83502db7b370503d37fde50ba90a3f64c7f8839f52a3264",
+        "size": 8043
+      },
+      "pycriu/images/mm_pb2.py": {
+        "source": "pycriu/images/mm_pb2.py",
+        "sha256": "059d1e375176213c2e882ce6d9e4da2bb3f8304e7e9cf4105a65e1417b6f6d07",
+        "size": 12435
+      },
+      "pycriu/images/mnt_pb2.py": {
+        "source": "pycriu/images/mnt_pb2.py",
+        "sha256": "05e0872f7438508a252b9b17af964cef8035a3729db1c90c203c34d62fdd990c",
+        "size": 14888
+      },
+      "pycriu/images/netdev_pb2.py": {
+        "source": "pycriu/images/netdev_pb2.py",
+        "sha256": "54d0bf826f2f00909e10c8b26354241005df656295fe0c5acb8a9f9978fcd027",
+        "size": 18332
+      },
+      "pycriu/images/ns_pb2.py": {
+        "source": "pycriu/images/ns_pb2.py",
+        "sha256": "9dcebe935c2b6d063b77db015ff87119e49865a9d8b0d5de9946d8792225073e",
+        "size": 3186
+      },
+      "pycriu/images/opts_pb2.py": {
+        "source": "pycriu/images/opts_pb2.py",
+        "sha256": "9294b0473459e56db3008c5bea71acf441c46c57eceb49d8029167b126795802",
+        "size": 5301
+      },
+      "pycriu/images/packet_sock_pb2.py": {
+        "source": "pycriu/images/packet_sock_pb2.py",
+        "sha256": "2d485b674fe7cc146ee981d9487f75cd70e3712ec2d5c82b312980085d3531e3",
+        "size": 17185
+      },
+      "pycriu/images/pagemap_pb2.py": {
+        "source": "pycriu/images/pagemap_pb2.py",
+        "sha256": "4b89849a0484523b4187a7f733e71c8b4ff328f8bd7e5ebda7d9fee087565b95",
+        "size": 4738
+      },
+      "pycriu/images/pb.py": {
+        "source": "pycriu/images/pb.py",
+        "sha256": "928f394610d3d8133801e2404d386bcc0b748504cc7847e564e72a37618cc9cf",
+        "size": 1906
+      },
+      "pycriu/images/pb2dict.py": {
+        "source": "pycriu/images/pb2dict.py",
+        "sha256": "060401a0974fd5780025ab219f544efc98c852204d65c42be022a3b69e615734",
+        "size": 12877
+      },
+      "pycriu/images/pidns_pb2.py": {
+        "source": "pycriu/images/pidns_pb2.py",
+        "sha256": "55b1a85f9ee6ca0002c4319ed59243cca19b220ffbeceb8134f625020f99552f",
+        "size": 1918
+      },
+      "pycriu/images/pipe_data_pb2.py": {
+        "source": "pycriu/images/pipe_data_pb2.py",
+        "sha256": "15baf07bb74583dc11ac0bf7f2d1e9d491ddf7467063e91701f527012c6e8bf7",
+        "size": 2821
+      },
+      "pycriu/images/pipe_pb2.py": {
+        "source": "pycriu/images/pipe_pb2.py",
+        "sha256": "4537ce24e59cee0fa81cec91d2769a5294fa3ad27d942f6c064e59b67f0134e4",
+        "size": 3489
+      },
+      "pycriu/images/pstree_pb2.py": {
+        "source": "pycriu/images/pstree_pb2.py",
+        "sha256": "d4d064f536fdb2e5eb4780f031a5a1ab347ae8337982eceaeefa7ebf2ddf37f5",
+        "size": 3611
+      },
+      "pycriu/images/regfile_pb2.py": {
+        "source": "pycriu/images/regfile_pb2.py",
+        "sha256": "a214283bb81555b252e071d3e39bbd30e76cfb803f37f87e90740c52ad74131f",
+        "size": 7589
+      },
+      "pycriu/images/remap_file_path_pb2.py": {
+        "source": "pycriu/images/remap_file_path_pb2.py",
+        "sha256": "fa062f71e933c2419f41b2d38562277118d0b59ffb88c882d1493d45462968f6",
+        "size": 4211
+      },
+      "pycriu/images/rlimit_pb2.py": {
+        "source": "pycriu/images/rlimit_pb2.py",
+        "sha256": "b919bdc95df25c72e23d17b03855e79fb456b52408601305407035a0532170c9",
+        "size": 2327
+      },
+      "pycriu/images/sa_pb2.py": {
+        "source": "pycriu/images/sa_pb2.py",
+        "sha256": "58e674bf3d1fd2bc57ff6b30c626a45406745d8404dc96e65523055e4f6dac96",
+        "size": 4617
+      },
+      "pycriu/images/seccomp_pb2.py": {
+        "source": "pycriu/images/seccomp_pb2.py",
+        "sha256": "c675cc7b40b0b486c26386bd721d18af5b031bcf640cf61e1ce7369ed81a099b",
+        "size": 4147
+      },
+      "pycriu/images/siginfo_pb2.py": {
+        "source": "pycriu/images/siginfo_pb2.py",
+        "sha256": "1395d3329b9a4482cd00072cb0c59b7e62d9d61d4fe875d6999f358d6b0789f0",
+        "size": 3309
+      },
+      "pycriu/images/signalfd_pb2.py": {
+        "source": "pycriu/images/signalfd_pb2.py",
+        "sha256": "6aa37fdb75ff6c12a16e27414e2e13311a0f2fbaf9de6d1d93991f2bf48129b5",
+        "size": 3677
+      },
+      "pycriu/images/sit_pb2.py": {
+        "source": "pycriu/images/sit_pb2.py",
+        "sha256": "13402ff43746607fbbcd90707399b62bb66d2435148cbfd924bc4c3819a3e1da",
+        "size": 8876
+      },
+      "pycriu/images/sk_inet_pb2.py": {
+        "source": "pycriu/images/sk_inet_pb2.py",
+        "sha256": "4278d2067c32e21405ed6e2a79f192ebfb68591a48d04e4219f108d2e168efb9",
+        "size": 15459
+      },
+      "pycriu/images/sk_netlink_pb2.py": {
+        "source": "pycriu/images/sk_netlink_pb2.py",
+        "sha256": "3291bdb33456ea1cba683677e61d7ce5d1c91f46117202a61c19d4e476e4ae2a",
+        "size": 7303
+      },
+      "pycriu/images/sk_opts_pb2.py": {
+        "source": "pycriu/images/sk_opts_pb2.py",
+        "sha256": "67442082a2bc5d655bf7de10e79c1f0bb26d639ec1a45201c72d13122921ac17",
+        "size": 13719
+      },
+      "pycriu/images/sk_packet_pb2.py": {
+        "source": "pycriu/images/sk_packet_pb2.py",
+        "sha256": "6a90e7a835cd33a9c5fb9fc86605a245937024d4db56c9c107d3d3bb1fe5acf9",
+        "size": 4495
+      },
+      "pycriu/images/sk_unix_pb2.py": {
+        "source": "pycriu/images/sk_unix_pb2.py",
+        "sha256": "763e4cec9fa96694c61ae93095c59f0241cc954db2b7402c04bf491017ce8578",
+        "size": 12118
+      },
+      "pycriu/images/stats_pb2.py": {
+        "source": "pycriu/images/stats_pb2.py",
+        "sha256": "7df036a8cdfc3e15b99f29bfd861365742a0538665f39935d852099fdfcee38d",
+        "size": 12965
+      },
+      "pycriu/images/sysctl_pb2.py": {
+        "source": "pycriu/images/sysctl_pb2.py",
+        "sha256": "19e6a8ae6bc674b7614b743004430ed0a230f6b62b7ee3a7a2ef62ded7b80283",
+        "size": 3813
+      },
+      "pycriu/images/tcp_stream_pb2.py": {
+        "source": "pycriu/images/tcp_stream_pb2.py",
+        "sha256": "d6860e29b34fd33bbd3986f441044b0576571e33600461f9ce5bb0ca27078e8a",
+        "size": 9247
+      },
+      "pycriu/images/time_pb2.py": {
+        "source": "pycriu/images/time_pb2.py",
+        "sha256": "3f15de6d98658ebc2e3e4824e9362bd5d2a744ee6cfedd84b1567e56358f5a5a",
+        "size": 2270
+      },
+      "pycriu/images/timens_pb2.py": {
+        "source": "pycriu/images/timens_pb2.py",
+        "sha256": "8d29502519cab754e0dbd4c4d9ff02d57aa9427a5cd6475dbe47a30ae6130c98",
+        "size": 4120
+      },
+      "pycriu/images/timer_pb2.py": {
+        "source": "pycriu/images/timer_pb2.py",
+        "sha256": "f9348bfdb043f516bf64f40340bb79f6edbea221fb424c4c216161bef10ab29f",
+        "size": 11835
+      },
+      "pycriu/images/timerfd_pb2.py": {
+        "source": "pycriu/images/timerfd_pb2.py",
+        "sha256": "f93d45514760f66c44ce0674ef766e25ad951808bf90a07d6569e504463561c5",
+        "size": 6255
+      },
+      "pycriu/images/tty_pb2.py": {
+        "source": "pycriu/images/tty_pb2.py",
+        "sha256": "43bf0f8a7f4dc59283edbfba2573ed44a9cc765789d5219e9a76253c409f4663",
+        "size": 23481
+      },
+      "pycriu/images/tun_pb2.py": {
+        "source": "pycriu/images/tun_pb2.py",
+        "sha256": "103ae064043754065b28744b2cc2eed191ec67e670c0a18fd9021d26e589a951",
+        "size": 6357
+      },
+      "pycriu/images/userns_pb2.py": {
+        "source": "pycriu/images/userns_pb2.py",
+        "sha256": "c8ccc3c5e2f2636dced3c44bb9a8ade733c210221f1c6f38075007811eafba50",
+        "size": 4643
+      },
+      "pycriu/images/utsns_pb2.py": {
+        "source": "pycriu/images/utsns_pb2.py",
+        "sha256": "03c19c687d01e21a545e19e6c35120b67cc271f39f7e99de57d6a1ebcc98dd69",
+        "size": 2373
+      },
+      "pycriu/images/vma_pb2.py": {
+        "source": "pycriu/images/vma_pb2.py",
+        "sha256": "8867942d2ad03b2ab404ca6b26be14be0a8ed879aefb8927470693e229c1eb76",
+        "size": 6465
+      },
+      "pycriu/rpc_pb2.py": {
+        "source": "pycriu/rpc_pb2.py",
+        "sha256": "7379d7fd1751e9989e37112dce571b787af6f36cf20cfbbc57c8a63a57846c5b",
+        "size": 70313
+      },
+      "root_overlay.py": {
+        "source": "backends/deltabox/gsd/root_overlay.py",
+        "sha256": "0e72683a0532f356af9fa31b37a4068f50b2fab97b9b4b61bbafdbad5f55beab",
+        "size": 10332
+      },
+      "root_sandbox.py": {
+        "source": "backends/deltabox/gsd/root_sandbox.py",
+        "sha256": "30654a5c08c81a93101a3d53cc78d2d4d2b6709d4c365a283af2308ad11f59f2",
+        "size": 14249
+      },
+      "sandbox_controller.py": {
+        "source": "backends/deltabox/gsd/sandbox_controller.py",
+        "sha256": "7b1672a4eabefb20110b986d507069bf1566de8c7faee8bbaf1081e07bbd13f9",
+        "size": 147138
+      },
+      "semantic_parser.py": {
+        "source": "backends/deltabox/gsd/semantic_parser.py",
+        "sha256": "f1be0bb92a5890f460fccb8d378bc9d0356b84d4c8e2680b50ffbe84009eb07a",
+        "size": 5272
+      },
+      "template_fork.py": {
+        "source": "backends/deltabox/gsd/template_fork.py",
+        "sha256": "51313a06e4dbba74afb2e70e3b69a9a26b7c6778bec7f02a403830b372aa53af",
+        "size": 70001
+      },
+      "trace_replay_main.py": {
+        "source": "ae/runners/deltabox/guest/trace_replay_main.py",
+        "sha256": "a310c82869cb601e482b693c54c7d1de9e4688fa8431359733032d961ee94e36",
+        "size": 87782
+      }
+    },
+    "archive": {
+      "path": "/mnt/disk2/dyp/ae-image-source-check-20260921/smoke-01/fast/django__django-14997/guest.tar",
+      "device": 66304,
+      "inode": 1093144,
+      "size": 1402880,
+      "mtime_ns": 1790004953036892252,
+      "ctime_ns": 1790004953036892252,
+      "sha256": "307106159ff5c450d44bf9cf4e513525d4d2379556a30a223f5d4c1494fb3891"
+    }
+  },
+  "guest_archive": "/mnt/disk2/dyp/ae-image-source-check-20260921/smoke-01/fast/django__django-14997/guest.tar",
+  "schedule": "/mnt/disk2/dyp/ae-image-source-check-20260921/smoke-01/schedules/django__django-14997.jsonl",
+  "schedule_sha256": "aef20b6d66a6f5884ab2a3f3897018ff78d667f32e09efc90d0dcd4471bc4e11",
+  "schedule_artifact": "schedule.jsonl",
+  "testbed": null,
+  "work_dir": null,
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 600,
+  "ssh_timeout": 120,
+  "checkpoint_profile": "historical-async-full",
+  "incremental_dump_enabled": false,
+  "durable_dump_enabled": true,
+  "checkpoint_profile_note": "Historical harness uses asynchronous FULL dumps; does not measure the paper's incremental dump mechanism.",
+  "guest_env": {
+    "DELTABOX_INSTANCE_ID": "django__django-14997",
+    "DELTABOX_REPLAY_REPOSITORY_COMMIT": "0d4e575c96d408e0efb4dfd0cbfc864219776950",
+    "DELTABOX_ASYNC_TEMPLATE_FULL_DUMP": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python",
+    "PYTHONPATH": "/app",
+    "DELTABOX_CHECKPOINT_STASH_TEMPLATE": "1",
+    "DELTABOX_FIXED_ACTIVE_PID": "0",
+    "DELTABOX_FORCE_CRIU_RESTORE": "0",
+    "DELTABOX_CRIU_LAZY_RESTORE": "0",
+    "DELTABOX_CRIU_LAZY_RESTORE_PARALLEL": "0",
+    "DELTABOX_KEEP_AGENT_CHANNEL_AFTER_RESTORE": "0",
+    "DELTABOX_REOPEN_AGENT_FIFOS_ON_EPOCH": "1",
+    "DELTABOX_REQUIRE_REAL_AGENT": "1",
+    "DELTABOX_REPLAY_AGENT_MODE": "real",
+    "DELTABOX_REPLAY_WORKER_EXEC": "1",
+    "DELTABOX_REPLAY_ACTIVE_WORKER": "0",
+    "DELTABOX_WORKER_INDEX_SIDECAR": "0",
+    "DELTABOX_WORKER_EXEC_TIMEOUT": "180",
+    "AGENT_WORKER_CMD_TIMEOUT": "180",
+    "DELTABOX_WORKER_INDEX_TIMEOUT": "300",
+    "AGENT_WORKER_INDEX_MAX_TOTAL_BYTES": "536870912",
+    "DELTABOX_CRIU_DUMP_BIN": "criu",
+    "DELTABOX_CRIU_RESTORE_BIN": "criu"
+  },
+  "guest_flags": [
+    "--no-adaptive",
+    "--warm-template",
+    "--prewarm",
+    "--agent-mode",
+    "real",
+    "--require-real-agent",
+    "--worker-exec"
+  ],
+  "status": "ok",
+  "lane": 0,
+  "host_binding": null,
+  "host_command": [
+    "unshare",
+    "--mount",
+    "--net",
+    "--propagation",
+    "private",
+    "/usr/bin/python3",
+    "/mnt/disk2/dyp/ae-dump-lifetime-20260921/ae/runners/deltabox/run_instance.py",
+    "--_run-config",
+    "/mnt/disk2/dyp/ae-image-source-check-20260921/smoke-01/fast/django__django-14997/run.json"
+  ],
+  "returncode": 0,
+  "artifacts": [
+    {
+      "path": "django__django-14997.results.jsonl",
+      "sha256": "995374c2c7d54439f56f931c4166f02f4dc90afd400e091ca66b3657f8517cb6",
+      "bytes": 14452
+    },
+    {
+      "path": "schedule.jsonl",
+      "sha256": "aef20b6d66a6f5884ab2a3f3897018ff78d667f32e09efc90d0dcd4471bc4e11",
+      "bytes": 667
+    }
+  ]
+}

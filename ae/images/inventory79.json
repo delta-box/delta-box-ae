@@ -1,0 +1,43 @@
+{
+  "collected_on": "2026-09-20",
+  "source_root": "/mnt/disk2/dyp/d-overlayfs",
+  "repository_head": "6819771a572094191bd3ab594d3466cad9123e6f",
+  "images": [
+    {
+      "name": "ubuntu-24.04.xfs",
+      "logical_bytes": 21474836480,
+      "sha256_first_4MiB": "7abcf27d745d3fe8e5e01e1fcba193d3eaf621f65b9a4374e32bf6c23785e82a"
+    },
+    {
+      "name": "base.xfs",
+      "logical_bytes": 3221225472,
+      "sha256_first_4MiB": "5d422e3eb4bcbe00a91d6d562aec8cc1cc19efe4be758a5c422e2dcb900502a5"
+    },
+    {
+      "name": "data-django.xfs",
+      "logical_bytes": 9663676416,
+      "sha256_first_4MiB": "b725f216ae4d5b1dfaa39c01ff4b292c71c825540235d4e41a2b6795293be8d5"
+    },
+    {
+      "name": "data-sympy.xfs",
+      "logical_bytes": 9663676416,
+      "sha256_first_4MiB": "c01cb472d6c910315de78900a3556391d546812c329353a4ab019903ddfdd37b"
+    },
+    {
+      "name": "data-sphinx.xfs",
+      "logical_bytes": 10737418240,
+      "sha256_first_4MiB": "c48efb1ec079661b3cc4507f231e12d209606e3a2b7a3b14346622a73f02af7b"
+    },
+    {
+      "name": "data-sci.xfs",
+      "logical_bytes": 19327352832,
+      "sha256_first_4MiB": "e057f9b98196513496f1df86cdb92e3a736de30391b2a19e1dcb4a5ca154bc00"
+    },
+    {
+      "name": "data-tools.xfs",
+      "logical_bytes": 10737418240,
+      "sha256_first_4MiB": "ec4275ef187cf18e8261586e25854b163af871378691e069af37171dc91ddfa1"
+    }
+  ],
+  "kernel_config_sha256": "a030e626590ce76e4c06c8a31a468c0c5f62b257cc07479031b8c5f03b04c916"
+}

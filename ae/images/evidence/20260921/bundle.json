@@ -1,0 +1,46 @@
+{
+  "status": "ok",
+  "steps": [
+    {
+      "name": "kernel",
+      "command": [
+        "bash",
+        "/mnt/disk2/dyp/ae-image-source-check-20260921/ae/images/scripts/build_kernel.sh",
+        "--existing",
+        "/mnt/disk2/dyp/d-overlayfs/linux-6.8/vmlinux",
+        "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/kernel"
+      ],
+      "status": "ok",
+      "log": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/logs/kernel/stdout.log",
+      "returncode": 0
+    },
+    {
+      "name": "disks",
+      "command": [
+        "sudo",
+        "-n",
+        "-E",
+        "/usr/bin/python3",
+        "/mnt/disk2/dyp/ae-image-source-check-20260921/ae/images/scripts/build_xfs.py",
+        "split",
+        "--source",
+        "/mnt/disk1/dyp/d-overlayfs_xfs/ubuntu-24.04.xfs",
+        "--out",
+        "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks",
+        "--ssh-pubkey",
+        "/home/dyp/.ssh/id_ed25519.pub",
+        "--groups",
+        "django"
+      ],
+      "status": "ok",
+      "log": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/logs/disks/stdout.log",
+      "returncode": 0
+    }
+  ],
+  "scope": "guest kernel and selected base/data disks",
+  "groups": [
+    "django"
+  ],
+  "kernel_mode": "existing",
+  "config": "/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/config.json"
+}

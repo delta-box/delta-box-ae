@@ -1,0 +1,313 @@
+diff --git a/criu/config.c b/criu/config.c
+index d7ef3f8..6d6decd 100644
+--- a/criu/config.c
++++ b/criu/config.c
+@@ -1047,6 +1047,9 @@ int parse_options(int argc, char **argv, bool *usage_error, bool *has_exec_cmd,
+ 			break;
+ 		case 'V':
+ 			pr_msg("Version: %s\n", CRIU_VERSION);
++			if (getenv("DELTABOX_CRIU_CAPABILITIES") &&
++			    !strcmp(getenv("DELTABOX_CRIU_CAPABILITIES"), "1"))
++				pr_msg("DeltaBox capabilities: exact-parent-v1 exact-parent-lazy-v1\n");
+ 			if (strcmp(CRIU_GITID, "0"))
+ 				pr_msg("GitID: %s\n", CRIU_GITID);
+ 			exit(0);
+diff --git a/criu/image.c b/criu/image.c
+index 91101c3..785a862 100644
+--- a/criu/image.c
++++ b/criu/image.c
+@@ -8,6 +8,7 @@
+ #include "cr_options.h"
+ #include "imgset.h"
+ #include "image.h"
++#include "page-xfer.h"
+ #include "pstree.h"
+ #include "stats.h"
+ #include "cgroup.h"
+@@ -280,7 +281,7 @@ int write_img_inventory(InventoryEntry *he)
+ 
+ int inventory_save_uptime(InventoryEntry *he)
+ {
+-	if (!opts.track_mem)
++	if (!opts.track_mem && !exact_parent_requested())
+ 		return 0;
+ 
+ 	/*
+diff --git a/criu/include/page-xfer.h b/criu/include/page-xfer.h
+index 0d9b350..bbde638 100644
+--- a/criu/include/page-xfer.h
++++ b/criu/include/page-xfer.h
+@@ -31,6 +31,9 @@ struct page_xfer {
+ 	 */
+ 	unsigned long offset;
+ 	bool transfer_lazy;
++	/* Opt-in exact comparison; never derives cross-task holes from soft dirty. */
++	bool exact_parent;
++	u64 exact_compared, exact_reused, exact_written;
+ 
+ 	/* private data for every page-xfer engine */
+ 	union {
+@@ -48,6 +51,7 @@ struct page_xfer {
+ 	struct page_read *parent;
+ };
+ 
++extern bool exact_parent_requested(void);
+ extern int open_page_xfer(struct page_xfer *xfer, int fd_type, unsigned long id);
+ struct page_pipe;
+ extern int page_xfer_dump_pages(struct page_xfer *, struct page_pipe *);
+diff --git a/criu/mem.c b/criu/mem.c
+index 9e8740c..4448f24 100644
+--- a/criu/mem.c
++++ b/criu/mem.c
+@@ -539,6 +539,10 @@ static int __parasite_dump_pages_seized(struct pstree_item *item, struct parasit
+ 
+ 	pr_info("\n");
+ 	pr_info("Dumping pages (type: %d pid: %d)\n", CR_FD_PAGES, item->pid->real);
++	if (exact_parent_requested() && (mdc->pre_dump || mdc->lazy)) {
++		pr_err("Exact parent comparison supports regular local dump only\n");
++		return -1;
++	}
+ 	pr_info("----------------------------------------\n");
+ 
+ 	timing_start(TIME_MEMDUMP);
+@@ -594,7 +598,7 @@ static int __parasite_dump_pages_seized(struct pstree_item *item, struct parasit
+ 	 * Step 1 -- generate the pagemap
+ 	 */
+ 	args->off = 0;
+-	has_parent = !!xfer.parent && !possible_pid_reuse;
++	has_parent = !!xfer.parent && !possible_pid_reuse && !xfer.exact_parent;
+ 	if (mdc->parent_ie)
+ 		parent_predump_mode = mdc->parent_ie->pre_dump_mode;
+ 
+diff --git a/criu/page-xfer.c b/criu/page-xfer.c
+index 463d4c5..3c7b27b 100644
+--- a/criu/page-xfer.c
++++ b/criu/page-xfer.c
+@@ -30,6 +30,14 @@
+ 
+ static int page_server_sk = -1;
+ 
++/* Deliberately opt-in and restricted to one pinned binary revision. */
++bool exact_parent_requested(void)
++{
++	const char *value = getenv("DELTABOX_CRIU_EXACT_PARENT");
++	return value && !strcmp(value, "1");
++}
++
++
+ struct page_server_iov {
+ 	u32 cmd;
+ 	u64 nr_pages;
+@@ -356,6 +364,11 @@ static int write_pagemap_loc(struct page_xfer *xfer, struct iovec *iov, u32 flag
+ 
+ static void close_page_xfer(struct page_xfer *xfer)
+ {
++	if (xfer->exact_parent)
++		pr_info("Exact parent pages: compared=%llu reused=%llu written=%llu\n",
++			(unsigned long long)xfer->exact_compared,
++			(unsigned long long)xfer->exact_reused,
++			(unsigned long long)xfer->exact_written);
+ 	if (xfer->parent != NULL) {
+ 		xfer->parent->close(xfer->parent);
+ 		xfree(xfer->parent);
+@@ -365,6 +378,41 @@ static void close_page_xfer(struct page_xfer *xfer)
+ 	close_image(xfer->pmi);
+ }
+ 
++/* This mode requires immutable, ordinary local parent images. Reject damage
++ * and lazy-only parents rather than silently producing a purported delta.
++ */
++static int exact_validate_parent(struct page_read *p)
++{
++	unsigned long long bytes = 0, end = 0;
++	struct stat st;
++	int i;
++	for (i = 0; i < p->nr_pmes; i++) {
++		PagemapEntry *pe = p->pmes[i];
++		unsigned long long len = pe->nr_pages * PAGE_SIZE;
++		u32 flags = pe->flags;
++		if (!pe->nr_pages || pe->nr_pages > ULLONG_MAX / PAGE_SIZE ||
++		    pe->vaddr % PAGE_SIZE || pe->vaddr < end || pe->vaddr > ULLONG_MAX - len ||
++		    (flags & ~(PE_PRESENT | PE_PARENT | PE_LAZY)) ||
++		    !(flags & (PE_PRESENT | PE_PARENT)) ||
++		    ((flags & PE_PRESENT) && (flags & PE_PARENT))) {
++			pr_err("Invalid or unsupported exact parent pagemap\n");
++			return -1;
++		}
++		end = pe->vaddr + len;
++		if (flags & PE_PRESENT) {
++			if (bytes > ULLONG_MAX - len)
++				return -1;
++			bytes += len;
++		}
++	}
++	if (fstat(img_raw_fd(p->pi), &st) || st.st_size < 0 ||
++	    (unsigned long long)st.st_size != bytes) {
++		pr_err("Exact parent pages image length does not match pagemap\n");
++		return -1;
++	}
++	return p->parent ? exact_validate_parent(p->parent) : 0;
++}
++
+ static int open_page_local_xfer(struct page_xfer *xfer, int fd_type, unsigned long img_id)
+ {
+ 	u32 pages_id;
+@@ -411,12 +459,24 @@ static int open_page_local_xfer(struct page_xfer *xfer, int fd_type, unsigned lo
+ 			xfree(xfer->parent);
+ 			xfer->parent = NULL;
+ 			close(pfd);
++			if (exact_parent_requested() && fd_type == CR_FD_PAGEMAP)
++				goto err_pi;
+ 			goto out;
+ 		}
+ 		close(pfd);
+ 	}
+ 
+ out:
++	xfer->exact_parent = exact_parent_requested() && fd_type == CR_FD_PAGEMAP && xfer->parent;
++	if (xfer->exact_parent) {
++		if (exact_validate_parent(xfer->parent)) {
++			xfer->parent->close(xfer->parent);
++			xfree(xfer->parent);
++			xfer->parent = NULL;
++			goto err_pi;
++		}
++		page_read_disable_dedup(xfer->parent);
++	}
+ 	xfer->write_pagemap = write_pagemap_loc;
+ 	xfer->write_pages = write_pages_loc;
+ 	xfer->close = close_page_xfer;
+@@ -433,6 +493,12 @@ int open_page_xfer(struct page_xfer *xfer, int fd_type, unsigned long img_id)
+ {
+ 	xfer->offset = 0;
+ 	xfer->transfer_lazy = true;
++	xfer->exact_parent = false;
++	xfer->exact_compared = xfer->exact_reused = xfer->exact_written = 0;
++	if (exact_parent_requested() && (opts.use_page_server || opts.stream || opts.auto_dedup)) {
++		pr_err("Exact parent comparison forbids page-server, stream and auto-dedup\n");
++		return -1;
++	}
+ 
+ 	if (opts.use_page_server)
+ 		return open_page_server_xfer(xfer, fd_type, img_id);
+@@ -877,6 +943,87 @@ err:
+ 	return -1;
+ }
+ 
++/* Write already-proven ranges directly: the comparison reader has advanced
++ * past this range, so write_pagemap_loc's forward-only existence check must
++ * not rewind it. Every PE_PARENT below was read successfully and memcmp-equal.
++ */
++static int exact_write_map(struct page_xfer *xfer, unsigned long addr, unsigned long len, u32 flags)
++{
++	PagemapEntry pe = PAGEMAP_ENTRY__INIT;
++	pe.vaddr = addr;
++	pe.has_nr_pages = true;
++	pe.nr_pages = len / PAGE_SIZE;
++	pe.has_flags = true;
++	pe.flags = flags;
++	return pb_write_one(xfer->pmi, &pe, PB_PAGEMAP);
++}
++
++static int exact_xfer_pages(struct page_xfer *xfer, int pipe, struct iovec *iov, u32 flags)
++{
++	unsigned long pos, run_start = 0, run_len = 0;
++	u32 run_flags = 0;
++	unsigned char *current, *parent;
++	int ret = -1;
++
++	if ((!(flags & PE_PRESENT) || (flags & ~(PE_PRESENT | PE_LAZY))) || xfer->offset || !xfer->parent || iov->iov_len % PAGE_SIZE) {
++		pr_err("Unsupported exact parent page transfer\n");
++		return -1;
++	}
++	current = xmalloc(PAGE_SIZE * 2);
++	if (!current)
++		return -1;
++	parent = current + PAGE_SIZE;
++	for (pos = 0; pos < iov->iov_len; pos += PAGE_SIZE) {
++		unsigned long addr = (unsigned long)iov->iov_base + pos;
++		size_t got = 0;
++		int found;
++		u32 output_flags = flags;
++		while (got < PAGE_SIZE) {
++			ssize_t n = read(pipe, current + got, PAGE_SIZE - got);
++			if (n < 0 && errno == EINTR)
++				continue;
++			if (n <= 0) {
++				pr_perror("Cannot read exact comparison page");
++				goto out;
++			}
++			got += n;
++		}
++		found = xfer->parent->seek_pagemap(xfer->parent, addr);
++		if (found < 0)
++			goto out;
++		if (found > 0) {
++			if (xfer->parent->read_pages(xfer->parent, addr, 1, parent, 0) != 1)
++				goto out;
++			xfer->exact_compared++;
++			if (!memcmp(current, parent, PAGE_SIZE))
++				output_flags = PE_PARENT | (flags & PE_LAZY);
++		}
++		if (run_len && output_flags != run_flags) {
++			if (exact_write_map(xfer, run_start, run_len, run_flags) < 0)
++				goto out;
++			run_len = 0;
++		}
++		if (!run_len) {
++			run_start = addr;
++			run_flags = output_flags;
++		}
++		run_len += PAGE_SIZE;
++		if (output_flags & PE_PRESENT) {
++			if (write_all(img_raw_fd(xfer->pi), current, PAGE_SIZE) != PAGE_SIZE)
++				goto out;
++			xfer->exact_written++;
++		} else {
++			xfer->exact_reused++;
++		}
++	}
++	if (run_len && exact_write_map(xfer, run_start, run_len, run_flags) < 0)
++		goto out;
++	ret = 0;
++out:
++	xfree(current);
++	return ret;
++}
++
+ int page_xfer_dump_pages(struct page_xfer *xfer, struct page_pipe *pp)
+ {
+ 	struct page_pipe_buf *ppb;
+@@ -904,6 +1051,11 @@ int page_xfer_dump_pages(struct page_xfer *xfer, struct page_pipe *pp)
+ 
+ 			flags = ppb_xfer_flags(xfer, ppb);
+ 
++			if (xfer->exact_parent) {
++				if (exact_xfer_pages(xfer, ppb->p[0], &iov, flags))
++					return -1;
++				continue;
++			}
+ 			if (xfer->write_pagemap(xfer, &iov, flags))
+ 				return -1;
+ 			if ((flags & PE_PRESENT) && xfer->write_pages(xfer, ppb->p[0], iov.iov_len))
+diff --git a/criu/pagemap.c b/criu/pagemap.c
+index 6c9c4f7..e19fd70 100644
+--- a/criu/pagemap.c
++++ b/criu/pagemap.c
+@@ -480,7 +480,15 @@ static int read_pagemap_page(struct page_read *pr, unsigned long vaddr, unsigned
+ 	pagemap_bound_check(pr->pe, vaddr, nr);
+ 
+ 	if (pagemap_in_parent(pr->pe)) {
+-		if (read_parent_page(pr, vaddr, nr, buf, flags) < 0)
++		/* A lazy-pages client owns the completion callback only on the
++		 * top reader. Ancestors are local and have no callback: queued
++		 * parent reads would never wake the faulting task. Finish this
++		 * range in the daemon and notify the owning client exactly once.
++		 */
++		unsigned parent_flags = pr->io_complete ? flags & ~PR_ASYNC : flags;
++		if (read_parent_page(pr, vaddr, nr, buf, parent_flags) < 0)
++			return -1;
++		if (pr->io_complete && pr->io_complete(pr, vaddr, nr) < 0)
+ 			return -1;
+ 	} else {
+ 		if (pr->maybe_read_page(pr, vaddr, nr, buf, flags) < 0)

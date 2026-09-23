@@ -1,0 +1,178 @@
+{
+  "reviewed_commit": "93c05845b80eed0202fa768f9d0ac8081633470a",
+  "date": "2026-09-20",
+  "bindings": [
+    {
+      "source": "finalbench/official_sandbox_fork/cube_official_fork_20260605_210626.json",
+      "sha256": "050c02861ba230581a121050c8843413ac991c2e056bbb538a9dd2dcf1c30acf",
+      "backend": "cube",
+      "templates": [
+        "cube-official-fork-bench-20260605_210553"
+      ],
+      "forks": [
+        1,
+        4,
+        16,
+        64
+      ]
+    },
+    {
+      "source": "finalbench/official_sandbox_fork/e2b_official_fork_20260605_211829.json",
+      "sha256": "645eae70f6a56b57e89f9d422deb2c266673cec60e583f2f24230a388eed19ab",
+      "backend": "e2b",
+      "templates": [
+        "base"
+      ],
+      "forks": [
+        1,
+        4,
+        16,
+        64
+      ]
+    },
+    {
+      "source": "finalbench/official_sandbox_fork/e2b_official_fork16_c16_x4_20260605_215731.json",
+      "sha256": "1c9accb0422ebed683f33a595a8a7a885c5cb7eda237aa1facee1eb5fe814b93",
+      "backend": "e2b",
+      "templates": [
+        "base"
+      ],
+      "forks": [
+        16
+      ]
+    },
+    {
+      "source": "finalbench/fc_diff_dm/fc_dm_pilot.py",
+      "sha256": "a4b176683d32fde308a3de2020de8dcff19e76b521e50c8d2389ce0854337f9a"
+    },
+    {
+      "source": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/REPORT.md",
+      "sha256": "87d2566417c60a8d792f687847e75f7d507ed2f2605e8c450935b2ca737f41ce"
+    },
+    {
+      "source": "finalbench/deltabox_peagle_mcts30_2x_numa12_realrtt/scripts/prepare_images_in_shm.sh",
+      "sha256": "aedf325139d9484820d1453d2f5da11a67562bda6d406638a28b0c2958c438ad"
+    },
+    {
+      "source": "rollbackable-sandbox-paper/plot/plot_fig_rl_combo.py",
+      "sha256": "ee2287fc4b2d512ccf53197d8fa2d8609192b8506fe569da81a2d0fdd50685cd"
+    },
+    {
+      "source": "/mnt/disk2/dyp/d-overlayfs/benchmarks/replay/swesearch_replay.sh",
+      "sha256": "e0fc6f98f8c5a85f823cf7d40653bdbcf7aad8f55e81609e5f13c054bec91618",
+      "loop_size_mib": 4096
+    }
+  ],
+  "live_image_paths": [
+    {
+      "path": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/base.xfs",
+      "bytes": 3221225472,
+      "device": 2049,
+      "inode": 51118155,
+      "sha256_first_4MiB": "5d422e3eb4bcbe00a91d6d562aec8cc1cc19efe4be758a5c422e2dcb900502a5"
+    },
+    {
+      "path": "/mnt/disk2/dyp/d-overlayfs/data-django.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-django.xfs",
+      "bytes": 9663676416,
+      "device": 2049,
+      "inode": 51118156,
+      "sha256_first_4MiB": "b725f216ae4d5b1dfaa39c01ff4b292c71c825540235d4e41a2b6795293be8d5"
+    },
+    {
+      "path": "/mnt/disk2/dyp/d-overlayfs/data-sympy.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sympy.xfs",
+      "bytes": 9663676416,
+      "device": 2049,
+      "inode": 51118159,
+      "sha256_first_4MiB": "c01cb472d6c910315de78900a3556391d546812c329353a4ab019903ddfdd37b"
+    },
+    {
+      "path": "/mnt/disk2/dyp/d-overlayfs/data-sci.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sci.xfs",
+      "bytes": 19327352832,
+      "device": 2049,
+      "inode": 51118157,
+      "sha256_first_4MiB": "e057f9b98196513496f1df86cdb92e3a736de30391b2a19e1dcb4a5ca154bc00"
+    },
+    {
+      "path": "/mnt/disk2/dyp/d-overlayfs/data-tools.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-tools.xfs",
+      "bytes": 10737418240,
+      "device": 2049,
+      "inode": 51118160,
+      "sha256_first_4MiB": "ec4275ef187cf18e8261586e25854b163af871378691e069af37171dc91ddfa1"
+    },
+    {
+      "path": "/mnt/disk1/dyp/d-overlayfs_xfs/base.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/base.xfs",
+      "bytes": 3221225472,
+      "device": 2049,
+      "inode": 51118155,
+      "sha256_first_4MiB": "5d422e3eb4bcbe00a91d6d562aec8cc1cc19efe4be758a5c422e2dcb900502a5"
+    },
+    {
+      "path": "/mnt/disk1/dyp/d-overlayfs_xfs/data-django.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-django.xfs",
+      "bytes": 9663676416,
+      "device": 2049,
+      "inode": 51118156,
+      "sha256_first_4MiB": "b725f216ae4d5b1dfaa39c01ff4b292c71c825540235d4e41a2b6795293be8d5"
+    },
+    {
+      "path": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sympy.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sympy.xfs",
+      "bytes": 9663676416,
+      "device": 2049,
+      "inode": 51118159,
+      "sha256_first_4MiB": "c01cb472d6c910315de78900a3556391d546812c329353a4ab019903ddfdd37b"
+    },
+    {
+      "path": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sci.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-sci.xfs",
+      "bytes": 19327352832,
+      "device": 2049,
+      "inode": 51118157,
+      "sha256_first_4MiB": "e057f9b98196513496f1df86cdb92e3a736de30391b2a19e1dcb4a5ca154bc00"
+    },
+    {
+      "path": "/mnt/disk1/dyp/d-overlayfs_xfs/data-tools.xfs",
+      "exists": true,
+      "resolved": "/mnt/disk1/dyp/d-overlayfs_xfs/data-tools.xfs",
+      "bytes": 10737418240,
+      "device": 2049,
+      "inode": 51118160,
+      "sha256_first_4MiB": "ec4275ef187cf18e8261586e25854b163af871378691e069af37171dc91ddfa1"
+    },
+    {
+      "path": "/dev/shm/deltabox_peagle_mcts30_2x_numa12_xfs/shared/base.xfs",
+      "exists": false
+    },
+    {
+      "path": "/dev/shm/deltabox_peagle_mcts30_2x_numa12_xfs/shared/data-django.xfs",
+      "exists": false
+    },
+    {
+      "path": "/dev/shm/deltabox_peagle_mcts30_2x_numa12_xfs/shared/data-sympy.xfs",
+      "exists": false
+    },
+    {
+      "path": "/dev/shm/deltabox_peagle_mcts30_2x_numa12_xfs/shared/data-sci.xfs",
+      "exists": false
+    },
+    {
+      "path": "/dev/shm/deltabox_peagle_mcts30_2x_numa12_xfs/shared/data-tools.xfs",
+      "exists": false
+    }
+  ]
+}

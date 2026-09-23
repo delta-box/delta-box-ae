@@ -1,0 +1,13 @@
+{
+  "pid": 3475960,
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "kernel_sha256": "fa09edb1891d893dbad6136b0dcfb4deac9c5126513df3b6312c278b0d521808",
+  "host_affinity_cpus": [
+    0,
+    1
+  ],
+  "host_numa_policy": "policy: bind\npreferred node: 0\nphyscpubind: 0 1 \ncpubind: 0 \nnodebind: 0 \nmembind: 0 \n",
+  "probe_sha256": "680be198faeedd8a891a7b3574e3dc18489a360f5df324f0817fab5de3899305",
+  "rootfs_copy": "/mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/rootfs.xfs",
+  "base_read_only_source": "/mnt/disk2/dyp/d-overlayfs/base.xfs"
+}

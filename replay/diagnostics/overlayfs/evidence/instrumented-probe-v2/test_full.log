@@ -1,0 +1,114 @@
+
+=======================================================
+  OverlayFS 热切换全量测试 (ext4 宿主机兼容)
+=======================================================
+
+[0;36m[INFO][0m === T01: 基础 checkpoint 读写 ===
+[0;32m[PASS][0m T01a: overlay 读取 lower 正确
+[0;32m[PASS][0m T01b: copy-up 到 upper1
+Checkpoint succeeded.
+[0;32m[PASS][0m T01c: checkpoint ioctl 成功
+[0;32m[PASS][0m T01d: checkpoint 后读取正确
+[0;32m[PASS][0m T01e: 写入到新 upper2 正确
+[0;36m[INFO][0m === T02: lazy switch 写入去向 ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T02a: stale fd 写入被 lazy switch 重定向到 upper2
+[0;32m[PASS][0m T02b: 新 open 写入到 upper2
+[0;36m[INFO][0m === T03: 多代 checkpoint (3 轮) ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T03a: gen1 读取正确
+Checkpoint succeeded.
+[0;32m[PASS][0m T03b: gen2 读取正确
+Checkpoint succeeded.
+[0;32m[PASS][0m T03c: 第 3 次 checkpoint 成功
+[0;32m[PASS][0m T03d: gen3 读取正确
+[0;32m[PASS][0m T03e: gen3 追加写入正确
+[0;36m[INFO][0m === T04: 文件创建/删除/重命名 跨 checkpoint ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T04a: checkpoint 后创建文件到 upper2
+[0;32m[PASS][0m T04b: checkpoint 后删除文件成功
+[0;32m[PASS][0m T04c: checkpoint 后重命名成功
+[0;36m[INFO][0m === T05: 符号链接 & 硬链接 ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T05a: checkpoint 后创建符号链接
+[0;32m[PASS][0m T05b: checkpoint 后硬链接创建
+[0;36m[INFO][0m === T06: 元数据操作 chmod/truncate ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T06a: checkpoint 后 chmod 成功
+[0;32m[PASS][0m T06b: checkpoint 后 truncate 成功 (size=5)
+[0;32m[PASS][0m T06c: truncate 后内容正确
+[0;36m[INFO][0m === T07: 深层目录 copy-up ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T07a: 深层 4 级目录写入成功
+[0;32m[PASS][0m T07b: 深层目录创建新文件
+[0;32m[PASS][0m T07c: 6 级嵌套目录创建成功
+[0;36m[INFO][0m === T08: 目录缓存一致性 (readdir) ===
+[0;36m[INFO][0m   切换前文件数: 30
+Checkpoint succeeded.
+[0;36m[INFO][0m   切换后文件数: 60
+[0;32m[PASS][0m T08a: readdir 看到新 lower 的文件
+[0;32m[PASS][0m T08b: 5 次 readdir 结果一致
+[0;36m[INFO][0m === T09: mmap 安全性 ===
+[0;32m[PASS][0m T09a: mmap 读写在 checkpoint 后不崩溃
+[0;36m[INFO][0m === T10: 并发读写 + 交替 checkpoint (5s) ===
+Checkpoint succeeded.
+Checkpoint succeeded.
+Checkpoint succeeded.
+Checkpoint succeeded.
+Checkpoint succeeded.
+[0;32m[PASS][0m T10a: 全部 5 次 checkpoint 成功
+[0;32m[PASS][0m T10b: 无写入错误
+[0;32m[PASS][0m T10c: 压力测试后文件系统可用
+[0;36m[INFO][0m === T11: fallocate / ftruncate 跨 checkpoint ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T11a: checkpoint 后 ftruncate 到 100 bytes
+[0;32m[PASS][0m T11b: checkpoint 后 fallocate 到 1MB
+[0;36m[INFO][0m === T12: stale fd 读写 (bystander 场景) ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T12a: stale fd 读取不崩溃
+[0;32m[PASS][0m T12b: stale fd 写入不崩溃
+[0;32m[PASS][0m T12c: merged 读取不崩溃
+[0;36m[INFO][0m === T13: 只读操作安全性 ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T13a: checkpoint 后读取 lower 文件正确
+[0;32m[PASS][0m T13b: stat 正常
+[0;32m[PASS][0m T13c: readdir 正常
+[0;32m[PASS][0m T13d: access(R_OK) 正常
+[0;32m[PASS][0m T13e: 纯读操作未触发 copy-up
+[0;36m[INFO][0m === T14: 批量 copy-up (100 文件) ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T14a: 100 个文件写入无错误
+[0;32m[PASS][0m T14b: 100 个文件全部 copy-up 到 upper2
+[0;32m[PASS][0m T14c: 抽查第 50 个文件内容正确
+[0;36m[INFO][0m === T15: O_APPEND 写入跨 checkpoint ===
+Checkpoint succeeded.
+[0;32m[PASS][0m T15a: O_APPEND 写入内容正确
+[0;32m[PASS][0m T15b: append 写入到 upper2
+
+=======================================================
+  结果:  PASS=44  FAIL=0  WARN=0
+=======================================================
+
+[0;32m无 kernel 崩溃[0m
+
+Kernel 日志 (与 ovl 相关):
+[   17.340459] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   17.340541] ovl_ioctl_checkpoint: 7 callbacks suppressed
+[   18.348114] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   18.348813] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   19.355598] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   19.355643] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.410472] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.410519] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.463457] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.463473] overlayfs: ovl_chk_busy: open inode (ino=6915614, count=1)
+[   20.463478] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   20.463504] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.506584] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.506631] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.548336] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.548369] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.607151] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.607206] overlayfs: ovl_chk_busy: open inode (ino=3068100, count=1)
+[   20.607212] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   20.607240] overlayfs: ovl_checkpoint: old upper injected as lower[1]

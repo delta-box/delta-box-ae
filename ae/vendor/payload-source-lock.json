@@ -1,0 +1,26 @@
+[
+  {
+    "source_path": "finalcode/spr_payload/mock_llm_server.py",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "destination": "ae/vendor/spr_payload/mock_llm_server.py",
+    "sha256": "5bde9a192398300e24b75869cd8e7f6bfeca493971c6777f7ce0f567706042a2"
+  },
+  {
+    "source_path": "finalcode/spr_payload/protocol.py",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "destination": "ae/vendor/spr_payload/protocol.py",
+    "sha256": "67c86fee51e1d48c9df0a03440ec3ce8537e048a9e4f17a5fbdee9a7b44f6e4b"
+  },
+  {
+    "source_path": "finalcode/spr_payload/replay_driver.py",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "destination": "ae/vendor/spr_payload/replay_driver.py",
+    "sha256": "2f2ce3ce0fff40f428e9179b34a830c5017e1b04212eb94cfca835023e0d0dfc"
+  },
+  {
+    "source_path": "finalcode/spr_payload/trajectory_index.py",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "destination": "ae/vendor/spr_payload/trajectory_index.py",
+    "sha256": "fa874fabb78c71a519e68926a18ca2d00fc542374a9375230977c6cd4257c27a"
+  }
+]

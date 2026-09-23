@@ -1,0 +1,6 @@
+{
+  "pid": 3391602,
+  "kernel": "/mnt/disk2/dyp/d-overlayfs/linux-6.8/vmlinux",
+  "rootfs_copy": "/mnt/disk2/dyp/overlay-stale-fd-20260921/old-kernel-probe-v2/ovl-probe-8k5n67tk/rootfs.xfs",
+  "base_read_only_source": "/mnt/disk2/dyp/d-overlayfs/base.xfs"
+}

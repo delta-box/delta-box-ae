@@ -1,0 +1,14 @@
+.sources/
+out/
+*.xfs
+*.ext4
+*.qcow2
+*.img
+*.iso
+*.tar
+*.tar.gz
+*.bin
+vmlinux
+bzImage
+*.ko
+__pycache__/

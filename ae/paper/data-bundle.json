@@ -1,0 +1,11 @@
+{
+  "filename": "deltabox-paper-data-20260923-replay.tar.zst",
+  "sha256": "da8114c8bb476f524020b4cb5292f2019d17241ac6a2272c64e281441f0f4cb5",
+  "compressed_bytes": 32322056,
+  "uncompressed_object_bytes": 1494564426,
+  "unique_objects": 2988,
+  "materialized_file_references": 4866,
+  "manifest_sha256": "fbb5d7ec68b873a99d5e40df51830a0ff04544f6d1dfc3e32835c82271e27fec",
+  "storage": "Curated archive; original historical data excluded",
+  "repository_path": "datasets/deltabox-paper-data-20260923-replay.tar.zst"
+}

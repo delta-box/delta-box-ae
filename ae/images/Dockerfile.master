@@ -1,0 +1,38 @@
+# Reconstructed upstream recipe. Historical builds started from ubuntu-24.04.xfs.
+# Build through scripts/build_master.sh; record the resolved OCI digest and logs.
+ARG UBUNTU_IMAGE=ubuntu:24.04
+FROM ${UBUNTU_IMAGE}
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CRIU_REF=30acbabcd
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    systemd systemd-sysv dbus openssh-server sudo passwd ca-certificates curl git \
+    build-essential pkg-config python3 python3-dev python3-pip python3-venv \
+    python3-protobuf python3-psutil python3-requests python3-numpy \
+    protobuf-c-compiler libprotobuf-c-dev libnl-3-dev libnet1-dev libcap-dev \
+    libaio-dev libgnutls28-dev libbsd-dev libnftables-dev libselinux1-dev \
+    iproute2 iptables iputils-ping procps rsync xfsprogs e2fsprogs \
+    libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libbz2-dev \
+    liblzma-dev libsqlite3-dev libreadline-dev libncurses-dev libgdbm-dev \
+    libgfortran5 gfortran libopenblas-dev liblapack-dev libfreetype6-dev \
+    libpng-dev libjpeg-dev graphviz locales && \
+    locale-gen en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/checkpoint-restore/criu.git /build/criu && \
+    cd /build/criu && git checkout --detach "$CRIU_REF" && git submodule update --init --recursive && \
+    mkdir -p /usr/share/ae-build && git rev-parse HEAD > /usr/share/ae-build/criu.commit && \
+    make -j4 criu && make install-criu PREFIX=/usr/local && criu --version && rm -rf /build
+COPY miniconda.sh /build/miniconda.sh
+ARG MINICONDA_SHA256
+RUN test -n "$MINICONDA_SHA256" && \
+    echo "$MINICONDA_SHA256  /build/miniconda.sh" | sha256sum -c - && \
+    bash /build/miniconda.sh -b -p /opt/miniconda3 && rm -rf /build
+COPY env_specs.json install_envs.py install_envs_strict.py /build/
+# This is a newly solved shared shell environment; the historical lock was not found.
+# Terms/channel configuration must be supplied through the chosen installer/channels.
+ARG CONDA_CHANNEL=conda-forge
+RUN /opt/miniconda3/bin/conda config --system --remove-key channels || true
+RUN /opt/miniconda3/bin/conda config --system --add channels "$CONDA_CHANNEL" && \
+    /opt/miniconda3/bin/conda create -y -n testbed python=3.11 pip pytest && \
+    python3 /build/install_envs_strict.py /build/env_specs.json && \
+    cp /build/env_specs.json /usr/share/ae-build/env_specs.json && \
+    rm -rf /repos /build /root/.cache && apt-get clean
+CMD ["/sbin/init"]

@@ -1,0 +1,427 @@
+{
+  "operation": "Replace nonempty model_api_key/api_key/openai_api_key/anthropic_api_key JSON string values with empty strings",
+  "unchanged": "All bytes outside these field values, including prompts, observations, actions, measurements and RTTs",
+  "original_storage": "Unmodified originals remain in local traces/raw and traces/supplement; excluded from Git",
+  "changed_files": [
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/astropy__astropy-14309/trajectory.json",
+      "source_sha256": "2b6be8b0a9327d06c1bfa5b0ff4a9776debe9f6aa76a24f2a1829957552d904a",
+      "published_sha256": "fd2298f6530d04730e3417c221a141f7aaac8cf643a91fbdf60dd02846022bcd",
+      "cleared_fields": 50
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-11066/trajectory.json",
+      "source_sha256": "347c56699aab3d360c0822d4f1f564c73124cb992d02a5f8d94569948bdb90be",
+      "published_sha256": "3499d16a9a97712b74338fe2cd4b2b9cd533c6e6aebbe7b0fe578a0d431f4a1b",
+      "cleared_fields": 35
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-11603/trajectory.json",
+      "source_sha256": "13b0de9cb5ffb34caa4d800fae4f920ec580ef65364ab881781d66eeb07a2159",
+      "published_sha256": "4e58b5e33a4033c9cdae028a746d86e85d96f30ce3218774949dc99c674fe44c",
+      "cleared_fields": 25
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-12143/trajectory.json",
+      "source_sha256": "5388a607986717452e06a4b02fcfa07d787a06761c37527fe52b6889b1ecce5e",
+      "published_sha256": "82a45cb06e69af783cf302374d02f8be8d99bcee6fabd0cb05a43b247731ddc1",
+      "cleared_fields": 82
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-12276/trajectory.json",
+      "source_sha256": "d8492285daac9396231442bef5ea4ab3adf8233ad53f7c5c593e1a0f21b85080",
+      "published_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "cleared_fields": 184
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-13089/trajectory.json",
+      "source_sha256": "977e7bc77f30b6e8a89e70817617bb4c0db337430f347d033b5881c0e8de1b4e",
+      "published_sha256": "10e35c5cac0e32a57a17f7bdc741ac24d6b8c30c1537092f68ee710b4856db77",
+      "cleared_fields": 63
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-13410/trajectory.json",
+      "source_sha256": "326b3ae73b42980bc747d1579d7e86cf1c8491c629deada0c6bf8ff9dfa52c58",
+      "published_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "cleared_fields": 97
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-13670/trajectory.json",
+      "source_sha256": "a40e88dec0977c6b6daefad76ac44a18582aa0d509378606602243f54cdbe11b",
+      "published_sha256": "1ace2cad3b6ff888bbfc61c2dfee8985431ee294371502d464ea2b8e5b4ebaae",
+      "cleared_fields": 63
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-13741/trajectory.json",
+      "source_sha256": "378be4b9042a0eb77c691890ec1675b39e5d436eafd88d5c674db588b40efc7b",
+      "published_sha256": "6b49c7fc6eac02715f8116ed93d9138e2c79bc27f9d839d476c0196b4bfe83e8",
+      "cleared_fields": 39
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-13786/trajectory.json",
+      "source_sha256": "f4857283e2232ceeb48ac5441f61882970225208bbbc4992a17776879007e69f",
+      "published_sha256": "e6aeb5e253e0aacc86c45a6d7e747c50bd43cad6f04c2bd0f4bc45fe02e83c5b",
+      "cleared_fields": 53
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-14373/trajectory.json",
+      "source_sha256": "f94f98a8827713eecb12be108bf6b99875b5b041241533bfa903ff2f664d2c78",
+      "published_sha256": "a2eba1efe252a2ddaa439edaa7449b7cc1219c2a36addc6b770dc674445c2d11",
+      "cleared_fields": 57
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-15467/trajectory.json",
+      "source_sha256": "80e9eba8b00c7cf5dd01633b4a3351475dfaceac9face13f2d29c5d1462103ad",
+      "published_sha256": "3860ef11c6155401a0c26dd824c798ad03473117343f08b812d932b29c679760",
+      "cleared_fields": 24
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-16429/trajectory.json",
+      "source_sha256": "11053fb5dadf909c5ef0c4e3dc82485898cf30c771ea6e058d6d993bdce3782c",
+      "published_sha256": "30d1e1a5ef093ddee8c8a818ea79241f1aeb2decbdcfaf99e303983bf92c4137",
+      "cleared_fields": 20
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-16569/trajectory.json",
+      "source_sha256": "f9707c7296ff50243d44660b1856b8799a3b36ac2d622e98bd9b44e8de1bce38",
+      "published_sha256": "615996bc08adda448daac7d326513149b14a506f28bee2ce7e963f0376aaf81c",
+      "cleared_fields": 91
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/django__django-9296/trajectory.json",
+      "source_sha256": "852339d0827d344dce00d19009090130e8e26e0d31568daa56ab02f54e436b16",
+      "published_sha256": "12b6154c8a7790037a2e2ed0bdb544695b731bfc7326cc7709a70db3296ab22c",
+      "cleared_fields": 37
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/pylint-dev__pylint-6903/trajectory.json",
+      "source_sha256": "17009355e0a8114b76bc12d8015341936cad9d234803706e72645e2959562651",
+      "published_sha256": "2a80e4939decad0655f54d0e04a554d4dd6a60e926b660a15aea58b2075ac447",
+      "cleared_fields": 92
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/pylint-dev__pylint-7277/trajectory.json",
+      "source_sha256": "f9542103353c7b1506eccf9b5d4c65be42898c867f457dc91726f2dfb9dc0d38",
+      "published_sha256": "93d0a6d92e7514d10e51c7f88474625fae6ccf160ab1d61ab098c0e0071983bd",
+      "cleared_fields": 48
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/pytest-dev__pytest-5809/trajectory.json",
+      "source_sha256": "0f262ad7f6436660e9b542ce11868cbbe71f064419f87f36a95af03031683b05",
+      "published_sha256": "e3b952ad95f450f621519de05afc729ca744370816a4b742428b44df13d9e40b",
+      "cleared_fields": 142
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/pytest-dev__pytest-6202/trajectory.json",
+      "source_sha256": "c17cacba1d4e3e0be5662eff0555baf28ca72311d26db354ea2ea69e32882f13",
+      "published_sha256": "ea2c61439f5c70409d5eb3ab7837c29400517d891eecf90bd4ab03e3e3eb6b4b",
+      "cleared_fields": 62
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/scikit-learn__scikit-learn-10844/trajectory.json",
+      "source_sha256": "84e4a72a72973827b73cb82b46be659e5a8dc252a6d3888379d22779b87c199a",
+      "published_sha256": "0c5563ce8f03661a61b7a10b66b604bd3b62a21bf32fab3d82db3faa8644947b",
+      "cleared_fields": 61
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/scikit-learn__scikit-learn-12585/trajectory.json",
+      "source_sha256": "bd7fbdfb1b5ec0582142ca627c88f650b9a987550521ad6e986ff1500fab166e",
+      "published_sha256": "588bc9e7cad5205c751374e1561885217d5c5caee38b067bda58ec13aef9cbe8",
+      "cleared_fields": 51
+    },
+    {
+      "source": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/claude/mcts/sympy__sympy-14711/trajectory.json",
+      "source_sha256": "2e62ffef77882d72fd83316cea69a1cc8d8bf9fb8778c24a8b8537d26c623660",
+      "published_sha256": "09650c3833ae38cb4284cc5f7d17f0190e29ec26d737300563411d5bd6d8953a",
+      "cleared_fields": 76
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/astropy__astropy-14309/trajectory.json",
+      "source_sha256": "2f2e693e4c1b298574daef0adaa5a2f038948645d6a524ab8281f6485fd742d4",
+      "published_sha256": "49ba878663cdee38700573a4c455b0fab7369012de0e7a2910643b69bc22250c",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/astropy__astropy-7606/trajectory.json",
+      "source_sha256": "9331f91fac3e39a39bf2f6292e971469498919862be87a1615a10450bcd7c2af",
+      "published_sha256": "c4c7461a07f44d1b44fb22c11a2d54bbb3b464ec91112fcd5ae15cf297ac5be7",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-11163/trajectory.json",
+      "source_sha256": "25bfb50f08725a866921fb4f73d06a25c0fe369b7354771f247d8e8bbdb38de5",
+      "published_sha256": "3cb97191a9172b5dd5fe512ddb5502914f01c29f6064fea0cc49df5c9ac3c5aa",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-11276/trajectory.json",
+      "source_sha256": "2810971f9d3c49f35d88708e4d8eb1d2ede247979a3b114220eb2a683fdd7d14",
+      "published_sha256": "a33edd9d60424e579664b7f1cf9dcb49ca26e9e5c3fb88feba8d0a764eb187e3",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-11532/trajectory.json",
+      "source_sha256": "177f19b102f53b6436c1700801f730ee2821f6be65f5d6b14589ead83cce7927",
+      "published_sha256": "ed1a7bc5ae851e399890924ac06d046db9136218b8dc22f264366a61e4e2c95b",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-11880/trajectory.json",
+      "source_sha256": "f0c9b35b8dfb437d46e897fd4ada5e3b43b1628967cf8b8222d989910991a5c8",
+      "published_sha256": "b47a0f9133feb82acf4af196749d94e2b88b499a93acac72b7fa0543e239bfc8",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-12143/trajectory.json",
+      "source_sha256": "c3282cd7f0fcf95a8e881f6eaee440ebefb497cab22e004369fb960c96764613",
+      "published_sha256": "62d5cb81999ba13815a4ae5e77199b2845c8fa2e62541836707aafef6f3c1b6c",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-13089/trajectory.json",
+      "source_sha256": "a44318d3b82faffcd009a367ff1130e585d9d7eb95b9fb7ff6140d27174a6f7b",
+      "published_sha256": "86bac9db19f9125a5c6766e927b3b0333c8ff9124092169a93bb99b762b5f6b3",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-13410/trajectory.json",
+      "source_sha256": "dd2d0a45ab6ea2216023ea2f873242cb73912a48a5ec3481aeb94ccf497f2341",
+      "published_sha256": "54eec49c1c66d9f1c502949bb01b0d890449524b1c5b4e1f9290d1418bc1f13c",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-13786/trajectory.json",
+      "source_sha256": "cfd2afc420c6f9817a0d84593968213d2c6f0ca9c53936a45466d45f36d2496d",
+      "published_sha256": "e49c20a35eb1696d6ba1761dd0506b6ebe5c92c51fed09dee48b4a2bc47fca78",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-14373/trajectory.json",
+      "source_sha256": "0e3905e152e9dab5829f54a2665efb50887441ed2bef6ece74a165c30eaffbcf",
+      "published_sha256": "1e747d8601c78d225bcf036938a4e516e3cc996c9708bd9a5421c23e847a00dc",
+      "cleared_fields": 7
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-14493/trajectory.json",
+      "source_sha256": "51884e187e0fb28aa9744cd60e4792f230be3f697b358b94614ae4ceec8aa045",
+      "published_sha256": "2cb37ac68edf39c53e2f43b92fe6741ce89ef2fe0eccdd1604eb8cbd86b1164c",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-15467/trajectory.json",
+      "source_sha256": "2cd47cc73a2a096ed66c91d2ff6821a1a4712987e6565c01d16d14482ea77b9f",
+      "published_sha256": "e8aae57aa696804820d316a8f29811d2b4e221e405fea46bbd5afdcffae59486",
+      "cleared_fields": 7
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-15731/trajectory.json",
+      "source_sha256": "d4e6b84e3f87a1b57c9f7dbfffb0a38d5175313d6b4872e2304ff252a7dffc96",
+      "published_sha256": "40ba9328a8a86b6e08325ef9825ae03b89c21b2a7133e0db787b74395be36ef7",
+      "cleared_fields": 8
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-16429/trajectory.json",
+      "source_sha256": "1cc325468fc3989be95948065ff811caf3735257a4aedff5f7fda8f174a1f2b0",
+      "published_sha256": "5ca8517b505cbb8e0d9c3acf218c7d77768ee0c5281265c02898f2c6821c6d25",
+      "cleared_fields": 12
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-16569/trajectory.json",
+      "source_sha256": "70790d6251c532954e3df955ee459cd1d8bd7d5e03ee16173b2aedb558685695",
+      "published_sha256": "087fe568f498b8756caa7fcdf4f5375af23e2814db1099183fc67343ec0a1a35",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/django__django-17029/trajectory.json",
+      "source_sha256": "49a21459ac8434b89ac5d42b7680c5b98c0bfd5a61446d317624466564edacfb",
+      "published_sha256": "af1c1da4a3ab69ba7d6393cc485862c892a33a0faa800dd19bfb699240a9f3d2",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/matplotlib__matplotlib-20859/trajectory.json",
+      "source_sha256": "74bced633efbfb307ddb70503fa21fcff08a2cd2bd31e84106e4fcec89e6bd6b",
+      "published_sha256": "f1209aa6d7eb9809b632064de93dc1304f69715309ef9850334cab450544a1b3",
+      "cleared_fields": 8
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/matplotlib__matplotlib-25122/trajectory.json",
+      "source_sha256": "ef29410fdf6d7e9af49a2cb3db2c2860c3b395481c2782096a984e331b904fc2",
+      "published_sha256": "d3fd6ab2ab84a278d562213ac388f5b7f31e259fc7b3e4b4e043f874622c93c2",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/matplotlib__matplotlib-26113/trajectory.json",
+      "source_sha256": "acc28f006b2b7549cadea8865f5bb6fe84d941ce55ef097ca16a3e9b0445fd0a",
+      "published_sha256": "b9e215a2f611ca431cc096684d0f3a5f45f6425aec210e1f82ac74baf4e93bdf",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pydata__xarray-2905/trajectory.json",
+      "source_sha256": "562ec49b1ce2f56adaa550d8d0bbd63f3c746ab0573cc661416557eebca2e004",
+      "published_sha256": "0e2bb51547ca3d8b9e15b45b3b7071e48ccb5366ff978cb146ae9ccfbd0f777c",
+      "cleared_fields": 14
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pydata__xarray-3677/trajectory.json",
+      "source_sha256": "8a0fa2073b2f0c51e1cc970285f2388e57156c02b362cd795649489c52c19065",
+      "published_sha256": "a01b7f96899babc3c6351cdf767edef6251191117891598981fafd4e15d788ef",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pydata__xarray-4356/trajectory.json",
+      "source_sha256": "8183efa6753649293014d41d1bf840c797c45555eff0bbe532a9ba492ec8e98a",
+      "published_sha256": "650efca3b2ffca884a3dab083b43d88ec37e37b43c6bbfde078eb57690fb2ce6",
+      "cleared_fields": 7
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pydata__xarray-4629/trajectory.json",
+      "source_sha256": "546b6fdb09b6e2a4102f66aef0b09f63445825b694eeadf09f6b06265f32d9b9",
+      "published_sha256": "41d193e527e0e600a003475917b8b7d805f087a7f606d89ce59b4d7ee65baba6",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pydata__xarray-4966/trajectory.json",
+      "source_sha256": "ff72f99517742cd2bb2dba71b7645261b436b3d1e7ab92b36eabffa41c80fafe",
+      "published_sha256": "73ddf5cac1a68511fee31baf80cdd42bb000217736cdf63eec4ab2a45cb666a0",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pylint-dev__pylint-6903/trajectory.json",
+      "source_sha256": "bf3083cf9ee7969c4c4533122177811689f69a6cf3aa37159cd8d8dfb9277cb6",
+      "published_sha256": "8438d6bd47b5fe89885eb2bd406a132fbc7ffc7009c39d5bee293c2b1f08a8d6",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pylint-dev__pylint-7277/trajectory.json",
+      "source_sha256": "1ae45ecdc005af4dde77881276ac0a20a1e70491387cb7e4b6842446cbd20600",
+      "published_sha256": "309a96918025e6517edecde011b17034093d736057277633c07dcbca493e4b73",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pytest-dev__pytest-10051/trajectory.json",
+      "source_sha256": "5d8b36c8804996c4fde5aefd01ece18949114cbef25e7255363ee2e69f4bb748",
+      "published_sha256": "d33a632fc4d1d51e6a445be4652e29115ee6630edf259ba753df4c1b182b97c8",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pytest-dev__pytest-5631/trajectory.json",
+      "source_sha256": "45644c915a6741a873fab649b406700b5419b491cf728ccd739620d5d7beb1d1",
+      "published_sha256": "a8704ed7f89d1c63f32a5d36becb1f0df275d002f156ce3048254c5aeb05a461",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pytest-dev__pytest-5809/trajectory.json",
+      "source_sha256": "2c47f72ab6bcd54dac9d1d97cff39265e2cd23c89743366ec22d1ea28eaf447f",
+      "published_sha256": "d8076409a0eb27586849d96a1ad042620b0e659fe2cfff3cd070b85b6eb178ab",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pytest-dev__pytest-6202/trajectory.json",
+      "source_sha256": "2dd36b205f15b3e1b5c231da6baa6110a1cb9927fda860358407f38d7012d973",
+      "published_sha256": "b0f6820011a917aea9bda4653408195568180f904f9bf992bc34276959d9fcc7",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/pytest-dev__pytest-7205/trajectory.json",
+      "source_sha256": "ddc3ca5f20ec1c3938e67589adf33790721a83c943c3fc07a571c1c6c30d3d4f",
+      "published_sha256": "b4ee21689048db90c9486c3652729d3df13d784710116b8620379314f0f7a1f4",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-12973/trajectory.json",
+      "source_sha256": "9cfd477d6fb57a9d8c99c2939b5023f65443ff3bea6c47e3cbb4963f8d985a63",
+      "published_sha256": "28510e697c1f0ab4f74804efbd40ff27cd69bb0535c9dffa3bfc033ed736ed87",
+      "cleared_fields": 8
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-13135/trajectory.json",
+      "source_sha256": "b363b6d32cdc34f54972e88afdac3fd3d90a9f7d03cc5e85d0be4f4462596239",
+      "published_sha256": "1c3c2f9d93f170a9c996ac9998e40060ba04755e8d2300757ededb2c9975afba",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-14629/trajectory.json",
+      "source_sha256": "5e8e3f6fab89c23ba8ee8eb37b847897a394f3f5e144ac2854f4c9b740564ae8",
+      "published_sha256": "4229b756182634a2b5d90b81f52081b77ffbf04b9586e2c9e5b01f907a9a2a4b",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-14710/trajectory.json",
+      "source_sha256": "1bb6d33db6e9d6c32674c08084909e232f31c32fe41d7355f645bf9f4955fc3b",
+      "published_sha256": "eec8ff6498720da8e0af45517f83bfaeda3d4fbe0ff824457cca9dc25990b338",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-25931/trajectory.json",
+      "source_sha256": "eaba72b16443b773df13cb53cde44db270d4e54b7282b34fd0356fce9509855a",
+      "published_sha256": "36cc3b9f5415024a1b08c6f914faca847b85d20763ef10fb6183217494e0d390",
+      "cleared_fields": 10
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/scikit-learn__scikit-learn-26323/trajectory.json",
+      "source_sha256": "b81609556b4c4e74cda1989c36dcc51078f6b5393fef49fdb30a7c2f4569c38e",
+      "published_sha256": "33063f8c66ae84e180bf0fa7d6c671fda52f8a8f398db7a595dcc4c5c9f0a6b6",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-13091/trajectory.json",
+      "source_sha256": "a1148668ac4755681dd1b27d6d4b66cd3b4a116b2a2534db2e359863d0f77349",
+      "published_sha256": "d7f9f59c03926530c97aecdd766f669191d67365556f9b2358333bea476507e3",
+      "cleared_fields": 11
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-13372/trajectory.json",
+      "source_sha256": "c00a2cf4d9f3b8c93f6b50f059688c6831fd9423adb76e3558e9158cfa6d4b3e",
+      "published_sha256": "020a6008c3342a45dbb93549f2f80400d436340ba3286f246d1a4f64199edcbd",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-14711/trajectory.json",
+      "source_sha256": "328da314243ccd1964a4c14f1ef669b92af2a069f790f8c2e4a257ece3515a31",
+      "published_sha256": "852929f2d97a3259da660cee063eb532d31dfbc42b7b56fa606de6fd150b4415",
+      "cleared_fields": 6
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-15349/trajectory.json",
+      "source_sha256": "70794c57cc6766caa07e3e5bcd79b115d26760e288ba6da5161126e03912104a",
+      "published_sha256": "f252f494d65d242840e05f4fcbd217a4c2b16decb5e9f3b493b1b41db1e9f921",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-15599/trajectory.json",
+      "source_sha256": "0cd1c6c06411383e49a72b236596b84e3cc01c80a2e1d64b074af037b45a95af",
+      "published_sha256": "9fd2d7b87f7c15ca0dc8baeb8d10d65c42e4900c68653237711b3d9127cfbab4",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-15976/trajectory.json",
+      "source_sha256": "bf2e307519471cd547f23621d4643446c0abf4e742a67b005670392a434b7654",
+      "published_sha256": "919994cf0ae0c122901eef336e7c88e2c7cdb8f93243424b98fd44b912de992f",
+      "cleared_fields": 10
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-17318/trajectory.json",
+      "source_sha256": "760049769713ef2022ecff9471f95be383918469e1a7f2f165f659cc7b86ae94",
+      "published_sha256": "a0f1c1389cebdef14dcfbcbe5d080b0a587f412dae4a0291d15f924dcbcebda6",
+      "cleared_fields": 11
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-19954/trajectory.json",
+      "source_sha256": "766fa94563dc94fab03451be9e6af009b642548f5bc7337522510c425a1da3ad",
+      "published_sha256": "aeca101defc9bf017e9ac865fca25ba98f3949143dfb3409d78394355369a9c6",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-24443/trajectory.json",
+      "source_sha256": "c9d0f709a210dae90cc41765d898c17a35d452c36a610eb7dc532727d8470558",
+      "published_sha256": "ccecbd23ad3aec44072cead022c6852df7366fbf45a553c7b7865f30c3d990d0",
+      "cleared_fields": 9
+    },
+    {
+      "source": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/claude/linear/sympy__sympy-24539/trajectory.json",
+      "source_sha256": "0926a02d5540befe04d9f8bd8b1337fced0db211c257ba79d564c6146cb5aea1",
+      "published_sha256": "b893fda15aae466a6224785556b93853cb3c3ae9eafb24f1227fb8e01688056c",
+      "cleared_fields": 6
+    }
+  ]
+}

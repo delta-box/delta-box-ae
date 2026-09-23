@@ -1,0 +1,7 @@
+# Optional replacement environment for Figure 8, NOT a recovered historical image.
+# BASE_IMAGE should include the matching CUDA runtime + torch and use @sha256.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY requirements-gpu.lock /tmp/requirements-gpu.lock
+RUN python -m pip install --require-hashes -r /tmp/requirements-gpu.lock && \
+    python -c 'import torch, transformers, peft; print(torch.__version__)'

@@ -1,0 +1,28 @@
+[INFO] === Test: deleted-open fd must not resurrect path across checkpoint ===
+[INFO] Setting up test directories on root XFS...
+[INFO] Root filesystem is XFS ✓
+[INFO] Root XFS: reflink=unknown
+[INFO] All directories under /tmp/ovl_test_delopen_8283 (on root XFS)
+[INFO] Building ioctl tool...
+[INFO] --- case pureupper (has_lower=0) ---
+[INFO] Overlay mounted: lower=/tmp/ovl_test_delopen_8283/lower1, upper=/tmp/ovl_test_delopen_8283/upper1
+[0;32m[PASS][0m [pureupper] path gone after rm (pre-checkpoint)
+[INFO] Checkpoint: lowerdir=/tmp/ovl_test_delopen_8283/lower2,upperdir=/tmp/ovl_test_delopen_8283/upper2,workdir=/tmp/ovl_test_delopen_8283/work2
+Checkpoint succeeded.
+[INFO] [pureupper] write via stale fd returned success
+[0;32m[PASS][0m [pureupper] path stays gone in merged view (no resurrection)
+[0;32m[PASS][0m [pureupper] no entry in new upper layer
+[0;32m[PASS][0m [pureupper] data readable via stale fd (anonymous inode intact)
+[INFO] --- case withlower (has_lower=1) ---
+[INFO] Overlay mounted: lower=/tmp/ovl_test_delopen_8283/lower1, upper=/tmp/ovl_test_delopen_8283/upper1
+[0;32m[PASS][0m [withlower] path gone after rm (pre-checkpoint)
+[INFO] Checkpoint: lowerdir=/tmp/ovl_test_delopen_8283/lower2,upperdir=/tmp/ovl_test_delopen_8283/upper2,workdir=/tmp/ovl_test_delopen_8283/work2
+Checkpoint succeeded.
+[INFO] [withlower] write via stale fd returned success
+[0;32m[PASS][0m [withlower] path stays gone in merged view (no resurrection)
+[0;32m[PASS][0m [withlower] no entry in new upper layer
+[0;32m[PASS][0m [withlower] data readable via stale fd (anonymous inode intact)
+[0;32m[PASS][0m No kernel errors
+
+[0;32m[PASS][0m === ALL deleted-open resurrection checks passed ===
+[INFO] Cleaning up...

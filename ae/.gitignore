@@ -1,0 +1,16 @@
+# Local source archives may be large and contain historical private metadata.
+# Publish a reviewed dataset separately; keep provenance and cohort lists in Git.
+/traces/archives/
+/traces/raw/
+/traces/supplement/
+/traces/objects/
+/paper/**/data/
+/dist/
+# Full historical inventories are local audit inputs, not the paper release index.
+/provenance/79-20260920/history-files.jsonl
+/provenance/79-20260920/trajectory-inventory.csv
+/provenance/79-20260920/*-source-files.json
+/provenance/79-20260920/audit-output.json
+__pycache__/
+*.pyc
+.DS_Store

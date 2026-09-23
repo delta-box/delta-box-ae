@@ -1,0 +1,2 @@
+mount: /sys/kernel/debug: debugfs already mounted on /sys/kernel/debug.
+       dmesg(1) may have more information after failed mount system call.

@@ -1,0 +1,43 @@
+diff --git a/packages/orchestrator/cmd/create-build/main.go b/packages/orchestrator/cmd/create-build/main.go
+index 6b67531b2..40bdb9e6e 100644
+--- a/packages/orchestrator/cmd/create-build/main.go
++++ b/packages/orchestrator/cmd/create-build/main.go
+@@ -58,6 +58,7 @@ const (
+ func main() {
+ 	templateID := flag.String("template", "local-template", "template id")
+ 	fromBuild := flag.String("from-build", "", "base build ID to build from (incremental build)")
++	image := flag.String("image", baseImage, "base OCI image to use when -from-build is empty")
+ 	toBuild := flag.String("to-build", "", "output build ID (UUID, required)")
+ 	storagePath := flag.String("storage", "", "storage: local path or gs://bucket (default: gs://$TEMPLATE_BUCKET_NAME or .local-build)")
+ 	sandboxDir := flag.String("sandbox-dir", "", "override SANDBOX_DIR (the rootfs path baked into the snapshot)")
+@@ -121,7 +122,7 @@ func main() {
+ 		log.Fatalf("network config: %v", err)
+ 	}
+ 
+-	err = doBuild(ctx, *templateID, *toBuild, *fromBuild, *kernel, *fc, *vcpu, *memory, *disk, *hugePages, *startCmd, *setupCmd, *readyCmd, localMode, *verbose, *timeout, builderConfig, networkConfig)
++	err = doBuild(ctx, *templateID, *toBuild, *fromBuild, *image, *kernel, *fc, *vcpu, *memory, *disk, *hugePages, *startCmd, *setupCmd, *readyCmd, localMode, *verbose, *timeout, builderConfig, networkConfig)
+ 	if err != nil {
+ 		log.Fatal(err)
+ 	}
+@@ -220,7 +221,7 @@ func setupEnv(ctx context.Context, storagePath, sandboxDir, kernel, fc string, l
+ 
+ func doBuild(
+ 	parentCtx context.Context,
+-	templateID, buildID, fromBuild, kernel, fc string,
++	templateID, buildID, fromBuild, image, kernel, fc string,
+ 	vcpu, memory, disk int,
+ 	hugePages bool,
+ 	startCmd, setupCmd, readyCmd string,
+@@ -405,7 +406,11 @@ func doBuild(
+ 		tmpl.FromTemplate = &templatemanager.FromTemplateConfig{BuildID: fromBuild}
+ 		fmt.Printf("Building from: %s\n", fromBuild)
+ 	} else {
+-		tmpl.FromImage = baseImage
++		if image == "" {
++			image = baseImage
++		}
++		tmpl.FromImage = image
++		fmt.Printf("Building from image: %s\n", image)
+ 	}
+ 
+ 	result, err := builder.Build(ctx, storage.Paths{BuildID: buildID}, tmpl, l.Detach(ctx).Core())

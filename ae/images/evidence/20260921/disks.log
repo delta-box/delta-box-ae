@@ -1,0 +1,13 @@
+ssh-keygen: generating new host keys: RSA ECDSA ED25519 
+passwd: password changed.
+⚠️ /proc/ is not mounted. This is not a supported mode of operation. Please fix
+your invocation environment to mount /proc/ and /sys/ properly. Proceeding anyway.
+Your mileage may vary.
+Synchronizing state of ssh.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable ssh
+Created symlink /etc/systemd/system/sshd.service → /usr/lib/systemd/system/ssh.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/ssh.service → /usr/lib/systemd/system/ssh.service.
+Created symlink /etc/systemd/system/multi-user.target.wants/data-postmount.service → /etc/systemd/system/data-postmount.service.
+Version: 4.2
+GitID: v4.2-22-g2cf8f13ca
+/mnt/disk2/dyp/ae-image-source-check-20260921/bundle-02/disks/build.json

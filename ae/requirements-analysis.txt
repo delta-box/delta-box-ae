@@ -1,0 +1,3 @@
+# Host-only plotting; measurement drivers use their configured historical environments.
+matplotlib>=3.8,<4
+Pillow>=9.1,<13

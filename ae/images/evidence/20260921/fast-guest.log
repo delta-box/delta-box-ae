@@ -1,0 +1,61 @@
+[sources] verified 99 current runtime/helper files
+[replay] 3 events from /tmp/replay_schedule.jsonl
+[stage] 9 catalog clones contain commit 0d4e575c96d408e0efb4dfd0cbfc864219776950; using /mnt/data/testbeds/django__1.11 and checking out the recorded commit
+[replay] staging real testbed by commit instance=django__django-14997 version=1.11 commit=0d4e575c96d408e0efb4dfd0cbfc864219776950
+[stage] /mnt/data/testbeds/django__1.11  ->  /testbed_original_data
+[stage] done in 2.30s
+Previous HEAD position was 3545e84488 [1.11.x] Fixed #28702 -- Made query lookups for CIText fields use citext.
+HEAD is now at 0d4e575c96 Fixed #33198 -- Corrected BinaryField.max_length docs.
+Removing Django.egg-info/
+Removing build/
+Removing dist/
+Removing django/__pycache__/
+Removing django/utils/__pycache__/
+[replay] overlay ready: {'upper': '/overlay_workspace/upper', 'work': '/overlay_workspace/work', 'layers': '/overlay_workspace/layers'}
+[replay] tmpfs mounted at /var/lib/replay/snapshots (14G cap)
+[NAMESPACE] Entering new PID/Mount universe...
+[NAMESPACE child] Agent PID=1 in new PID ns, sid=self
+[NAMESPACE sentinel] ns-init host PID = 449
+[mock-npd] pid=447 ready
+[replay] real agent host pid=449
+[Controller] CRIU dump bin=criu restore bin=criu
+[Controller] Warm-template fast path ENABLED (checkpoint_mode=async-template-full-dump, fixed_active_pid=-, restore_fastfork_dump_pid=0)
+[Controller] Hot-page prewarm ENABLED
+[Controller] Opening OverlayFS mount point: /testbed
+[Controller] ioctl cmd = 0x40104F01, args size = 16 bytes
+[replay] controller up. flags adaptive=False warm_template=True prewarm=True sync_dump=False
+[replay] worker code index loaded: files=6461 classes=6152 functions=17556 bytes=38746402 sidecar=None rss=106116KB build_ms=5246.0832595825195
+[Controller] Checkpointing d4703637 (strategy=standard)...
+[PERF] Agent RSS at pre-dump bootstrap: 103.8 MB (pid=449)
+[PERF] Warm-template bootstrap-fork(pre-dump)=2.53ms (template=449, active=456, rss=103.8MB)
+[PERF] Agent RSS at async-template stash: 95.5 MB (pid=456)
+[PERF] Warm-template async-stash=warm=12.61ms dump=11.83ms (warm_template=458, dump_root=460, active=456, rss=95.5MB)
+[CRIU] dump root=460 active=456 ns_init=449 prev=- prev_used=False prev_cross_pid=False prev_pid_mode=-
+[FS] Upper is dirty. Sinking to new layer.
+[FS] Switching overlay layers via ioctl:
+     options = "lowerdir=/testbed_original_data,upperdir=/overlay_workspace/layers/upper_d4703637_next,workdir=/overlay_workspace/layers/work_d4703637_next,ovl_kind=ckpt"
+     options_len = 153
+[FS] Switch successful. New stack: 1 lower layers
+[PERF] Checkpoint ID d4703637: OverlayFS=16.29ms
+Error (criu/sockets.c:216): sockets: Diag module missing (-2)
+Error: Could not process rule: Operation not supported
+create table inet CRIU
+^^^^^^^^^^^^^^^^^^^^^^^
+Warn  (criu/kerndat.c:1610): Can't create nftables table
+[PERF] Checkpoint ID d4703637: CRIU=184.15ms (async) dump_size=94.03MB
+[Controller] disposed async dump template pid=460 ckpt=d4703637
+[Controller] Checkpointing e279f52b (strategy=standard)...
+[PERF] Agent RSS at async-template stash: 97.8 MB (pid=456)
+[PERF] Warm-template async-stash=warm=7.95ms dump=11.10ms (warm_template=482, dump_root=484, active=456, rss=97.8MB)
+[CRIU] dump root=484 active=456 ns_init=449 prev=- prev_used=False prev_cross_pid=False prev_pid_mode=-
+[FS] Upper is clean. Skipping sink (Optimization Triggered).
+[Controller] Restoring to d4703637...
+[FS] Switching overlay layers via ioctl:
+     options = "lowerdir=/overlay_workspace/layers/layer_d4703637:/testbed_original_data,upperdir=/overlay_workspace/layers/restore_1a04a7_upper,workdir=/overlay_workspace/layers/restore_1a04a7_work,ovl_kind=restore"
+     options_len = 199
+[FS] Switch successful. New stack: 2 lower layers
+[Controller] epoch -> 1
+[PERF] Restore ID d4703637: cleanup=0.00ms, dispatch=0.06ms, OverlayFS=0.15ms ‖ fork (post-ioctl wait 4.36ms), critical-path=4.56ms, rss=96.3MB (warm-template HIT)
+[PERF] Checkpoint ID e279f52b: CRIU=195.68ms (async) dump_size=94.03MB
+[Controller] disposed async dump template pid=484 ckpt=e279f52b
+[replay] done. 6 events recorded -> /tmp/replay_results.jsonl

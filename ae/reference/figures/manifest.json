@@ -1,0 +1,166 @@
+{
+  "source": "atc26-paper158.pdf",
+  "repository_copy": "ae/reference/paper158.pdf",
+  "source_sha256": "1cc012a6ba4afdd127372a236333983ad6d17934ac63680b37faa3e6f65bb95e",
+  "dpi": 288,
+  "coordinate_system": "PDF points from top-left",
+  "content": "Original paper figures and tables, including captions; not AE measurements",
+  "artifacts": [
+    {
+      "file": "figure-01.png",
+      "pdf_page": 2,
+      "crop_points": [
+        315,
+        69,
+        562,
+        239
+      ],
+      "width": 988,
+      "height": 680,
+      "sha256": "02582938867ebd27091a22e9f9aa66bd72ef681dc007a1fc1e541f5589cf9736"
+    },
+    {
+      "file": "figure-02.png",
+      "pdf_page": 4,
+      "crop_points": [
+        50,
+        232,
+        298,
+        410
+      ],
+      "width": 992,
+      "height": 712,
+      "sha256": "2a532d3d8cda7ba2f353f6dd90db3151deb9e6695dd92c8c3556a167e3ca548b"
+    },
+    {
+      "file": "figure-03.png",
+      "pdf_page": 5,
+      "crop_points": [
+        50,
+        69,
+        562,
+        250
+      ],
+      "width": 2048,
+      "height": 724,
+      "sha256": "267b24fe0f3fb4acd59c5c35834452671d957c7da6c585a26996fffd374aea75"
+    },
+    {
+      "file": "figure-04.png",
+      "pdf_page": 6,
+      "crop_points": [
+        50,
+        69,
+        298,
+        253
+      ],
+      "width": 992,
+      "height": 736,
+      "sha256": "2f15a7d24e4ef62d8a02e6625e1783d7f1bdfacd4082b89ec081db92655d5cd3"
+    },
+    {
+      "file": "figure-05.png",
+      "pdf_page": 7,
+      "crop_points": [
+        50,
+        69,
+        298,
+        321
+      ],
+      "width": 992,
+      "height": 1008,
+      "sha256": "f8037f750991531cc497656b2a67c2e833441e254cdb4515771f4b7cf92c1eb0"
+    },
+    {
+      "file": "figure-06.png",
+      "pdf_page": 8,
+      "crop_points": [
+        50,
+        69,
+        298,
+        222
+      ],
+      "width": 992,
+      "height": 612,
+      "sha256": "905d34fec31f85cec92741eb5fba1224a0f6d6fc0a256d277c17c01f06c41cbd"
+    },
+    {
+      "file": "figure-07.png",
+      "pdf_page": 10,
+      "crop_points": [
+        315,
+        69,
+        563,
+        251
+      ],
+      "width": 992,
+      "height": 728,
+      "sha256": "24b6bb790ea104b9b74b00b4153cb4f7995d6e314af596f34a687a6860df7ec9"
+    },
+    {
+      "file": "figure-08.png",
+      "pdf_page": 11,
+      "crop_points": [
+        50,
+        211,
+        562,
+        378
+      ],
+      "width": 2048,
+      "height": 668,
+      "sha256": "270b0a0183e791394920be722d7946264a065cb2e85aa3f17fd00bcac6b76974"
+    },
+    {
+      "file": "figure-09.png",
+      "pdf_page": 12,
+      "crop_points": [
+        50,
+        69,
+        298,
+        286
+      ],
+      "width": 992,
+      "height": 868,
+      "sha256": "59c82c9f788b26e836e15662fa6f3632b65e453d14221398e1e02564bade3b13"
+    },
+    {
+      "file": "table-01.png",
+      "pdf_page": 4,
+      "crop_points": [
+        50,
+        69,
+        562,
+        230
+      ],
+      "width": 2048,
+      "height": 644,
+      "sha256": "8937fefc40cbeac90f33317f1367e926e0f81799f37e7727dc70aa37825535f9"
+    },
+    {
+      "file": "table-02.png",
+      "pdf_page": 11,
+      "crop_points": [
+        50,
+        69,
+        562,
+        209
+      ],
+      "width": 2048,
+      "height": 560,
+      "sha256": "5e785cfd4c44cf9796bcb6d4fd99e5a6eb51147dbd2b16729f9f357375a98baf"
+    },
+    {
+      "file": "table-03.png",
+      "pdf_page": 11,
+      "crop_points": [
+        315,
+        381,
+        562,
+        569
+      ],
+      "width": 988,
+      "height": 752,
+      "sha256": "909b30c573759db06f03f0952b7e5b2eaaa9f2300635a6b8fb197c5f37804f11"
+    }
+  ]
+}

@@ -1,0 +1,457 @@
+[
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "criu_copytree/criu_copytree_pilot.py",
+    "destination": "ae/vendor/finalbench/criu_copytree/criu_copytree_pilot.py",
+    "source_sha256": "6d290d2d4e77f63aba04ffff453ea386640c44affdc447acc3e0034989e8635e"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "criu_copytree/criu_sandbox_server.py",
+    "destination": "ae/vendor/finalbench/criu_copytree/criu_sandbox_server.py",
+    "source_sha256": "6e2ca6ba70b94647649f43ce49106eef97f27a17f31ae281e3f191dde6dabbbe"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "criu_copytree/criu_worker.py",
+    "destination": "ae/vendor/finalbench/criu_copytree/criu_worker.py",
+    "source_sha256": "916bab5ddcc52e22dd5df0a841a6ec958d24f6677644d043f0c2f6e87e8c7cd7"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/cube_cow_schedule_replay.py",
+    "destination": "ae/vendor/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/cube_cow_schedule_replay.py",
+    "source_sha256": "cda6c8e5562bd538a96abbbeec6f768875ba7722e9e7c65f9bbd0d3369fc631a"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/index_sidecar.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/index_sidecar.py",
+    "source_sha256": "bbb8c1d6ad6c5a026723893d58ee199bbbab2334c4b5b3a4ba140f2b831c1d76"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_index_proxy.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_index_proxy.py",
+    "source_sha256": "6e62c03f2865e57a9d35a096f8a73e1ffd264edbdaa85403c0658715d88ad493"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/__init__.py",
+    "source_sha256": "f0d504e9090cb4c9ddde754fb055ca8e69fa8a7d2ee3446e5825180414a41658"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/exceptions.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/exceptions.py",
+    "source_sha256": "e4860613110d96cc0873904cd1b36ed202ea334e1415a3487736123629f4f216"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/litellm_core_utils/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/litellm_core_utils/__init__.py",
+    "source_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/litellm_core_utils/prompt_templates/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/litellm_core_utils/prompt_templates/__init__.py",
+    "source_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/litellm_core_utils/prompt_templates/factory.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/litellm_core_utils/prompt_templates/factory.py",
+    "source_sha256": "825f207c006ac423e8f3ab52953a10b0b0d2213988da35d324ced76343c28886"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/types/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/types/__init__.py",
+    "source_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/types/llms/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/types/llms/__init__.py",
+    "source_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/litellm/types/llms/openai.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/litellm/types/llms/openai.py",
+    "source_sha256": "2dba3a77e7fbc10a2b7c93184d0c31daa9e94a78bbc19232c0b05c03d202e7e0"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/llama_index/__init__.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/llama_index/__init__.py",
+    "source_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "deltabox_std/slim_shims/sitecustomize.py",
+    "destination": "ae/vendor/finalbench/deltabox_std/slim_shims/sitecustomize.py",
+    "source_sha256": "b0db914f2c8a877218f043743a03fc063f48408fa997baf8aff1db4d09b66bcb"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "e2b_finalbench/e2b_action_runner.py",
+    "destination": "ae/vendor/finalbench/e2b_finalbench/e2b_action_runner.py",
+    "source_sha256": "f77094ec17d109b1596e966ccc3bc12272000ae6eb05ddccd308ca28b828b751"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "e2b_finalbench/e2b_finalbench_pilot.py",
+    "destination": "ae/vendor/finalbench/e2b_finalbench/e2b_finalbench_pilot.py",
+    "source_sha256": "45b7c21914bab5d0f9a3e1ab1c86f762c76229c793586d4d88b45e9ad9a8aff7"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "e2b_finalbench/e2b_slim_action_runner.py",
+    "destination": "ae/vendor/finalbench/e2b_finalbench/e2b_slim_action_runner.py",
+    "source_sha256": "0eeecc73c1c6217c49db2b47562a3f7ca7395095d34ee24419d35194c890c607"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "e2b_finalbench/e2b_slim_action_worker.py",
+    "destination": "ae/vendor/finalbench/e2b_finalbench/e2b_slim_action_worker.py",
+    "source_sha256": "9f599610b51af7c36b004a665a20456ed7ff8b347cc88e57bf95e1f3360fe1b8"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "e2b_finalbench/e2b_slim_finalbench_pilot.py",
+    "destination": "ae/vendor/finalbench/e2b_finalbench/e2b_slim_finalbench_pilot.py",
+    "source_sha256": "127f33f13e56308d90882c8816e60616633b71c401e4cfb806b898160306dd0d"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "fc_diff_dm/fc_dm_controller_pilot.py",
+    "destination": "ae/vendor/finalbench/fc_diff_dm/fc_dm_controller_pilot.py",
+    "source_sha256": "3534cf18870b376135c76c0d3bf48c3ec105fea1c65291fd137047a2ca7b0b96"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "fc_diff_dm/fc_dm_pilot.py",
+    "destination": "ae/vendor/finalbench/fc_diff_dm/fc_dm_pilot.py",
+    "source_sha256": "a4b176683d32fde308a3de2020de8dcff19e76b521e50c8d2389ce0854337f9a"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "fc_diff_dm/guest_controller_driver.py",
+    "destination": "ae/vendor/finalbench/fc_diff_dm/guest_controller_driver.py",
+    "source_sha256": "fdb28679bfafccde395f09aaa05c0284f66e0b4fd2788750261afa88def4c93e"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "fc_diff_dm/guest_moatless_pause_driver.py",
+    "destination": "ae/vendor/finalbench/fc_diff_dm/guest_moatless_pause_driver.py",
+    "source_sha256": "edfe50bb7d8b3416d275b71f13d6fd5ebd3a377909c3b3ea89ce73abae9f7fb9"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "official_sandbox_fork/bench_deltabox_fork_in_vm.py",
+    "destination": "ae/vendor/finalbench/official_sandbox_fork/bench_deltabox_fork_in_vm.py",
+    "source_sha256": "66f6459873dd75e72b9c09c90fc317e176a3cbeb26545a4111b61e1715a8b342"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "official_sandbox_fork/bench_official_fork.py",
+    "destination": "ae/vendor/finalbench/official_sandbox_fork/bench_official_fork.py",
+    "source_sha256": "6554378e8489301dad7997ed43144dc5554918abb87b4d2ce51c2fef2aad3a87"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "replay_copytree/real_replay_driver.py",
+    "destination": "ae/vendor/finalbench/replay_copytree/real_replay_driver.py",
+    "source_sha256": "fdda055727cc2c9e876a8a2cb80c10ad66dbe485e8c9523c00ff4650baf7934e"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "replay_copytree/real_trace_runner.py",
+    "destination": "ae/vendor/finalbench/replay_copytree/real_trace_runner.py",
+    "source_sha256": "7930875afe2afd453eae2d19b129c3c48fe86e1e4314ebef118604134085e3ca"
+  },
+  {
+    "repository": "finalbench",
+    "commit": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+    "source_path": "replay_copytree/walker.py",
+    "destination": "ae/vendor/finalbench/replay_copytree/walker.py",
+    "source_sha256": "0b7ba09af2dc9b64859e521bc2d0353e3c69624dffd26e790cbb07d8ec7f25f4"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/analyze_diag.py",
+    "destination": "ae/vendor/d-overlayfs/agentfs/analyze_diag.py",
+    "source_sha256": "1dc73e069102ff08ddc35e66ae8e8a90e2255003b933ae82617f13cb57d619f8"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bench_ioctl_diagnostic.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bench_ioctl_diagnostic.sh",
+    "source_sha256": "51c15b7c15fdb9e6af64785af806b3fd26272181b77b04e8c9e4207bba3e1687"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bench_ioctl_fast_vs_slow.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bench_ioctl_fast_vs_slow.sh",
+    "source_sha256": "e801468f46666491f154e7545e14220bafb41fe48d617a3cd4526bf6de65152e"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bench_ioctl_inproc.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bench_ioctl_inproc.sh",
+    "source_sha256": "7a55a07e69e0024cd41b39ea1b4fcb3de92daf3c4edb83fd34be713856373706"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bench_ioctl_realcontention.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bench_ioctl_realcontention.sh",
+    "source_sha256": "01055dfcfaf3c9976c8b51eb1981566476d9a3796b83144920af64cf7a1167bb"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bench_table4_rs_slow_n1.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bench_table4_rs_slow_n1.sh",
+    "source_sha256": "5a63c45a179e108eb05f28dc278d111a6da3fe34cfaeb927030928dbc70dd4b6"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bg_criu_load.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bg_criu_load.sh",
+    "source_sha256": "4187b27c96ed3ec2b87a19fbc406408855427f2689c959ce5f37d644c281936c"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bg_fork_load.c",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bg_fork_load.c",
+    "source_sha256": "a1edcde1d196c56b64f37d427077dead29409cc07e8a605c86f5794881a6ebff"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/bystander_test.c",
+    "destination": "ae/vendor/d-overlayfs/agentfs/bystander_test.c",
+    "source_sha256": "317e1864803b0e52285edd11edf5b54b20d538a4940be2c39798cfbc9a621e01"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/common.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/common.sh",
+    "source_sha256": "c5b43e4cbb16b3067ca8bca80e1a5427fb768891a10d4098784d4737f086c6e3"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/ovl_ioctl.c",
+    "destination": "ae/vendor/d-overlayfs/agentfs/ovl_ioctl.c",
+    "source_sha256": "4ef2515eab25f6821d3dfe8c407442dce4b73eff2cb67a8885cd458cfff6d7b6"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/ovl_ioctl_bench.c",
+    "destination": "ae/vendor/d-overlayfs/agentfs/ovl_ioctl_bench.c",
+    "source_sha256": "62973acd23bcc9f36052572f19738b1925dfd1452b11e73700795136ec7c105d"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/run_all.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/run_all.sh",
+    "source_sha256": "9f7b80c0de28ec66895ecbc1c59fe3ec0656f5259d180b46736053a05890a18d"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/run_host_bench.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/run_host_bench.sh",
+    "source_sha256": "9c15d174ee5c43818c9df7e2d887a1ea07f381e76b221a1e5b42f12196143bca"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_bystander_fd.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_bystander_fd.sh",
+    "source_sha256": "bcff75a91865387421f3dbbfd19c61d8a7a89aa39e31ffc99cd6b0089e6b3217"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_concurrent_rw.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_concurrent_rw.sh",
+    "source_sha256": "6f51d15b057c413c8b279486966291f116894af678d878483a8c88d8d15043c2"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_cross_checkpoint_fd_cow.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_cross_checkpoint_fd_cow.sh",
+    "source_sha256": "52085441d0149e3e46f1aec8b9e63de044a9655621b3e74cca899e2bf6e7d7bf"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_deleted_open_resurrect.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_deleted_open_resurrect.sh",
+    "source_sha256": "181480dbdd4ad047ca07f1e51852815a80f9270bb0ff6c92c028ed4a48aa666d"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_dentry_stale.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_dentry_stale.sh",
+    "source_sha256": "314fe00f81b3f5780ebe117988cdf0b9f67b7e68b964fe505e1dde4688f715c0"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_dir_cache.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_dir_cache.sh",
+    "source_sha256": "eeb7dd21bfae91b8fb55cdbb797b1c7474c59f183fc40094e288ab4e93e2ace5"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_full.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_full.sh",
+    "source_sha256": "7847fc82e4ea988a7870211b0d8d64834b70ed5115361296af7f1c5da05c7b3e"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_lazy_switch_write.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_lazy_switch_write.sh",
+    "source_sha256": "47b37f61eb7d5fd1ac8930817704b08acbb60a7d457d40af34685401d83f1256"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_mmap_crash.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_mmap_crash.sh",
+    "source_sha256": "8317c0e87eff027a05507719ed457af7a324a523c682031df1e0d9ae1975f92d"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_xfs_partial_write.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_xfs_partial_write.sh",
+    "source_sha256": "5547d08478514a8f324f4e49c2b01cfe46dd1b8952b1f7c37ca17e6b98067c8f"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "agentfs/test_xfs_reflink_copyup.sh",
+    "destination": "ae/vendor/d-overlayfs/agentfs/test_xfs_reflink_copyup.sh",
+    "source_sha256": "6dc23f7864ad202c488eadfef33294aa04a852eb5c62197d7e706b97ff05b7a0"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "benchresults/2026-05-11_swesearch_war/aggregate_and_plot.py",
+    "destination": "ae/vendor/d-overlayfs/benchresults/2026-05-11_swesearch_war/aggregate_and_plot.py",
+    "source_sha256": "62f95cb71d4d08483d41322a4f7c12a972aadd508a43b7e1a23785ddc6cb9acd"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "benchresults/2026-05-11_swesearch_war/run_swesearch_all.sh",
+    "destination": "ae/vendor/d-overlayfs/benchresults/2026-05-11_swesearch_war/run_swesearch_all.sh",
+    "source_sha256": "16019e82124ed440ec0339151c02cd5a8e8feceb234117c2ae39556386994954"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "benchresults/2026-05-11_swesearch_war/swesearch_replay.sh",
+    "destination": "ae/vendor/d-overlayfs/benchresults/2026-05-11_swesearch_war/swesearch_replay.sh",
+    "source_sha256": "b58c14b6da52a0b0f941ec0d917ca89853f019e4fb8d1e7db3b647161386f16b"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "benchresults/2026-05-11_swesearch_war/swesearch_replay_engine.py",
+    "destination": "ae/vendor/d-overlayfs/benchresults/2026-05-11_swesearch_war/swesearch_replay_engine.py",
+    "source_sha256": "b4762f272b5d8887b463a709ee97a0eeab5455f7e762835b849cb1f9e70dfdbc"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "benchresults/2026-05-11_swesearch_war/swesearch_to_actions.py",
+    "destination": "ae/vendor/d-overlayfs/benchresults/2026-05-11_swesearch_war/swesearch_to_actions.py",
+    "source_sha256": "d8f65d96b7c6c67c1eaf42669d87d8bb607bb9d219d1375c0199a85a0c87f3df"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "experiments/memcurve_forkonly_write_sympy22840_20260611/aggregate_write_forkonly_memcurve.py",
+    "destination": "ae/vendor/d-overlayfs/experiments/memcurve_forkonly_write_sympy22840_20260611/aggregate_write_forkonly_memcurve.py",
+    "source_sha256": "65eca221c8a6b73f65e7b66fc5de84f3ba1da1f180c86f3958141bcb66ae224f"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "experiments/memcurve_forkonly_write_sympy22840_20260611/run_one_arm.sh",
+    "destination": "ae/vendor/d-overlayfs/experiments/memcurve_forkonly_write_sympy22840_20260611/run_one_arm.sh",
+    "source_sha256": "1699d1827973c338d76dec83fc386b043f3757409bce18136d6d834554412fdb"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "finalcode/finaltest/measure_motiv_totals.py",
+    "destination": "ae/vendor/d-overlayfs/finalcode/finaltest/measure_motiv_totals.py",
+    "source_sha256": "fea7e35cd5fba66089e29e98723a50bb2e9189518a9636d017d946cdad4b994d"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "guest/rl/batched_fork.py",
+    "destination": "ae/vendor/d-overlayfs/guest/rl/batched_fork.py",
+    "source_sha256": "509858c6a231c8fb2dddbd7ff8e314e4b3ad3da96cc042cc421a368dc3d666a1"
+  },
+  {
+    "repository": "d-overlayfs",
+    "commit": "6819771a572094191bd3ab594d3466cad9123e6f",
+    "source_path": "scripts/profile_slim_workrt_dirty.py",
+    "destination": "ae/vendor/d-overlayfs/scripts/profile_slim_workrt_dirty.py",
+    "source_sha256": "55ee5c113e9341e02da8dc40ab15d36f2b2a091d3c5696ee02ae11e19eb20135"
+  }
+]

@@ -1,0 +1,28 @@
+[INFO] === Test: cross-checkpoint stale fd COW policy ===
+[INFO] Setting up test directories on root XFS...
+[INFO] Root filesystem is XFS ✓
+[INFO] Root XFS: reflink=unknown
+[INFO] All directories under /tmp/ovl_test_xfd_8856 (on root XFS)
+[INFO] Building ioctl tool...
+[INFO] --- case rehome persists ---
+[INFO] Overlay mounted: lower=/tmp/ovl_test_xfd_8856/lower1, upper=/tmp/ovl_test_xfd_8856/upper1
+[INFO] Checkpoint: lowerdir=/tmp/ovl_test_xfd_8856/lower2,upperdir=/tmp/ovl_test_xfd_8856/upper2,workdir=/tmp/ovl_test_xfd_8856/work2
+Checkpoint succeeded.
+[0;32m[PASS][0m [rehome] stale fd write became path-visible
+[0;32m[PASS][0m [rehome] write landed in current upper
+[INFO] --- case deleted path becomes anonymous ---
+[INFO] Overlay mounted: lower=/tmp/ovl_test_xfd_8856/lower1, upper=/tmp/ovl_test_xfd_8856/upper1
+[INFO] Checkpoint: lowerdir=/tmp/ovl_test_xfd_8856/lower2,upperdir=/tmp/ovl_test_xfd_8856/upper2,workdir=/tmp/ovl_test_xfd_8856/work2
+Checkpoint succeeded.
+[0;32m[PASS][0m [vanish] fileA hidden by new-branch delete
+[0;32m[PASS][0m [vanish] fileA path stayed absent
+[0;32m[PASS][0m [vanish] stale fd write stayed private/readable
+[INFO] --- case foreign upper same-name guard ---
+[INFO] Overlay mounted: lower=/tmp/ovl_test_xfd_8856/lower1, upper=/tmp/ovl_test_xfd_8856/upper1
+[INFO] Checkpoint: lowerdir=/tmp/ovl_test_xfd_8856/lower2,upperdir=/tmp/ovl_test_xfd_8856/upper2,workdir=/tmp/ovl_test_xfd_8856/work2
+Checkpoint succeeded.
+[0;32m[PASS][0m [foreign] new upper file was not overwritten
+[0;32m[PASS][0m [foreign] stale-fd write stayed anonymous
+[0;32m[PASS][0m No kernel errors
+[0;32m[PASS][0m === ALL cross-checkpoint fd COW checks passed ===
+[INFO] Cleaning up...

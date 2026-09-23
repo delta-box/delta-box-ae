@@ -1,0 +1,93 @@
+[   13.273895] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.273948] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.274038] overlayfs: ckpt_v25 kind=unknown ns: parse=16112 kernpath=31375 swap=79780 free=739 tail=1145 total=129151
+[   13.310170] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.310180] overlayfs: ovl_chk_busy: open inode (ino=3068100, count=1)
+[   13.310183] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   13.310202] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.310267] overlayfs: ckpt_v25 kind=unknown ns: parse=10306 kernpath=19224 swap=59045 free=448 tail=184 total=89207
+[   13.345063] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.345094] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.345327] overlayfs: ckpt_v25 kind=unknown ns: parse=10144 kernpath=19293 swap=225710 free=540 tail=275 total=255962
+[   13.353048] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.353088] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.353221] overlayfs: ckpt_v25 kind=unknown ns: parse=13036 kernpath=26412 swap=122088 free=1280 tail=634 total=163450
+[   13.362722] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.362761] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.362824] overlayfs: ckpt_v25 kind=unknown ns: parse=12976 kernpath=25075 swap=52691 free=1078 tail=340 total=92160
+[   13.390762] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.390789] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.390848] overlayfs: ckpt_v25 kind=unknown ns: parse=4528 kernpath=20614 swap=51060 free=714 tail=548 total=77464
+[   13.418413] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.418436] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.447552] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.447576] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.478911] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.478933] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   13.520269] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   13.520304] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   14.185509] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   14.185539] overlayfs: ovl_chk_busy: open inode (ino=5755457, count=1)
+[   14.185560] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   14.185589] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   15.319288] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   15.319339] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   16.328685] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   16.328727] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   17.340415] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   17.340459] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   17.340541] ovl_ioctl_checkpoint: 7 callbacks suppressed
+[   17.340542] overlayfs: ckpt_v25 kind=unknown ns: parse=28416 kernpath=14321 swap=75957 free=587 tail=448 total=119729
+[   18.348114] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   18.348813] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   18.348889] overlayfs: ckpt_v25 kind=unknown ns: parse=29149 kernpath=670788 swap=68738 free=694 tail=342 total=769711
+[   19.355598] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   19.355643] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   19.355690] overlayfs: ckpt_v25 kind=unknown ns: parse=27901 kernpath=15001 swap=42024 free=975 tail=189 total=86090
+[   20.410472] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.410519] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.410624] overlayfs: ckpt_v25 kind=unknown ns: parse=14568 kernpath=29351 swap=94780 free=676 tail=700 total=140075
+[   20.463457] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.463473] overlayfs: ovl_chk_busy: open inode (ino=6915614, count=1)
+[   20.463478] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   20.463504] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.463600] overlayfs: ckpt_v25 kind=unknown ns: parse=14797 kernpath=26963 swap=88620 free=524 tail=468 total=131372
+[   20.506584] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.506631] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.506703] overlayfs: ckpt_v25 kind=unknown ns: parse=5736 kernpath=38549 swap=62580 free=715 tail=316 total=107896
+[   20.548336] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.548369] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.548441] overlayfs: ckpt_v25 kind=unknown ns: parse=5584 kernpath=25344 swap=62184 free=702 tail=392 total=94206
+[   20.607151] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   20.607206] overlayfs: ovl_chk_busy: open inode (ino=3068100, count=1)
+[   20.607212] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   20.607240] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   20.607326] overlayfs: ckpt_v25 kind=unknown ns: parse=15940 kernpath=27994 swap=78144 free=644 tail=387 total=123109
+[   21.533228] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   21.533242] overlayfs: ovl_chk_busy: open inode (ino=6915613, count=1)
+[   21.533246] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   21.533266] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   21.533334] overlayfs: ckpt_v25 kind=unknown ns: parse=11080 kernpath=22352 swap=59302 free=1334 tail=852 total=94920
+[   21.562357] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   21.562369] overlayfs: ovl_chk_busy: open inode (ino=102051, count=1)
+[   21.562373] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   21.562392] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   21.562464] overlayfs: ckpt_v25 kind=unknown ns: parse=10433 kernpath=22504 swap=63053 free=1067 tail=824 total=97881
+[   22.525692] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   22.525708] overlayfs: ovl_chk_busy: open inode (ino=3068102, count=1)
+[   22.525713] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   22.525736] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   22.525820] overlayfs: ckpt_v25 kind=unknown ns: parse=14874 kernpath=24522 swap=74158 free=1324 tail=850 total=115728
+[   22.582651] overlayfs: ovldiag fdget file=deleted_pureupper.txt flags=8002 mode=4f801f real=deleted_pureupper.txt rflags=48002 rmode=eb4f801f rino=3068102 nlink=0 mnt_current=0 gen=1/1
+[   22.582662] overlayfs: ovldiag target ino=3068102 nlink=0 mnt_current=0
+[   22.584979] overlayfs: ovldiag fdget file=deleted_pureupper.txt flags=8002 mode=4f801f real=deleted_pureupper.txt rflags=48002 rmode=eb4f801f rino=3068102 nlink=0 mnt_current=0 gen=1/1
+[   22.584989] overlayfs: ovldiag target ino=3068102 nlink=0 mnt_current=0
+[   22.607629] overlayfs: ovl_dir_ioctl called: cmd=0x40104f01
+[   22.607649] overlayfs: ovl_chk_busy: open inode (ino=6915614, count=1)
+[   22.607653] overlayfs: ovl_checkpoint: continuing despite 1 open inodes (Lazy Switch enabled)
+[   22.607668] overlayfs: ovl_checkpoint: old upper injected as lower[1]
+[   22.607718] overlayfs: ckpt_v25 kind=unknown ns: parse=9970 kernpath=16713 swap=43794 free=1012 tail=451 total=71940
+[   22.674575] overlayfs: ovldiag fdget file=deleted_withlower.txt flags=8002 mode=4f801f real=#6915617 rflags=48002 rmode=eb4f801f rino=6915617 nlink=0 mnt_current=0 gen=1/1
+[   22.674585] overlayfs: ovldiag target ino=6915617 nlink=0 mnt_current=0
+[   22.676757] overlayfs: ovldiag fdget file=deleted_withlower.txt flags=8002 mode=4f801f real=#6915617 rflags=48002 rmode=eb4f801f rino=6915617 nlink=0 mnt_current=0 gen=1/1
+[   22.676767] overlayfs: ovldiag target ino=6915617 nlink=0 mnt_current=0

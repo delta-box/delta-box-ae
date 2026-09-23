@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-20",
+  "bundle_sha256": "f5ac5cb0122072de2ed8242c7d0609e80c74aac65cb56cd39d7ea32e8dd1283f",
+  "git_only_checkout_import": "passed",
+  "verified_unique_objects": 2500,
+  "verified_materialized_file_references": 4378,
+  "source_files_with_api_key_fields_cleared": 70,
+  "cleared_fields": 1817,
+  "noncredential_json_content_preserved": "verified against unmodified local originals",
+  "published_object_credential_pattern_scan": "no matches for private key blocks, API token patterns, URL passwords or nonempty API key fields",
+  "python_syntax": "passed",
+  "scope": "Data packaging only; no new performance or system correctness experiments were run"
+}

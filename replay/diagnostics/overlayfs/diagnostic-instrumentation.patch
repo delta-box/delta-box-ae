@@ -1,0 +1,78 @@
+--- a/fs/overlayfs/file.c
++++ b/fs/overlayfs/file.c
+@@ -26,6 +26,20 @@
+ 
+ /* No atime modification on underlying */
+ #define OVL_OPEN_FLAGS (O_NOATIME)
++
++static void ovl_stale_diag(const struct file *file, const char *phase)
++{
++    const struct file *real = READ_ONCE(file->private_data);
++    struct inode *inode = file_inode(file);
++    struct ovl_fs *ofs = OVL_FS(inode->i_sb);
++    if (strcmp(current->comm, "python3") || !real)
++        return;
++    pr_info("ovldiag %s file=%pD flags=%x mode=%x real=%pD rflags=%x rmode=%x rino=%lu nlink=%u mnt_current=%d gen=%lu/%lu\n",
++            phase, file, file->f_flags, file->f_mode, real, real->f_flags,
++            real->f_mode, file_inode(real)->i_ino, file_inode(real)->i_nlink,
++            real->f_path.mnt == ovl_upper_mnt(ofs),
++            (unsigned long)OVL_I(inode)->checkpoint_gen, (unsigned long)ofs->checkpoint_gen);
++}
+ 
+ /* Forward decl: read-side lazy switch, defined below ovl_real_fdget_meta */
+ static int ovl_lazy_read_refresh(struct dentry *dentry);
+@@ -401,6 +415,13 @@
+ 
+ 		ovl_path_realdata(dentry, &realpath);
+ 	}
++	ovl_stale_diag(file, "fdget");
++    if (!strcmp(current->comm, "python3") && realpath.dentry) {
++        pr_info("ovldiag target ino=%lu nlink=%u mnt_current=%d\n",
++                d_inode(realpath.dentry) ? d_inode(realpath.dentry)->i_ino : 0,
++                d_inode(realpath.dentry) ? d_inode(realpath.dentry)->i_nlink : 0,
++                realpath.mnt == ovl_upper_mnt(OVL_FS(file_inode(file)->i_sb)));
++    }
+ 	if (!realpath.dentry)
+ 		goto check_flags;
+ 
+@@ -408,6 +429,10 @@
+ 	if (unlikely(file_inode(real->file) != d_inode(realpath.dentry))) {
+ 		real->flags = FDPUT_FPUT;
+ 		real->file = ovl_open_realfile(file, &realpath);
++        if (!strcmp(current->comm, "python3") && !IS_ERR(real->file))
++            pr_info("ovldiag fdget reopened flags=%x mode=%x ino=%lu nlink=%u\n",
++                    real->file->f_flags, real->file->f_mode,
++                    file_inode(real->file)->i_ino, file_inode(real->file)->i_nlink);
+ 
+ 		return PTR_ERR_OR_ZERO(real->file);
+ 	}
+@@ -757,6 +782,7 @@
+     if (d_really_is_negative(dentry))
+         return 0;
+ 
++    ovl_stale_diag(file, "ensure-before");
+     /* Fast path: check without lock */
+     old_real_file = READ_ONCE(file->private_data);
+     if (ovl_upper_mnt(ofs) && old_real_file->f_path.mnt == ovl_upper_mnt(ofs)
+@@ -949,6 +975,7 @@
+ 	    }
+ 
+     file->private_data = new_real_file;
++    ovl_stale_diag(file, "ensure-installed");
+     if (new_upper) {
+         struct dentry *old_upper;
+ 
+@@ -1043,7 +1070,12 @@
+ 	 * this property in case it is set by the issuer.
+ 	 */
+ 	ifl &= ~IOCB_DIO_CALLER_COMP;
+-	ret = backing_file_write_iter(real.file, iter, iocb, ifl, &ctx);
++	if (!strcmp(current->comm, "python3"))
++        pr_info("ovldiag write real flags=%x mode=%x ino=%lu\n", real.file->f_flags, real.file->f_mode, file_inode(real.file)->i_ino);
++    ret = backing_file_write_iter(real.file, iter, iocb, ifl, &ctx);
++    if (!strcmp(current->comm, "python3")) {
++        pr_info("ovldiag write result=%zd\n", ret);
++    }
+ 	fdput(real);
+ 
+ out_unlock:

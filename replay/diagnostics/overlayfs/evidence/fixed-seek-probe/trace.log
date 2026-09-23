@@ -1,0 +1,49 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 37/37   #P:2
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+         python3-409     [001] .....     6.051235: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff888007a63c00
+         python3-409     [001] .....     6.051481: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.051534: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x4
+         python3-409     [001] .....     6.053120: ovldiag_cow: (ovl_ensure_upper_and_switch+0x37f/0x630 <- ovl_rehome_or_anon_cow) result=0x0
+         python3-409     [001] .....     6.053122: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.053212: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x11
+         python3-409     [001] .....     6.053257: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.053260: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x8
+         python3-409     [001] .....     6.053313: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff8880045c5700
+         python3-409     [000] .....     6.065274: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff8880072bc500
+         python3-409     [000] .....     6.065377: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.065387: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x4
+         python3-409     [000] .....     6.065945: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.065952: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x11
+         python3-409     [000] .....     6.065975: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.065977: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x8
+         python3-409     [001] .....     6.075769: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff8880045d4d00
+         python3-409     [001] .....     6.075848: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.075859: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x4
+         python3-409     [001] .....     6.076779: ovldiag_cow: (ovl_ensure_upper_and_switch+0x37f/0x630 <- ovl_rehome_or_anon_cow) result=0xffffffef
+         python3-409     [001] .....     6.077130: ovldiag_cow: (ovl_ensure_upper_and_switch+0x3a7/0x630 <- ovl_rehome_or_anon_cow) result=0x0
+         python3-409     [001] .....     6.077132: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.077223: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x11
+         python3-409     [001] .....     6.077263: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [001] .....     6.077267: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x8
+         python3-409     [000] .....     6.084811: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff888004515600
+         python3-409     [000] .....     6.084846: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.084855: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x4
+         python3-409     [000] .....     6.085121: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff888004515d00
+         python3-409     [000] .....     6.085140: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.085146: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0xb
+         python3-409     [000] .....     6.085620: ovldiag_cow: (ovl_ensure_upper_and_switch+0x3f5/0x630 <- ovl_rehome_or_anon_cow) result=0x0
+         python3-409     [000] .....     6.085621: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.085674: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x11
+         python3-409     [000] .....     6.085699: ovldiag_ensure: (ovl_write_iter+0xaf/0x130 <- ovl_ensure_upper_and_switch) result=0x0
+         python3-409     [000] .....     6.085702: ovldiag_write: (ovl_write_iter+0x10c/0x130 <- backing_file_write_iter) result=0x8
+         python3-409     [000] .....     6.085739: ovldiag_open: (ovl_open+0xb2/0x100 <- ovl_open_realfile) result=0xffff888004515d00

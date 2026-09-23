@@ -1,0 +1,77 @@
+{
+  "host": "spr4numa",
+  "profile": "historical-async-full",
+  "groups_built": [
+    "django"
+  ],
+  "scope": "Django prefix smoke only; no controlled performance measurement",
+  "local_checks": {
+    "entrypoint_tests": 12,
+    "recipe_tests": 9,
+    "bash_syntax": "passed",
+    "diff_check": "passed"
+  },
+  "runs": {
+    "fast": {
+      "status": "ok",
+      "runtime_commit": "ee77dd1f7c06db89c4b1419d39c21d40cd95488c",
+      "checkpoint_count": 2,
+      "restore_count": 1,
+      "restore_path": "warm-template",
+      "worker_index_matches": true,
+      "indexed_files": 6461,
+      "worker_exec_bad_n": 0,
+      "error_n": 0,
+      "images": {
+        "kernel": {
+          "sha256": "d51d169089c3d3b9dfe3cb6b2e6ffb3a9bceeab52adf58e2ae1dfe5fc2681d89",
+          "size": 45348080
+        },
+        "base_xfs": {
+          "sha256": "a4c1e6c5d834ee459599365b3b99397196d30b4de4dfeca67929fcbb93686a98",
+          "size": 3221225472
+        },
+        "data_xfs": {
+          "sha256": "1d26ab3348b2ce35736df418011215548c3a9048352b121df4325f2eeff38709",
+          "size": 9663676416
+        }
+      }
+    },
+    "slow": {
+      "status": "ok",
+      "runtime_commit": "ee77dd1f7c06db89c4b1419d39c21d40cd95488c",
+      "checkpoint_count": 2,
+      "restore_count": 1,
+      "restore_path": "criu-lazy",
+      "worker_index_matches": true,
+      "indexed_files": 6461,
+      "worker_exec_bad_n": 0,
+      "error_n": 0,
+      "images": {
+        "kernel": {
+          "sha256": "d51d169089c3d3b9dfe3cb6b2e6ffb3a9bceeab52adf58e2ae1dfe5fc2681d89",
+          "size": 45348080
+        },
+        "base_xfs": {
+          "sha256": "a4c1e6c5d834ee459599365b3b99397196d30b4de4dfeca67929fcbb93686a98",
+          "size": 3221225472
+        },
+        "data_xfs": {
+          "sha256": "1d26ab3348b2ce35736df418011215548c3a9048352b121df4325f2eeff38709",
+          "size": 9663676416
+        }
+      }
+    }
+  },
+  "evidence_sha256": {
+    "disks.log": "4574b8047420875306db989b4879fad501a0af82bfcf6f662677d19271a21328",
+    "slow-results.jsonl": "ae3e00f22e3826f10db936b0f9a3a1ef716262b675d865e91b1e67087441e27f",
+    "disks-build.json": "f807066393e0ca83c23d8bdecc8df494506c71c84365fc1a4a20017b1b22daa6",
+    "fast-results.jsonl": "995374c2c7d54439f56f931c4166f02f4dc90afd400e091ca66b3657f8517cb6",
+    "bundle.json": "c9a016c2bbf53e45a2ca39122e646167bf04565c635f069a5a1d85a8f520c7ba",
+    "slow-run.json": "a48b95bd4f0aace8f0aad2916afb057650d197d7ab795c87f82b01d42ee65109",
+    "slow-guest.log": "7ff9fdbea7c0db96dc0593e1f437494479f650aa706541d6427a17c653b83047",
+    "fast-guest.log": "f2ef889bae978ef2f98594a2143c209d27e1f252aacaae92a8769533a0b59b67",
+    "fast-run.json": "0ff20add1b8460d8aa7689fca6107630c64b630e196a55ad48b21cdde1413834"
+  }
+}

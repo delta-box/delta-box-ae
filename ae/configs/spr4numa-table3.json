@@ -1,0 +1,24 @@
+{
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "base_xfs": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
+  "images_dir": "/mnt/disk2/dyp/d-overlayfs",
+  "instance_data_images": {
+    "django__django-14672": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-django.xfs",
+    "astropy__astropy-14182": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-sci.xfs"
+  },
+  "criu_bin": "../work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu",
+  "criu_dump_binary": "../work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu",
+  "checkpoint_profile": "async-incremental-lazy",
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "prewarm_policy": "off",
+  "vm_storage": "tmpfs",
+  "vm_work_dir": "../work/vm",
+  "measurement": {
+    "pin": true,
+    "numa_node": 2,
+    "cpus": "48-51"
+  },
+  "note": "Asynchronous incremental dump with exact page comparison and lazy parent-page restore. RAM-backed VM images, NUMA 2. Paper uses soft-dirty tracking; this implementation verifies equality from page bytes."
+}

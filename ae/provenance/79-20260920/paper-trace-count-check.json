@@ -1,0 +1,674 @@
+{
+  "paper": "atc26-paper158.pdf",
+  "scope": "Explicit trajectory sample count, iteration configuration, and workload coverage; not full result validation",
+  "explicit_rl_trajectory_count": {
+    "required": 9,
+    "available": 9,
+    "separate_result_files": 9
+  },
+  "current_input_iteration_configs": {
+    "table2-deltabox-12": {
+      "30": 12
+    },
+    "table2-e2b-original-8": {
+      "30": 8
+    },
+    "rl-fanout-9": {
+      "30": 9
+    },
+    "fig2-filesystem-30": {
+      "30": 30
+    },
+    "fig2-memory-5": {
+      "30": 5
+    }
+  },
+  "four_workload_groups_present": {
+    "DeltaBox": true,
+    "Cube canonical": true,
+    "E2B（论文原表）": true,
+    "FC-Diff（聚合 OK）": true,
+    "CRIU（聚合 ok，含 4 条 TAIL_CRASH_OK）": true,
+    "Replay（汇总记录）": true,
+    "E2B（另一轮 P-EAGLE，非论文原表）": true
+  },
+  "input_detail": {
+    "table2-deltabox-12": [
+      {
+        "instance": "django__django-14997",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/django__django-14997/trajectory.json",
+        "sha256": "f6b5d943ef2da249ae77ca876cc7590964014713b586cbc9ad6aeb5fa49ade02",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-14672",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/django__django-14672/trajectory.json",
+        "sha256": "ead6727dea4aae4de198a90c9a3d9dd31d53e2b50bcd38e85a93ce8c42482c1d",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-17630",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-17630/trajectory.json",
+        "sha256": "559294072fd0674f4b9254e6f7abeee6230d118da93928487fb88438d8dbedea",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-22840",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-22840/trajectory.json",
+        "sha256": "8a442ad00e107f4d4b397229a341979d14963d65f9c6db8cd256421ee344414e",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "matplotlib__matplotlib-23964",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/matplotlib__matplotlib-23964/trajectory.json",
+        "sha256": "d585ac8206cb412f23c587285150215adc1b5d1a0a2dd6c7e8c81f306686551b",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "matplotlib__matplotlib-26020",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/matplotlib__matplotlib-26020/trajectory.json",
+        "sha256": "41560e4e9ba970e8b59c9a5adde13bf7fdbd75db99f855c8b448e57efccc2c1d",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-7746",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/astropy__astropy-7746/trajectory.json",
+        "sha256": "ba768ee11dcefe319f2003916ee950d764271f54080195671349e2703df91e62",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-14182",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/astropy__astropy-14182/trajectory.json",
+        "sha256": "749a1a139dca7234701a876415bd5bff51fbbf6ce54c974762bcde6902f370cd",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-13453",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/astropy__astropy-13453/trajectory.json",
+        "sha256": "b29d42cdf745438da8aa51e49ad7f3898f91095017d144fc37738ab23c944da1",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pylint-dev__pylint-7228",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/pylint-dev__pylint-7228/trajectory.json",
+        "sha256": "f4752b1f994cb11149689f6e221d5e0244e6eb2ef9a8af827259f95491e2604d",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pylint-dev__pylint-7080",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/pylint-dev__pylint-7080/trajectory.json",
+        "sha256": "bf592e071f25114f6e8edcdec2893e534194400e1533dc62d940baeeab2f4fc4",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "psf__requests-863",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/psf__requests-863/trajectory.json",
+        "sha256": "e28612f748397f086908761a8768b417a79a0f93b9945d67dff0f395ec11f5b3",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      }
+    ],
+    "table2-e2b-original-8": [
+      {
+        "instance": "django__django-10914",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/django__django-10914/trajectory.json",
+        "sha256": "a323767c4cc8974abcb695e921fa8a91538fe9056159f9000d4779055180a9fb",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-12915",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/django__django-12915/trajectory.json",
+        "sha256": "c376def5f2f2f2db1dad48bc72d88809e9e5641b29f0e36c5b2e8a29884bf01c",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-12454",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/sympy__sympy-12454/trajectory.json",
+        "sha256": "d5fdd6d4cadcaac262613c13b4b9df200280dce48ef15f6affccf136175f5be8",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-13177",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/sympy__sympy-13177/trajectory.json",
+        "sha256": "516f034b22c5bd5ac1f8c3374de141606ee297f76e69ed015126688c0cc065fb",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-14309",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/astropy__astropy-14309/trajectory.json",
+        "sha256": "34b2920fcb538ac971143a99b896006f56527984f3c15d16630f428544287d1e",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "matplotlib__matplotlib-18869",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/matplotlib__matplotlib-18869/trajectory.json",
+        "sha256": "210e2dfafa566242868abc3a1b2eae974c73fdb618d6452a031ad0f643a0270f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pytest-dev__pytest-5221",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/pytest-dev__pytest-5221/trajectory.json",
+        "sha256": "8381e9024ec09875cd870eaf19590ea54db9e929cf1ecd41c75fcdffd26ce9d2",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sphinx-doc__sphinx-8506",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-ms/sphinx-doc__sphinx-8506/trajectory.json",
+        "sha256": "8dbf327b8852c5f03da5b04dadf0c47ac829917af4f2cb0b53e14d53e3c78743",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      }
+    ],
+    "rl-fanout-9": [
+      {
+        "instance": "django__django-11001",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/django__django-11001/trajectory.json",
+        "sha256": "7418a71e79704ab2ea240a77aea89515f8abc0002e94f01f24bcf3d9704d2f60",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-13448",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/django__django-13448/trajectory.json",
+        "sha256": "3843223556519025b58bcdfae5e6fce89013ed09d3f2de6863a44e8d56f70f6f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-14672",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/django__django-14672/trajectory.json",
+        "sha256": "ead6727dea4aae4de198a90c9a3d9dd31d53e2b50bcd38e85a93ce8c42482c1d",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-17630",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-17630/trajectory.json",
+        "sha256": "559294072fd0674f4b9254e6f7abeee6230d118da93928487fb88438d8dbedea",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-21171",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-21171/trajectory.json",
+        "sha256": "9ca3933a383a8b72351a9af1627fe61dfe1c20c7f6155e17eb691605baa68f2a",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-22840",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-22840/trajectory.json",
+        "sha256": "8a442ad00e107f4d4b397229a341979d14963d65f9c6db8cd256421ee344414e",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-4094",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/pydata__xarray-4094/trajectory.json",
+        "sha256": "ae8e55b8f262429f5b4585a5db093b19f6aca6c2a5bea5c41ca86728be104ff4",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-4493",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/pydata__xarray-4493/trajectory.json",
+        "sha256": "ee04cb87181aab10c1bea05a2096aa319f309f8b03b969e7894280a0787f1955",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-5131",
+        "local": "traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/pydata__xarray-5131/trajectory.json",
+        "sha256": "750f6dd647b979f34d0ec5fd4a9974490884005c04e868dd124a192a4946b5b3",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      }
+    ],
+    "fig2-filesystem-30": [
+      {
+        "instance": "astropy__astropy-6938",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/astropy__astropy-6938/trajectory.json",
+        "sha256": "673f2ce3d3b5dc8a08c5ee52625f82494ce68d2ab7abc7ae2038a0633e77e4ed",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-10914",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/django__django-10914/trajectory.json",
+        "sha256": "573f193cfc88c8812b2c2333844576e9d3e1a6837bde0e97be1967dcac00ca73",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 17
+      },
+      {
+        "instance": "matplotlib__matplotlib-18869",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/matplotlib__matplotlib-18869/trajectory.json",
+        "sha256": "89bcb8e5cf8b0dae0f675f6b29c58aef00ec90d41664a0203fc01c3ed954ce1c",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "mwaskom__seaborn-3010",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/mwaskom__seaborn-3010/trajectory.json",
+        "sha256": "88748a3aa6cb0540cbdefa50934cd9c055f4ece354f1f7a6e834a2756bce604f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pallets__flask-4045",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pallets__flask-4045/trajectory.json",
+        "sha256": "e3db60514da3862b2915adf41d98ed5e478090a5b96ec4958390446c19159c7f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "psf__requests-863",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/psf__requests-863/trajectory.json",
+        "sha256": "5ea9aa47c69b42febb11e0e018c0f2b8548e2f4b3969d0a94798041ec0f59c1c",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-3364",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pydata__xarray-3364/trajectory.json",
+        "sha256": "ceb742279b5bc812211f80c826c5c0ea91af9412273182f9445cc40ecba9946a",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pylint-dev__pylint-5859",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pylint-dev__pylint-5859/trajectory.json",
+        "sha256": "55c0d60bbefb1bb0970efa0bbdaedfb682f46fbe4aca6f51f7c7f5140351779f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 4
+      },
+      {
+        "instance": "pytest-dev__pytest-5103",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pytest-dev__pytest-5103/trajectory.json",
+        "sha256": "ab60b00f01ca4ee0620915222b827550bc4809f1fc452fe80280ce57eff6cb78",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "scikit-learn__scikit-learn-10297",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/scikit-learn__scikit-learn-10297/trajectory.json",
+        "sha256": "5ab56b84c3fdeaa275e2c821bbd23dad447262c5b72ab9b8947d5fd0c1067323",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 29
+      },
+      {
+        "instance": "sphinx-doc__sphinx-7686",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/sphinx-doc__sphinx-7686/trajectory.json",
+        "sha256": "f5fea5025fb95e4c44d76867a42526fb45be85fcc7849d62ae2c4e65a55f4ed4",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-11400",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/sympy__sympy-11400/trajectory.json",
+        "sha256": "5ed16d0d1867b494c41a3007173745297f5f3074abee450aa86149a3eaa45261",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-7746",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/astropy__astropy-7746/trajectory.json",
+        "sha256": "8bfc4d289af7f13f7f7eaa6e6489d7bc06913d45b9cddcfa5f9e47aeae161692",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-10924",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/django__django-10924/trajectory.json",
+        "sha256": "4f804f1ca1f244f0efc00fe6460e360598129f6d9228536dfa77417e41059ab7",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "matplotlib__matplotlib-22711",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/matplotlib__matplotlib-22711/trajectory.json",
+        "sha256": "89b743c829fdeb2b193023cc291d38d5aa84cd05a4aa3a9bea1652b97c32bd90",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 7
+      },
+      {
+        "instance": "mwaskom__seaborn-3190",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/mwaskom__seaborn-3190/trajectory.json",
+        "sha256": "50e549ae85ed0c87538f01deb7833a76b1cb5bdaa190fa926f694cff8a943d7e",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pallets__flask-5063",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pallets__flask-5063/trajectory.json",
+        "sha256": "465a7c88c5d2a59d3c8efbab7b37157238c837928c41eeb7767d40a47775bcef",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "psf__requests-1963",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/psf__requests-1963/trajectory.json",
+        "sha256": "6de8c4bd3c646fa74e2f50337ee97fe591543eb71b291d41bb9490ee73a709f5",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-4094",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pydata__xarray-4094/trajectory.json",
+        "sha256": "36bdc90eb2f72087d007125c5b41d692cbd29444f209df428a378f40f9c31313",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pylint-dev__pylint-6506",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pylint-dev__pylint-6506/trajectory.json",
+        "sha256": "d306c1f8b2cb6a9c588b70e8c6d7a938164dced6c9ce073379483bd00722ca1a",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pytest-dev__pytest-5221",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pytest-dev__pytest-5221/trajectory.json",
+        "sha256": "22dc1565e594e7e12c8aee80ab767a1202e4fc77c05e9bc6aac4eaa84f0101da",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "scikit-learn__scikit-learn-10508",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/scikit-learn__scikit-learn-10508/trajectory.json",
+        "sha256": "5fa2fc3942aa7da8b8071557850650a023831cede8f620af06f7d06cfb7e2615",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sphinx-doc__sphinx-7738",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/sphinx-doc__sphinx-7738/trajectory.json",
+        "sha256": "37ec4d6b9bb6880d50382f574a758e55148337e3a7f87380f4da93a57024b855",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-11870",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/sympy__sympy-11870/trajectory.json",
+        "sha256": "e5cab89237a838f7b6cadeddee2fcec8581c867f9ba82c95357f7d023539a119",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-12907",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/astropy__astropy-12907/trajectory.json",
+        "sha256": "5d00cdda4c31850dd054f5be74630458fdb787604f57bdd76bacb8684b3bec5b",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-11039",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/django__django-11039/trajectory.json",
+        "sha256": "e7d7cd7917c3bf6c8a2d48ce0ca426b348f28f46de1ce569ae7e59039cd76830",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "matplotlib__matplotlib-22835",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/matplotlib__matplotlib-22835/trajectory.json",
+        "sha256": "d7512eb402bb69bd0bb5e9f166f078209d7322e1bc53424593dc28b70a570a90",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 27
+      },
+      {
+        "instance": "mwaskom__seaborn-3407",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/mwaskom__seaborn-3407/trajectory.json",
+        "sha256": "65434d749660d166ad49e85104994c96c8ce545b34b6b3bbb5d732f146b9ef4c",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "psf__requests-2148",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/psf__requests-2148/trajectory.json",
+        "sha256": "befb61be34a8d06ff7d46bb3e9b7775cdd6d357021018198f8fb2bbd69cb3c94",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pydata__xarray-4248",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile50-native-mcts30-20260609_015241/pydata__xarray-4248/trajectory.json",
+        "sha256": "40759e9c0600e5d358729403c8c86f6c40c565dcb6d85323705a618b887f0d7f",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      }
+    ],
+    "fig2-memory-5": [
+      {
+        "instance": "psf__requests-863",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/evals/profile5_tree_rss_mcts30_psf__requests-863/psf__requests-863/trajectory.json",
+        "sha256": "1f63cca52fb7ce06ff195e3f32bba3dc26cb7502bdc95b2ec01712d1c0479556",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "pylint-dev__pylint-7228",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/evals/profile5_tree_rss_mcts30_pylint-dev__pylint-7228/pylint-dev__pylint-7228/trajectory.json",
+        "sha256": "9503efc9d2b572dfba97da0f773718f45789632f988ea4c65a1f132af8abc65b",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "astropy__astropy-7746",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/evals/profile5_tree_rss_mcts30_astropy__astropy-7746/astropy__astropy-7746/trajectory.json",
+        "sha256": "83e79c3e242c0e78fd86f31740fc1df888f6b2b491f40a81325ecef18fdb7c68",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "sympy__sympy-22840",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/evals/profile5_tree_rss_mcts30_sympy__sympy-22840/sympy__sympy-22840/trajectory.json",
+        "sha256": "21470d686ebce3f28e4d87dbe8692dbdce19a72139f635cdba496b91f014c5b2",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      },
+      {
+        "instance": "django__django-14997",
+        "local": "traces/raw/history-20260625/search_mcts_trajectories/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/evals/profile5_tree_rss_mcts30_django__django-14997/django__django-14997/trajectory.json",
+        "sha256": "f68a1fd9ef919b2f8173fa17a3695b95677ed10b92f397334d400bba68696c47",
+        "max_iterations": 30,
+        "tree_nodes_including_root": 30
+      }
+    ]
+  },
+  "rl_result_detail": [
+    {
+      "instance": "django__django-11001",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_django__django-11001.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "django__django-13448",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_django__django-13448.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "django__django-14672",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_django__django-14672.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "sympy__sympy-17630",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_sympy__sympy-17630.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "sympy__sympy-21171",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_sympy__sympy-21171.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "sympy__sympy-22840",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_sympy__sympy-22840.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "pydata__xarray-4094",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_pydata__xarray-4094.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "pydata__xarray-4493",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_pydata__xarray-4493.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    },
+    {
+      "instance": "pydata__xarray-5131",
+      "result": "traces/supplement/79-20260920/d-overlayfs/benchresults/2026-06-10_rl_fanout_qwen_peagle_mcts30_vm_overlay/fanout_modeA_pydata__xarray-5131.json",
+      "trajectory_path_matches_manifest": true,
+      "n_values": [
+        1,
+        4,
+        16,
+        64
+      ],
+      "reps": 5,
+      "warmup": 2,
+      "raw_repetitions_per_n": {
+        "1": 5,
+        "4": 5,
+        "16": 5,
+        "64": 5
+      }
+    }
+  ],
+  "limits": [
+    "30 iterations is not 30 independent trajectories",
+    "Node count includes the root and is not by itself a count of executed checkpoint events",
+    "E2B ms inputs match the recorded pool and instance; historical per-run input hashes remain unavailable",
+    "53 correctness checks and zero-mismatch assertions require separate run-log evidence"
+  ]
+}

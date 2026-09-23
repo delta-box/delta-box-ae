@@ -1,0 +1,2 @@
+instance,source,local,sha256,present,original_local,original_sha256,cleared_credential_fields
+sympy__sympy-22840,/mnt/disk2/dyp/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-22840/trajectory.json,paper/figure-06/data/inputs/memory/sympy__sympy-22840/trajectory.json,8a442ad00e107f4d4b397229a341979d14963d65f9c6db8cd256421ee344414e,True,traces/supplement/79-20260920/d-overlayfs/traces/swe-search/qwen3-coder-30b-p-eagle-ms/mcts-iter30/sympy__sympy-22840/trajectory.json,8a442ad00e107f4d4b397229a341979d14963d65f9c6db8cd256421ee344414e,0

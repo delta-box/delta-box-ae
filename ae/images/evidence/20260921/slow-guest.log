@@ -1,0 +1,70 @@
+[sources] verified 99 current runtime/helper files
+[replay] 3 events from /tmp/replay_schedule.jsonl
+[stage] 9 catalog clones contain commit 0d4e575c96d408e0efb4dfd0cbfc864219776950; using /mnt/data/testbeds/django__1.11 and checking out the recorded commit
+[replay] staging real testbed by commit instance=django__django-14997 version=1.11 commit=0d4e575c96d408e0efb4dfd0cbfc864219776950
+[stage] /mnt/data/testbeds/django__1.11  ->  /testbed_original_data
+[stage] done in 2.88s
+Previous HEAD position was 3545e84488 [1.11.x] Fixed #28702 -- Made query lookups for CIText fields use citext.
+HEAD is now at 0d4e575c96 Fixed #33198 -- Corrected BinaryField.max_length docs.
+Removing Django.egg-info/
+Removing build/
+Removing dist/
+Removing django/__pycache__/
+Removing django/utils/__pycache__/
+[replay] overlay ready: {'upper': '/overlay_workspace/upper', 'work': '/overlay_workspace/work', 'layers': '/overlay_workspace/layers'}
+[replay] tmpfs mounted at /var/lib/replay/snapshots (14G cap)
+[NAMESPACE] Entering new PID/Mount universe...
+[NAMESPACE child] Agent PID=1 in new PID ns, sid=self
+[NAMESPACE sentinel] ns-init host PID = 452
+[mock-npd] pid=450 ready
+[replay] real agent host pid=452
+[Controller] CRIU dump bin=criu restore bin=criu
+[Controller] Warm-template fast path ENABLED (checkpoint_mode=async-template-full-dump, fixed_active_pid=-, restore_fastfork_dump_pid=0)
+[Controller] Hot-page prewarm ENABLED
+[Controller] CRIU lazy-pages slow restore ENABLED (serial)
+[Controller] Opening OverlayFS mount point: /testbed
+[Controller] ioctl cmd = 0x40104F01, args size = 16 bytes
+[replay] controller up. flags adaptive=False warm_template=True prewarm=True sync_dump=False
+[replay] worker code index loaded: files=6461 classes=6152 functions=17556 bytes=38746402 sidecar=None rss=106512KB build_ms=5073.840618133545
+[Controller] Checkpointing 53725322 (strategy=standard)...
+[PERF] Agent RSS at pre-dump bootstrap: 104.0 MB (pid=452)
+[PERF] Warm-template bootstrap-fork(pre-dump)=2.87ms (template=452, active=455, rss=104.0MB)
+[PERF] Agent RSS at async-template stash: 95.1 MB (pid=455)
+[PERF] Warm-template async-stash=warm=14.52ms dump=14.83ms (warm_template=457, dump_root=459, active=455, rss=95.1MB)
+[CRIU] dump root=459 active=455 ns_init=452 prev=- prev_used=False prev_cross_pid=False prev_pid_mode=-
+[FS] Upper is dirty. Sinking to new layer.
+[FS] Switching overlay layers via ioctl:
+     options = "lowerdir=/testbed_original_data,upperdir=/overlay_workspace/layers/upper_53725322_next,workdir=/overlay_workspace/layers/work_53725322_next,ovl_kind=ckpt"
+     options_len = 153
+[FS] Switch successful. New stack: 1 lower layers
+[PERF] Checkpoint ID 53725322: OverlayFS=20.90ms
+Error (criu/sockets.c:216): sockets: Diag module missing (-2)
+Error: Could not process rule: Operation not supported
+create table inet CRIU
+^^^^^^^^^^^^^^^^^^^^^^^
+Warn  (criu/kerndat.c:1610): Can't create nftables table
+[PERF] Checkpoint ID 53725322: CRIU=241.81ms (async) dump_size=94.03MB
+[Controller] disposed async dump template pid=459 ckpt=53725322
+[Controller] Checkpointing d28b7648 (strategy=standard)...
+[PERF] Agent RSS at async-template stash: 97.6 MB (pid=455)
+[PERF] Warm-template async-stash=warm=8.90ms dump=11.93ms (warm_template=481, dump_root=483, active=455, rss=97.6MB)
+[CRIU] dump root=483 active=455 ns_init=452 prev=- prev_used=False prev_cross_pid=False prev_pid_mode=-
+[FS] Upper is clean. Skipping sink (Optimization Triggered).
+[Controller] DELTABOX_FORCE_CRIU_RESTORE=1: ignoring warm template 457 for 53725322
+[Controller] Restoring to 53725322...
+[PERF] Restore ID 53725322: warm-template MISS (template not registered for this snapshot — cache miss or discarded)
+[FS] Switching overlay layers via ioctl:
+     options = "lowerdir=/overlay_workspace/layers/layer_53725322:/testbed_original_data,upperdir=/overlay_workspace/layers/restore_133ade_upper,workdir=/overlay_workspace/layers/restore_133ade_work,ovl_kind=restore"
+     options_len = 199
+[FS] Switch successful. New stack: 2 lower layers
+[Controller] external restore clearing 2 warm-template pid(s): [457, 481]
+[Controller] external restore ns-init reap 452: [2, 4, 6, 8]
+[Controller] external pidns reap via ns-init 452: []
+[Controller] CRIU restored agent host PID: 455 -> 491 (external_pidns=True)
+[Controller] CRIU lazy restored agent SIGCONT pid=491
+[Controller] epoch -> 1
+[PERF] Restore ID 53725322: OverlayFS=0.40ms, CRIU lazy=29.35ms
+Full Restore Success
+[PERF] Checkpoint ID d28b7648: CRIU=291.46ms (async) dump_size=94.03MB
+[Controller] disposed async dump template pid=483 ckpt=d28b7648
+[replay] done. 6 events recorded -> /tmp/replay_results.jsonl

@@ -1,0 +1,19 @@
+--- a/fs/overlayfs/file.c
++++ b/fs/overlayfs/file.c
+@@ -390,6 +390,16 @@
+ 
+ 	real->flags = 0;
+ 	real->file = file->private_data;
++
++	/*
++	 * An anonymous CoW backing belongs to this open file, not to its
++	 * former pathname.  Resolving the inode-global real path here would
++	 * discard that private backing: a whiteout reopens the lower read-only
++	 * (EBADF on write), while a replacement aliases another file's upper.
++	 * Preserve the unlinked backing for reads, writes and seeks alike.
++	 */
++	if (!file_inode(real->file)->i_nlink)
++		goto check_flags;
+ 
+ 	if (allow_meta) {
+ 		ovl_path_real(dentry, &realpath);

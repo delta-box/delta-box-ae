@@ -1,0 +1,412 @@
+{
+  "schema_version": 1,
+  "repairs": [
+    {
+      "instance": "django__django-12276",
+      "transition": 72,
+      "trace_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "original_diff_sha256": "f5c6f64e5329e4e1772d83b5a1a144d0eaa6dd66eb6aad23a8cb306bd59f61b6",
+      "repaired_diff": "diff --git a/tests/forms_tests/widget_tests/test_fileinput.py b/tests/forms_tests/widget_tests/test_fileinput.py\nindex bbd7c7fe5..edd9cda1f 100644\n--- a/tests/forms_tests/widget_tests/test_fileinput.py\n+++ b/tests/forms_tests/widget_tests/test_fileinput.py\n@@ -18,3 +18,8 @@ class FileInputTest(WidgetTest):\n     def test_value_omitted_from_data(self):\n         self.assertIs(self.widget.value_omitted_from_data({}, {}, 'field'), True)\n         self.assertIs(self.widget.value_omitted_from_data({}, {'field': 'value'}, 'field'), False)\n+\n+    def test_use_required_attribute(self):\n+        # required attribute is not rendered when initial data exists\n+        self.assertIs(self.widget.use_required_attribute(initial_value=None), True)\n+        self.assertIs(self.widget.use_required_attribute(initial_value='resume.txt'), False)\n",
+      "repaired_diff_sha256": "6db70dbe67246ca88cc0cc78c384666a4a11d64409cd066ba386a254b7b63656",
+      "path": "tests/forms_tests/widget_tests/test_fileinput.py",
+      "pre_snapshot_sha256": "705ad774827e41d997050109f81ddb0726bf546f75d79cd3bdb9afbb1d0b7d11",
+      "post_snapshot_sha256": "abc477707d78a4aaed0642739903c0b947815d4a2a9e989097f5eaf9076fc227",
+      "corroborating_successor_ids": [
+        73,
+        75,
+        77
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "5fd84f3f182840a102925c03ea717ef03ce5c6c922b99db44fbcea4ecea71fb3",
+      "after_sha256": "57c6759adf283307ac1d89c30753c2bd9599db7e078719cbab3656860cc6f653"
+    },
+    {
+      "instance": "django__django-12276",
+      "transition": 128,
+      "trace_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "original_diff_sha256": "f5c6f64e5329e4e1772d83b5a1a144d0eaa6dd66eb6aad23a8cb306bd59f61b6",
+      "repaired_diff": "diff --git a/tests/forms_tests/widget_tests/test_fileinput.py b/tests/forms_tests/widget_tests/test_fileinput.py\nindex bbd7c7fe5..edd9cda1f 100644\n--- a/tests/forms_tests/widget_tests/test_fileinput.py\n+++ b/tests/forms_tests/widget_tests/test_fileinput.py\n@@ -18,3 +18,8 @@ class FileInputTest(WidgetTest):\n     def test_value_omitted_from_data(self):\n         self.assertIs(self.widget.value_omitted_from_data({}, {}, 'field'), True)\n         self.assertIs(self.widget.value_omitted_from_data({}, {'field': 'value'}, 'field'), False)\n+\n+    def test_use_required_attribute(self):\n+        # required attribute is not rendered when initial data exists\n+        self.assertIs(self.widget.use_required_attribute(initial_value=None), True)\n+        self.assertIs(self.widget.use_required_attribute(initial_value='resume.txt'), False)\n",
+      "repaired_diff_sha256": "6db70dbe67246ca88cc0cc78c384666a4a11d64409cd066ba386a254b7b63656",
+      "path": "tests/forms_tests/widget_tests/test_fileinput.py",
+      "pre_snapshot_sha256": "705ad774827e41d997050109f81ddb0726bf546f75d79cd3bdb9afbb1d0b7d11",
+      "post_snapshot_sha256": "abc477707d78a4aaed0642739903c0b947815d4a2a9e989097f5eaf9076fc227",
+      "corroborating_successor_ids": [
+        129
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "5fd84f3f182840a102925c03ea717ef03ce5c6c922b99db44fbcea4ecea71fb3",
+      "after_sha256": "57c6759adf283307ac1d89c30753c2bd9599db7e078719cbab3656860cc6f653"
+    },
+    {
+      "instance": "django__django-12276",
+      "transition": 131,
+      "trace_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "original_diff_sha256": "f5c6f64e5329e4e1772d83b5a1a144d0eaa6dd66eb6aad23a8cb306bd59f61b6",
+      "repaired_diff": "diff --git a/tests/forms_tests/widget_tests/test_fileinput.py b/tests/forms_tests/widget_tests/test_fileinput.py\nindex bbd7c7fe5..edd9cda1f 100644\n--- a/tests/forms_tests/widget_tests/test_fileinput.py\n+++ b/tests/forms_tests/widget_tests/test_fileinput.py\n@@ -18,3 +18,8 @@ class FileInputTest(WidgetTest):\n     def test_value_omitted_from_data(self):\n         self.assertIs(self.widget.value_omitted_from_data({}, {}, 'field'), True)\n         self.assertIs(self.widget.value_omitted_from_data({}, {'field': 'value'}, 'field'), False)\n+\n+    def test_use_required_attribute(self):\n+        # required attribute is not rendered when initial data exists\n+        self.assertIs(self.widget.use_required_attribute(initial_value=None), True)\n+        self.assertIs(self.widget.use_required_attribute(initial_value='resume.txt'), False)\n",
+      "repaired_diff_sha256": "6db70dbe67246ca88cc0cc78c384666a4a11d64409cd066ba386a254b7b63656",
+      "path": "tests/forms_tests/widget_tests/test_fileinput.py",
+      "pre_snapshot_sha256": "705ad774827e41d997050109f81ddb0726bf546f75d79cd3bdb9afbb1d0b7d11",
+      "post_snapshot_sha256": "abc477707d78a4aaed0642739903c0b947815d4a2a9e989097f5eaf9076fc227",
+      "corroborating_successor_ids": [
+        132
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "5fd84f3f182840a102925c03ea717ef03ce5c6c922b99db44fbcea4ecea71fb3",
+      "after_sha256": "57c6759adf283307ac1d89c30753c2bd9599db7e078719cbab3656860cc6f653"
+    },
+    {
+      "instance": "django__django-12276",
+      "transition": 197,
+      "trace_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "original_diff_sha256": "1bcd69ecd3ebce8c8adbd91472b23dd9e5486dc9c9a73f5aa8a6a85f907b5760",
+      "repaired_diff": "diff --git a/tests/forms_tests/widget_tests/test_fileinput.py b/tests/forms_tests/widget_tests/test_fileinput.py\nindex bbd7c7fe5..6813f28be 100644\n--- a/tests/forms_tests/widget_tests/test_fileinput.py\n+++ b/tests/forms_tests/widget_tests/test_fileinput.py\n@@ -18,3 +18,10 @@ class FileInputTest(WidgetTest):\n     def test_value_omitted_from_data(self):\n         self.assertIs(self.widget.value_omitted_from_data({}, {}, 'field'), True)\n         self.assertIs(self.widget.value_omitted_from_data({}, {'field': 'value'}, 'field'), False)\n+\n+    def test_use_required_attribute(self):\n+        # required attribute is True when no initial data exists\n+        self.assertIs(self.widget.use_required_attribute(None), True)\n+        self.assertIs(self.widget.use_required_attribute(''), True)\n+        # required attribute is False when initial data exists\n+        self.assertIs(self.widget.use_required_attribute('existing_file.jpg'), False)\n",
+      "repaired_diff_sha256": "0bef20f539e92c58afc04da03c2ed102fcb66ec04ba0229f699bcecf33ba75e7",
+      "path": "tests/forms_tests/widget_tests/test_fileinput.py",
+      "pre_snapshot_sha256": "de0d379c86b15e9cf5089b94f9fff00bfbbab5d8b89129a16c6eb73bac9a19c1",
+      "post_snapshot_sha256": "375ac25401a839b0c1211515569412993bd0d3c89264e33d429bd9607ef35370",
+      "corroborating_successor_ids": [
+        198,
+        200,
+        202
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "5fd84f3f182840a102925c03ea717ef03ce5c6c922b99db44fbcea4ecea71fb3",
+      "after_sha256": "501cbb8cadf0237118425a478248906b3f6fbd9cb2bd07aed5da90d63c312a3d"
+    },
+    {
+      "instance": "django__django-12276",
+      "transition": 206,
+      "trace_sha256": "6ac5f6f5ed24ca6b6520e3b236b239650263c42adb2ce43f7488c3cb7c52fe20",
+      "original_diff_sha256": "f5c6f64e5329e4e1772d83b5a1a144d0eaa6dd66eb6aad23a8cb306bd59f61b6",
+      "repaired_diff": "diff --git a/tests/forms_tests/widget_tests/test_fileinput.py b/tests/forms_tests/widget_tests/test_fileinput.py\nindex bbd7c7fe5..edd9cda1f 100644\n--- a/tests/forms_tests/widget_tests/test_fileinput.py\n+++ b/tests/forms_tests/widget_tests/test_fileinput.py\n@@ -18,3 +18,8 @@ class FileInputTest(WidgetTest):\n     def test_value_omitted_from_data(self):\n         self.assertIs(self.widget.value_omitted_from_data({}, {}, 'field'), True)\n         self.assertIs(self.widget.value_omitted_from_data({}, {'field': 'value'}, 'field'), False)\n+\n+    def test_use_required_attribute(self):\n+        # required attribute is not rendered when initial data exists\n+        self.assertIs(self.widget.use_required_attribute(initial_value=None), True)\n+        self.assertIs(self.widget.use_required_attribute(initial_value='resume.txt'), False)\n",
+      "repaired_diff_sha256": "6db70dbe67246ca88cc0cc78c384666a4a11d64409cd066ba386a254b7b63656",
+      "path": "tests/forms_tests/widget_tests/test_fileinput.py",
+      "pre_snapshot_sha256": "de0d379c86b15e9cf5089b94f9fff00bfbbab5d8b89129a16c6eb73bac9a19c1",
+      "post_snapshot_sha256": "b63e8ae53c45f452d91d98fb241a4462f3b4478cd3aee16c44e2bc4a403173ea",
+      "corroborating_successor_ids": [
+        207
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "5fd84f3f182840a102925c03ea717ef03ce5c6c922b99db44fbcea4ecea71fb3",
+      "after_sha256": "57c6759adf283307ac1d89c30753c2bd9599db7e078719cbab3656860cc6f653"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 15,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        16,
+        18,
+        22
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 25,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        26
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 28,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        29
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 30,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        31,
+        33,
+        35
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 38,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        39
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 41,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        42
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 51,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        52,
+        54,
+        58
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 61,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        62
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 64,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        65
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 66,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        67,
+        69,
+        71
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 74,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        75
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 77,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        78
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 80,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        81,
+        83,
+        85
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 88,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        89
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 91,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        92
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 100,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        101,
+        103,
+        107
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 110,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        111
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    },
+    {
+      "instance": "django__django-13410",
+      "transition": 113,
+      "trace_sha256": "d5d43a38be4b33870cb6628d8b49ed39f46917d428075e602e7e88d292421fed",
+      "original_diff_sha256": "7be3608940ee668610c55c3b788c059f5f6e087700f349df20c72daf287cfc0d",
+      "repaired_diff": "diff --git a/django/core/files/locks.py b/django/core/files/locks.py\nindex c46b00b90..ae8fdc979 100644\n--- a/django/core/files/locks.py\n+++ b/django/core/files/locks.py\n@@ -107,9 +107,15 @@ else:\n             return True\n     else:\n         def lock(f, flags):\n-            ret = fcntl.flock(_fd(f), flags)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), flags)\n+                return True\n+            except OSError:\n+                return False\n \n         def unlock(f):\n-            ret = fcntl.flock(_fd(f), fcntl.LOCK_UN)\n-            return ret == 0\n+            try:\n+                fcntl.flock(_fd(f), fcntl.LOCK_UN)\n+                return True\n+            except OSError:\n+                return False\n\\ No newline at end of file\n",
+      "repaired_diff_sha256": "cbd34dcde0c44acc3019fcc4ee87d3c2a5d109b59f8ddc4951e4b295271aa059",
+      "path": "django/core/files/locks.py",
+      "pre_snapshot_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "post_snapshot_sha256": "e6ee3bbfb48d1f996b03639a395e31c230285fbf760e01f065d731bc4c69f71e",
+      "corroborating_successor_ids": [
+        114
+      ],
+      "evidence": "Unmodified target before edit; identical cumulative Git patch in every recorded successor. Response diff contains concatenated removed/added lines.",
+      "before_sha256": "4e8fb6c3366a48774d48808926049abdf298ca21c527ed11db85522c3286e5b2",
+      "after_sha256": "e868ac3b5142e1afa1efe6b9753f7269bb6ff255d2908e55784242a194efdc79"
+    }
+  ]
+}

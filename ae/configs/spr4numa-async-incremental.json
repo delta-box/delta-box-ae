@@ -1,0 +1,44 @@
+{
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "base_xfs": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
+  "images_dir": "/mnt/disk2/dyp/d-overlayfs",
+  "deltafs": "/mnt/disk2/dyp/d-overlayfs",
+  "payload": "/mnt/disk2/dyp/spr_payload",
+  "moatless_venv": "/mnt/disk2/dyp/moatless_det_venv",
+  "nltk_data": "/mnt/disk2/dyp/replay-offline-nltk-20260921",
+  "criu_bin": "/mnt/disk2/dyp/criu-host-diagnostic-20260921/criu-source-2cf8f13ca/criu/criu",
+  "replay_message_policy": "audit",
+  "checkpoint_profile": "async-incremental",
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "gpu": {
+    "enabled": false,
+    "reason": "Skipped at user's request"
+  },
+  "cube": {
+    "sdk": "${CUBE_SDK}",
+    "api_url": "http://127.0.0.1:3000",
+    "template": "cube-finalbench-python-4vcpu-4096m-20260604-cow",
+    "proxy_node_ip": "127.0.0.1",
+    "phase_log": "/data/log/Cubelet/Cubelet-req.log",
+    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet"
+  },
+  "e2b": {
+    "infra": "/home/dyp/infra",
+    "ssh_host": "ubuntu@127.0.0.1",
+    "ssh_key": "${E2B_L1_KEY}",
+    "remote_path": "/mnt/disk2/dyp/e2b-tools/go/bin:/mnt/disk2/dyp/e2b-tools/node/bin:/mnt/disk2/dyp/e2b-tools/google-cloud-sdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "storage": "/var/tmp/e2b-slim-finalbench",
+    "from_build": "${E2B_FROM_BUILD}",
+    "api_url": "http://127.0.0.1:3000",
+    "sandbox_url": "http://127.0.0.1:3002",
+    "template": "${E2B_TEMPLATE}",
+    "ssh_port": 56555
+  },
+  "prewarm_policy": "off",
+  "baseline_test_runtime": {
+    "backend": "none"
+  },
+  "criu_dump_binary": "/mnt/disk2/dyp/criu-exact-parent-20260922/clean-build-root/source/criu/criu"
+}

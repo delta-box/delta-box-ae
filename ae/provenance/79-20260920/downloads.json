@@ -1,0 +1,23 @@
+[
+  {
+    "archive": "traces/archives/mcts_trajectory_data_20260625_172222.tar.zst",
+    "bytes": 154151710,
+    "sha256": "16629abed953642f2d070a97f72e7635ff2bf23688646de8477755f1f1a1d77c",
+    "source_host": "192.168.12.79",
+    "retrieved_date": "2026-09-20"
+  },
+  {
+    "archive": "traces/archives/spr4numa-lw-trace-inputs-20260920.tar.gz",
+    "bytes": 26652,
+    "sha256": "d2ae5a085146245b3e2c2d0d5504bb7e9425b8b849555d3f97abdf9e6ff10ac7",
+    "source_host": "192.168.12.79",
+    "retrieved_date": "2026-09-20"
+  },
+  {
+    "archive": "traces/archives/spr4numa-paper-trace-supplement-20260920.tar.gz",
+    "bytes": 289867035,
+    "sha256": "5a0de32a45b9936038b923f94efd50a97943c316c096d79ea5edcb074e474b3a",
+    "source_host": "192.168.12.79",
+    "retrieved_date": "2026-09-20"
+  }
+]

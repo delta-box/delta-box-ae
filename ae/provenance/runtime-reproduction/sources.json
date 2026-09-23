@@ -1,0 +1,7 @@
+{
+  "imported_repository": "ae",
+  "imported_commit": "e3596f8290737b220091466ecadc5e55cd791ba6",
+  "runtime_base": "c74c8f58819b1665c192c5b03d35b8ad8464a751",
+  "gpu_measurements": "skipped at author request",
+  "paper_sha256": "1cc012a6ba4afdd127372a236333983ad6d17934ac63680b37faa3e6f65bb95e"
+}

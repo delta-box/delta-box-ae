@@ -1,0 +1,175 @@
+{
+  "paper": "atc26-paper158.pdf",
+  "scope": "Reviewed recipe catalog, not a validated binary release; see review.md",
+  "logical_deltabox_image_gib": 49,
+  "artifacts": [
+    {
+      "name": "DeltaBox base and data",
+      "figures_tables": [
+        "table-02",
+        "table-03",
+        "figure-01",
+        "figure-02",
+        "figure-06",
+        "figure-07",
+        "figure-08"
+      ],
+      "recipes": [
+        "scripts/build_xfs.py",
+        "scripts/build_master.sh",
+        "Dockerfile.master"
+      ],
+      "recovered_inputs": [
+        "historical/build_base.sh",
+        "historical/build_data.sh",
+        "historical/install_envs.py",
+        "historical/env_specs.json"
+      ],
+      "outputs": [
+        "base.xfs",
+        "data-django.xfs",
+        "data-sympy.xfs",
+        "data-sci.xfs",
+        "data-tools.xfs"
+      ],
+      "full_build_validated": false,
+      "optional_outputs": [
+        "data-sphinx.xfs"
+      ],
+      "distribution_role": "core-after-run-binding-and-boot-validation"
+    },
+    {
+      "name": "DeltaBox Linux 6.8 guest",
+      "recipes": [
+        "scripts/build_kernel.sh"
+      ],
+      "recovered_inputs": [
+        "configs/linux-6.8-spr4numa.config"
+      ],
+      "outputs": [
+        "vmlinux"
+      ],
+      "full_build_validated": false,
+      "auxiliary_outputs": [
+        "arch/x86/boot/bzImage"
+      ],
+      "distribution_role": "core-after-run-binding"
+    },
+    {
+      "name": "FC-Diff+dm",
+      "figures_tables": [
+        "table-02",
+        "figure-01"
+      ],
+      "recipes": [
+        "scripts/build_fc_dm.py"
+      ],
+      "outputs": [
+        "fc-dm.xfs"
+      ],
+      "full_build_validated": false,
+      "distribution_role": "generate-per-instance-from-shared-base",
+      "historical_read_only_drive": "data-django.xfs",
+      "historical_read_only_drive_purpose": "boot dependency; replay payload is injected into rootfs"
+    },
+    {
+      "name": "CubeSandbox Table 2",
+      "figures_tables": [
+        "table-02"
+      ],
+      "recipes": [
+        "Dockerfile.cube",
+        "scripts/build_cube.sh",
+        "scripts/register_cube.sh"
+      ],
+      "historical_base_ref": "ghcr.io/tencentcloud/cubesandbox-base:2026.16",
+      "historical_base_digest": null,
+      "full_build_validated": false,
+      "historical_template": "cube-finalbench-python-4vcpu-4096m-20260604-cow",
+      "distribution_role": "separate-baseline-required-for-corresponding-results"
+    },
+    {
+      "name": "E2B local build (Table 2 / Figure 7 candidate)",
+      "figures_tables": [
+        "table-02",
+        "figure-07"
+      ],
+      "recipes": [
+        "scripts/build_l1.sh",
+        "scripts/build_e2b.sh"
+      ],
+      "patches": [
+        "patches/e2b-create-build.patch"
+      ],
+      "historical_base_ref": "e2bdev/base:latest",
+      "historical_base_digest": null,
+      "full_build_validated": false,
+      "deployment_helper": "scripts/build_l1.sh",
+      "distribution_role": "separate-baseline-with-deployment-required-for-corresponding-results",
+      "serving_template_registration_included": false
+    },
+    {
+      "name": "Write amplification",
+      "figures_tables": [
+        "figure-09"
+      ],
+      "recipes": [
+        "scripts/build_xfs.py",
+        "scripts/pull_figure09.py"
+      ],
+      "recovered_inputs": [
+        "configs/figure09-oci-inputs.json"
+      ],
+      "outputs": [
+        "ext4.img",
+        "xfs.img",
+        "xfs_reflink.img"
+      ],
+      "filesystem_build_validated": true,
+      "registry_pulls_validated": false,
+      "distribution_role": "generate-empty-filesystems-at-run-time",
+      "recovered_loop_size_mib": 4096,
+      "smoke_test_size_mib": 512
+    },
+    {
+      "name": "GPU replacement recipe (optional)",
+      "figures_tables": [
+        "figure-08"
+      ],
+      "recipes": [
+        "Dockerfile.gpu",
+        "scripts/build_gpu.sh"
+      ],
+      "requires": [
+        "Explicit CUDA/PyTorch base digest",
+        "Hash-pinned GPU dependency lock"
+      ],
+      "historical_image_unknown": true,
+      "full_build_validated": false,
+      "distribution_role": "experimental-replacement-not-historical-release"
+    },
+    {
+      "name": "CubeSandbox Figure 8a",
+      "figures_tables": [
+        "figure-08"
+      ],
+      "historical_template": "cube-official-fork-bench-20260605_210553",
+      "recipes": [],
+      "recipe_status": "exact-template-build-request-not-recovered",
+      "full_build_validated": false,
+      "distribution_role": "separate-required-baseline-input-if-reproducing-fanout"
+    },
+    {
+      "name": "E2B Figure 8a API template",
+      "figures_tables": [
+        "figure-08"
+      ],
+      "historical_template": "base",
+      "recipes": [],
+      "recipe_status": "api-template-registration-not-recovered",
+      "full_build_validated": false,
+      "distribution_role": "separate-required-baseline-input-if-reproducing-fanout"
+    }
+  ],
+  "logical_deltabox_image_gib_with_optional_sphinx": 59
+}

@@ -1,0 +1,6 @@
+{
+  "pid": 3406750,
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "rootfs_copy": "/mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-probe/ovl-probe-ou2kpnor/rootfs.xfs",
+  "base_read_only_source": "/mnt/disk2/dyp/d-overlayfs/base.xfs"
+}

@@ -1,0 +1,228 @@
+[
+  {
+    "source": "/mnt/disk2/dyp/finalbench/fc_diff_dm/fc_dm_controller_pilot.py",
+    "sha256": "88d005d5552196fb5d141deca80eb934d8eb5c90f387656cd9f3b1ee493f2673",
+    "matching_lines": [
+      {
+        "line": 63,
+        "text": "            \"--traces-root\", os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"),"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/fc_diff_dm/fc_dm_pilot.py",
+    "sha256": "37762657dadf338cbafe2702fcfe3c406842a87b424a43d284e38c2836c66200",
+    "matching_lines": [
+      {
+        "line": 39,
+        "text": "TRACE_ROOT = Path(os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"))"
+      },
+      {
+        "line": 492,
+        "text": "            trace_src = TRACE_ROOT / \"qwen3-coder-30b-ms\" / instance"
+      },
+      {
+        "line": 493,
+        "text": "            mock_trace_dir = mp / \"var/lib/finalbench/det_mock_traces/qwen3-coder-30b-ms\""
+      },
+      {
+        "line": 495,
+        "text": "            trace_src = TRACE_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / instance"
+      },
+      {
+        "line": 499,
+        "text": "        if not trace_src.exists():"
+      },
+      {
+        "line": 500,
+        "text": "            raise FileNotFoundError(f\"trace source not found: {trace_src}\")"
+      },
+      {
+        "line": 507,
+        "text": "        shutil.copytree(trace_src, link, symlinks=True)"
+      },
+      {
+        "line": 518,
+        "text": "Environment=MOCK_TRACES_ROOT=/var/lib/finalbench/det_mock_traces"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/fc_diff_dm/guest_controller_driver.py",
+    "sha256": "861a092c11a1b2d73a099120c959619e2f190bc99850d02a75140d2d3bde73e2",
+    "matching_lines": [
+      {
+        "line": 36,
+        "text": "MOCK_TRACES_ROOT = Path(os.environ.get(\"MOCK_TRACES_ROOT\", \"/var/lib/finalbench/det_mock_traces\"))"
+      },
+      {
+        "line": 123,
+        "text": "        traj_path = MOCK_TRACES_ROOT / \"qwen3-coder-30b-ms\" / instance / \"trajectory.json\""
+      },
+      {
+        "line": 125,
+        "text": "        traj_path = MOCK_TRACES_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / instance / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/fc_diff_dm/guest_moatless_pause_driver.py",
+    "sha256": "edfe50bb7d8b3416d275b71f13d6fd5ebd3a377909c3b3ea89ce73abae9f7fb9",
+    "matching_lines": [
+      {
+        "line": 45,
+        "text": "MOCK_TRACES_ROOT = Path(os.environ.get(\"MOCK_TRACES_ROOT\", \"/tmp/det_mock_traces\"))"
+      },
+      {
+        "line": 214,
+        "text": "            str(MOCK_TRACES_ROOT),"
+      },
+      {
+        "line": 246,
+        "text": "    traj_path = MOCK_TRACES_ROOT / \"qwen3-coder-30b-ms\" / INSTANCE_ID / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/fc_diff_dm/run_all_controller.py",
+    "sha256": "88b2d5662d59deb83b22df5be90f237e50a43e853c0884cec34ea1b250e2c8b9",
+    "matching_lines": [
+      {
+        "line": 30,
+        "text": "TRACE_ROOT = Path(os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"))"
+      },
+      {
+        "line": 82,
+        "text": "        p = TRACE_ROOT / \"qwen3-coder-30b-ms\" / inst / \"trajectory.json\""
+      },
+      {
+        "line": 84,
+        "text": "        p = TRACE_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / inst / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/criu_copytree/criu_copytree_pilot.py",
+    "sha256": "8401db54afeb3122868bb85b008694fe2e8697c7a25b6d68d356d65d672adc6a",
+    "matching_lines": [
+      {
+        "line": 39,
+        "text": "TRACES_ROOT = Path(os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"))"
+      },
+      {
+        "line": 85,
+        "text": "            str(TRACES_ROOT),"
+      },
+      {
+        "line": 182,
+        "text": "    env[\"CRIU_TRACES_ROOT\"] = str(TRACES_ROOT)"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/criu_copytree/criu_sandbox_server.py",
+    "sha256": "6e2ca6ba70b94647649f43ce49106eef97f27a17f31ae281e3f191dde6dabbbe",
+    "matching_lines": [
+      {
+        "line": 40,
+        "text": "TRACES_ROOT = Path(os.environ.get(\"CRIU_TRACES_ROOT\", \"/tmp/det_mock_traces\"))"
+      },
+      {
+        "line": 241,
+        "text": "    traj_path = TRACES_ROOT / \"qwen3-coder-30b-ms\" / instance / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/criu_copytree/criu_worker.py",
+    "sha256": "726fd48a962660e1bfd0050046586a81191c358d0ee7816967636b1656ba1175",
+    "matching_lines": [
+      {
+        "line": 43,
+        "text": "TRACES_ROOT = Path(os.environ.get(\"CRIU_TRACES_ROOT\", \"/tmp/det_mock_traces\"))"
+      },
+      {
+        "line": 209,
+        "text": "        traj_path = TRACES_ROOT / \"qwen3-coder-30b-ms\" / instance / \"trajectory.json\""
+      },
+      {
+        "line": 211,
+        "text": "        traj_path = TRACES_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / instance / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/criu_copytree/run_all.py",
+    "sha256": "2fa79aa1a62e41367861b3abb24a005f38e95b71e9fd74cd33b475c9ab764c9d",
+    "matching_lines": [
+      {
+        "line": 30,
+        "text": "TRACES_ROOT = Path(os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"))"
+      },
+      {
+        "line": 54,
+        "text": "        traj_path = TRACES_ROOT / \"qwen3-coder-30b-ms\" / instance / \"trajectory.json\""
+      },
+      {
+        "line": 56,
+        "text": "        traj_path = TRACES_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / instance / \"trajectory.json\""
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/replay_copytree/real_run_all.py",
+    "sha256": "98390a780ab578e4aa5de9cb1ef2465f0c55eed64d35517238d66ac2f6d694f3",
+    "matching_lines": [
+      {
+        "line": 39,
+        "text": "    env.setdefault(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\")"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/replay_copytree/real_trace_runner.py",
+    "sha256": "47bc5b207567fd67c07541bef923f5e811fa870a2a6818494e2204bb80904a7d",
+    "matching_lines": [
+      {
+        "line": 38,
+        "text": "TRACES_ROOT = Path(os.environ.get(\"FINALBENCH_TRACES_ROOT\", \"/mnt/disk2/dyp/d-overlayfs/traces/swe-search\"))"
+      },
+      {
+        "line": 90,
+        "text": "            str(TRACES_ROOT),"
+      },
+      {
+        "line": 115,
+        "text": "        traj = TRACES_ROOT / \"qwen3-coder-30b-ms\" / instance_id / \"trajectory.json\""
+      },
+      {
+        "line": 117,
+        "text": "        traj = TRACES_ROOT / \"qwen3-coder-30b-p-eagle-ms\" / \"mcts-iter30\" / instance_id / \"trajectory.json\""
+      },
+      {
+        "line": 188,
+        "text": "            str(TRACES_ROOT),"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/replay_copytree/run_all.py",
+    "sha256": "f49353b932f73bc378b4c5fb6f6b3a8ecc419a54e4b82ed537b6debbe77be6e9",
+    "matching_lines": [
+      {
+        "line": 28,
+        "text": "TRACES = Path(\"/mnt/disk2/dyp/spr_payload/det_traces/ms\")"
+      }
+    ]
+  },
+  {
+    "source": "/mnt/disk2/dyp/finalbench/replay_copytree/trace_runner.py",
+    "sha256": "a4ffdf33164099c85fd87217f88a0eae8a4fee71fa8b602ece0847bedb7ecb6f",
+    "matching_lines": [
+      {
+        "line": 217,
+        "text": "    traj = Path(f\"/mnt/disk2/dyp/spr_payload/det_traces/ms/{inst}/trajectory.json\")"
+      }
+    ]
+  }
+]

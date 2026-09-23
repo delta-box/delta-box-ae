@@ -1,0 +1,143 @@
+{
+  "exported_at": "2026-09-21T02:49:23.414351+00:00",
+  "files": [
+    {
+      "path": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/cube_cow_schedule_replay.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/cube_cow_schedule_replay.py",
+      "source_head": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+      "source_state": "working-tree",
+      "sha256": "33b6b08f7dd18ac0b8d24372d13d4f8c47c4c9df89c0e34300bf6e1ccfd2d47f",
+      "git_blob": "1951a4a5606e16c57ea0e3c3dba251394df54d24",
+      "head_blob": "fc03fe30692f7796c764fc5f3dcfdeef0a760e6c",
+      "differs_from_head": true,
+      "bytes": 32882
+    },
+    {
+      "path": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/run_cube_cow_2x_numa12.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/scripts/run_cube_cow_2x_numa12.py",
+      "source_head": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+      "source_state": "working-tree",
+      "sha256": "b7cafcae1b35ca9524a877a7e79bfdb1e6d25e8b7e60ac1c53182e3c5e83598f",
+      "git_blob": "d9ab8794cd378c420a587e82dacd2fa127a5a63c",
+      "head_blob": "3d7990cd2a4d1b371e2ea3a8d5f62823800d51dc",
+      "differs_from_head": true,
+      "bytes": 7103
+    },
+    {
+      "path": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_runner.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_runner.py",
+      "source_head": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+      "source_state": "working-tree",
+      "sha256": "dffb839e1703463fe0c9012ea4e04b99c0938909d504b02ae5ae35b5f79fecb3",
+      "git_blob": "130ab5349b10bf932e53a5b2c74f0096e0c84b24",
+      "head_blob": "130ab5349b10bf932e53a5b2c74f0096e0c84b24",
+      "differs_from_head": false,
+      "bytes": 12095
+    },
+    {
+      "path": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_worker.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_worker.py",
+      "source_head": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+      "source_state": "working-tree",
+      "sha256": "8ea03571252761d05229a87d22d8cadb611b57a671cf671b4f8141a03f56ce90",
+      "git_blob": "d5bab2b194d0662e3e4fd995d0a839e357274883",
+      "head_blob": "d5bab2b194d0662e3e4fd995d0a839e357274883",
+      "differs_from_head": false,
+      "bytes": 5037
+    },
+    {
+      "path": "finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_runner_worker_ops.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/e2b_slim_action_runner_worker_ops.py",
+      "source_head": "fa7e8e1d9bef60e6031480d91ec02709ccd1a90f",
+      "source_state": "working-tree",
+      "sha256": "dffb839e1703463fe0c9012ea4e04b99c0938909d504b02ae5ae35b5f79fecb3",
+      "git_blob": "130ab5349b10bf932e53a5b2c74f0096e0c84b24",
+      "head_blob": "130ab5349b10bf932e53a5b2c74f0096e0c84b24",
+      "differs_from_head": false,
+      "bytes": 12095
+    },
+    {
+      "path": "finalbench/official_sandbox_fork/bench_official_fork.py",
+      "source_repository": "/Users/bytedance/Desktop/delta/finalbench",
+      "source_commit": "a6db54b88934c4eb7893e56034e1df3dba91a1c9",
+      "source_path": "official_sandbox_fork/bench_official_fork.py",
+      "source_state": "committed-blob",
+      "sha256": "6554378e8489301dad7997ed43144dc5554918abb87b4d2ce51c2fef2aad3a87",
+      "git_blob": "dfa7cdf324c70625541c4bcb848bfefba3389845",
+      "bytes": 18936
+    },
+    {
+      "path": "finalbench/official_sandbox_fork/bench_deltabox_fork_in_vm.py",
+      "source_repository": "/Users/bytedance/Desktop/delta/finalbench",
+      "source_commit": "a6db54b88934c4eb7893e56034e1df3dba91a1c9",
+      "source_path": "official_sandbox_fork/bench_deltabox_fork_in_vm.py",
+      "source_state": "committed-blob",
+      "sha256": "66f6459873dd75e72b9c09c90fc317e176a3cbeb26545a4111b61e1715a8b342",
+      "git_blob": "21985fe6083774474da5238eeac7f9f0c1aa4eac",
+      "bytes": 16525
+    },
+    {
+      "path": "d-overlayfs/guest/rl/batched_fork.py",
+      "source_repository": "/Users/bytedance/Desktop/delta/d-overlayfs",
+      "source_commit": "d93e6610eba3e9f05d170c65904187955ee65ba4",
+      "source_path": "guest/rl/batched_fork.py",
+      "source_state": "committed-blob",
+      "sha256": "509858c6a231c8fb2dddbd7ff8e314e4b3ad3da96cc042cc421a368dc3d666a1",
+      "git_blob": "2b47f5314816d1d7a28e6d3dc836346f8292d45f",
+      "bytes": 12421
+    },
+    {
+      "path": "spr_payload/moatless-det-src/moatless/search_tree.py",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/spr_payload/moatless-det-src/moatless/search_tree.py",
+      "source_state": "unversioned-source-tree",
+      "sha256": "f8b891a647c931a598bc237767b1bb4c8ac21b9c423d1cf26e1febafbea51ea5",
+      "git_blob": "d0966bde8bf6c4f0707f15edc3ad084da3b83f8b",
+      "bytes": 43557
+    },
+    {
+      "path": "spr_payload/moatless-det-src/pyproject.toml",
+      "source_host": "spr4numa",
+      "source_path": "/mnt/disk2/dyp/spr_payload/moatless-det-src/pyproject.toml",
+      "source_state": "unversioned-source-tree",
+      "sha256": "f5b3a25272ec711c8821a7270e3d61af115f0d0be366d8c03cfb00d086971c91",
+      "git_blob": "3570f5bb51ec0ce8cd8004d083de46e8c4438dbd",
+      "bytes": 1882
+    },
+    {
+      "path": "d-overlayfs/scripts/run_swe_search_profile50_no_testbed.sh",
+      "source_repository": "/Users/bytedance/Desktop/delta/d-overlayfs",
+      "source_commit": "d93e6610eba3e9f05d170c65904187955ee65ba4",
+      "source_path": "scripts/run_swe_search_profile50_no_testbed.sh",
+      "source_state": "committed-blob",
+      "sha256": "b6967f3e39ef36b029a3f9e490fe2f08f6f264e10571a59e21ca63347d47bf0c",
+      "git_blob": "c7b4ad47fdae804fee8fe19915d492c3567a1fc7",
+      "bytes": 8333
+    },
+    {
+      "path": "d-overlayfs/scripts/aggregate_moatless_profile50.py",
+      "source_repository": "/Users/bytedance/Desktop/delta/d-overlayfs",
+      "source_commit": "d93e6610eba3e9f05d170c65904187955ee65ba4",
+      "source_path": "scripts/aggregate_moatless_profile50.py",
+      "source_state": "committed-blob",
+      "sha256": "82df86fce3600799860606be3f2c2cf847548d6cb8b6de6cfc003ef92fdbcdc8",
+      "git_blob": "0c9ed8d4307b9438aa0687fa6242dad6048634b5",
+      "bytes": 11201
+    },
+    {
+      "path": "d-overlayfs/traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/run_profile5_tree_rss.py",
+      "source_repository": "/Users/bytedance/Desktop/delta/d-overlayfs",
+      "source_commit": "d93e6610eba3e9f05d170c65904187955ee65ba4",
+      "source_path": "traces/swe-search/qwen3-coder-30b-vllm18086/profile5-tree-rss-20260609_052851/run_profile5_tree_rss.py",
+      "source_state": "committed-blob",
+      "sha256": "db752b4f6d72d9f4658045504378474ead5bd3e4915e334a64ca6765f11bc097",
+      "git_blob": "85e259fa065acd2842ccb08bdf53e6e19e651f61",
+      "bytes": 10333
+    }
+  ]
+}

@@ -1,0 +1,186 @@
+[
+  {
+    "id": "table-01",
+    "title": "Mechanism comparison",
+    "note": "Literature comparison; locally measured DeltaBox/Cube entries refer to Table 2/3. No independent trace cohort.",
+    "cohorts": [],
+    "file_references": 0,
+    "logical_bytes": 0
+  },
+  {
+    "id": "table-02",
+    "title": "Checkpoint/restore comparison",
+    "note": "Preserves each backend cohort separately. DeltaBox/Cube use 12 inputs; original E2B uses a different 8. FC/CRIU/Replay use a planned 244. Historical input versions and some paper timing values remain unresolved.",
+    "cohorts": [
+      {
+        "label": "deltabox",
+        "source_cohort": "table2-deltabox-12",
+        "rows": 12,
+        "distinct_instances": 12,
+        "manifest": "cohort-deltabox.csv"
+      },
+      {
+        "label": "cube",
+        "source_cohort": "table2-cube-canonical-12",
+        "rows": 12,
+        "distinct_instances": 12,
+        "manifest": "cohort-cube.csv"
+      },
+      {
+        "label": "e2b",
+        "source_cohort": "table2-e2b-original-8",
+        "rows": 8,
+        "distinct_instances": 8,
+        "manifest": "cohort-e2b.csv"
+      },
+      {
+        "label": "fc-diff",
+        "source_cohort": "table2-fc-actual",
+        "rows": 238,
+        "distinct_instances": 238,
+        "manifest": "cohort-fc-diff.csv"
+      },
+      {
+        "label": "criu-attempts",
+        "source_cohort": "table2-criu-all-attempts",
+        "rows": 244,
+        "distinct_instances": 244,
+        "manifest": "cohort-criu-attempts.csv"
+      },
+      {
+        "label": "replay",
+        "source_cohort": "table2-replay-actual",
+        "rows": 244,
+        "distinct_instances": 244,
+        "manifest": "cohort-replay.csv"
+      }
+    ],
+    "file_references": 2418,
+    "logical_bytes": 1798902207
+  },
+  {
+    "id": "table-03",
+    "title": "Component latency and fast/slow restore",
+    "note": "Fast and slow paths come from separate runs with different NUMA/concurrency settings. Candidate raw results are preserved; the published numerical mapping is not fully resolved.",
+    "cohorts": [
+      {
+        "label": "deltabox",
+        "source_cohort": "table2-deltabox-12",
+        "rows": 12,
+        "distinct_instances": 12,
+        "manifest": "cohort-deltabox.csv"
+      }
+    ],
+    "file_references": 177,
+    "logical_bytes": 40046331
+  },
+  {
+    "id": "figure-01",
+    "title": "Baseline phase costs",
+    "note": "Phase data and the Table 2 cohorts are provided. Historical plotting used adjustments/fallback values that still require reconciliation.",
+    "cohorts": [],
+    "file_references": 13,
+    "logical_bytes": 2163529
+  },
+  {
+    "id": "figure-02",
+    "title": "Per-step state changes",
+    "note": "Filesystem profiling uses 30 instances; memory profiling uses 5 separately recorded inputs. Counts are distinct from the 30-iteration budget.",
+    "cohorts": [
+      {
+        "label": "filesystem",
+        "source_cohort": "fig2-filesystem-30",
+        "rows": 30,
+        "distinct_instances": 30,
+        "manifest": "cohort-filesystem.csv"
+      },
+      {
+        "label": "memory",
+        "source_cohort": "fig2-memory-5",
+        "rows": 5,
+        "distinct_instances": 5,
+        "manifest": "cohort-memory.csv"
+      }
+    ],
+    "file_references": 107,
+    "logical_bytes": 84332910
+  },
+  {
+    "id": "figure-06",
+    "title": "Memory policies and lightweight skip",
+    "note": "Memory curves: one SymPy input under four fork-only policies (CRIU disabled). Adaptive data: 12 Claude/MiMo inputs; saved run directory also includes an Astropy probe.",
+    "cohorts": [
+      {
+        "label": "memory",
+        "source_cohort": "fig6-memory-1",
+        "rows": 1,
+        "distinct_instances": 1,
+        "manifest": "cohort-memory.csv"
+      },
+      {
+        "label": "adaptive",
+        "source_cohort": "fig6-adaptive-source-12",
+        "rows": 12,
+        "distinct_instances": 12,
+        "manifest": "cohort-adaptive.csv"
+      }
+    ],
+    "file_references": 135,
+    "logical_bytes": 60491868
+  },
+  {
+    "id": "figure-07",
+    "title": "MCTS end-to-end comparison",
+    "note": "DeltaBox 12 and original E2B 8 inputs remain separate. Saved E2B values model a warm-worker path from measured components; reading the aggregate is not a new end-to-end execution.",
+    "cohorts": [
+      {
+        "label": "deltabox",
+        "source_cohort": "table2-deltabox-12",
+        "rows": 12,
+        "distinct_instances": 12,
+        "manifest": "cohort-deltabox.csv"
+      },
+      {
+        "label": "e2b",
+        "source_cohort": "table2-e2b-original-8",
+        "rows": 8,
+        "distinct_instances": 8,
+        "manifest": "cohort-e2b.csv"
+      }
+    ],
+    "file_references": 157,
+    "logical_bytes": 52457373
+  },
+  {
+    "id": "figure-08",
+    "title": "Sandbox fan-out and GPU timing",
+    "note": "Separates the nine-input fork primitive, synthetic 64-MiB sandbox fan-out, and GPU timing inputs. E2B N=64 paper plotting used an estimate from N=16 measurements; failed native-N=64 evidence is retained.",
+    "cohorts": [
+      {
+        "label": "fork-primitive",
+        "source_cohort": "rl-fanout-9",
+        "rows": 9,
+        "distinct_instances": 9,
+        "manifest": "cohort-fork-primitive.csv"
+      }
+    ],
+    "file_references": 76,
+    "logical_bytes": 24885921
+  },
+  {
+    "id": "figure-09",
+    "title": "Write amplification",
+    "note": "185 pool+instance inputs represent 136 distinct instances. Each filesystem has 646 edit records, 603 applied_ok. Plot filtering remains part of the reproduction workflow.",
+    "cohorts": [
+      {
+        "label": "war",
+        "source_cohort": "fig9-war-inputs",
+        "rows": 185,
+        "distinct_instances": 136,
+        "manifest": "cohort-war.csv"
+      }
+    ],
+    "file_references": 1295,
+    "logical_bytes": 157922614
+  }
+]

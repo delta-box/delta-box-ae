@@ -1,0 +1,9 @@
+[
+  {
+    "repository": "d-overlayfs",
+    "commit": "d93e6610",
+    "source_path": "experiments/cubesandbox_table2_deltabox_canonical_serial_officialish_20260610/extract_deltabox_canonical_cube_phase_breakdown.py",
+    "destination": "ae/vendor/finalbench/cube_phase_parser.py",
+    "source_sha256": "f4bb02f207b89c6afc5baa95d8b28761597ef6e774701a3d98208a7684522c4a"
+  }
+]

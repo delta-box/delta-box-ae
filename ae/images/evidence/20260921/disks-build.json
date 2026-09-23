@@ -1,0 +1,31 @@
+{
+  "command": "split",
+  "status": "built-not-boot-tested",
+  "source": "/mnt/disk1/dyp/d-overlayfs_xfs/ubuntu-24.04.xfs",
+  "source_sha256": "dfe4d7bc0734fc3a3b5b8a695f686afce08509ba319c308b024f3bbc8c8e5c54",
+  "groups": {
+    "django": [
+      "django__1.11",
+      "django__2.2",
+      "django__3.0",
+      "django__3.1",
+      "django__3.2",
+      "django__4.0",
+      "django__4.1",
+      "django__4.2",
+      "django__5.0"
+    ]
+  },
+  "artifacts": [
+    {
+      "file": "base.xfs",
+      "bytes": 3221225472,
+      "sha256": "a4c1e6c5d834ee459599365b3b99397196d30b4de4dfeca67929fcbb93686a98"
+    },
+    {
+      "file": "data-django.xfs",
+      "bytes": 9663676416,
+      "sha256": "1d26ab3348b2ce35736df418011215548c3a9048352b121df4325f2eeff38709"
+    }
+  ]
+}

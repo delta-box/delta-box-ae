@@ -1,0 +1,22 @@
+{
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "base_xfs": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
+  "images_dir": "/mnt/disk2/dyp/d-overlayfs",
+  "instance_data_images": {
+    "django__django-14672": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-django.xfs",
+    "astropy__astropy-14182": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-sci.xfs"
+  },
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "prewarm_policy": "off",
+  "measurement": {
+    "pin": true,
+    "numa_node": 2,
+    "cpus": "48-51"
+  },
+  "vm_storage": "tmpfs",
+  "vm_work_dir": "../work/vm",
+  "checkpoint_profile": "historical-async-full",
+  "note": "Current diagnostic comparison: asynchronous full dump with lazy restore. The profile name is a compatibility identifier; this run is not the default incremental path described in the paper."
+}

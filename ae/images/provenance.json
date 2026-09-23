@@ -1,0 +1,78 @@
+[
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/scripts/build_base.sh",
+    "source_sha256": "c0ec4d2ade648b0f7838f23a537e4d4986a91d155e7f7eff7eeb5be115b79207",
+    "stored": "historical/build_base.sh",
+    "stored_sha256": "c0ec4d2ade648b0f7838f23a537e4d4986a91d155e7f7eff7eeb5be115b79207",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/scripts/build_data.sh",
+    "source_sha256": "cdd304f8f634d2963c042fb20b2f88876a2a3a73871d4517416b30c19f45e09e",
+    "stored": "historical/build_data.sh",
+    "stored_sha256": "cdd304f8f634d2963c042fb20b2f88876a2a3a73871d4517416b30c19f45e09e",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/image_groups.py",
+    "source_sha256": "d9e2e6604bfb8bb68286b003af5d24a3bf721772efdae49ec97239caa862b59c",
+    "stored": "historical/image_groups.py",
+    "stored_sha256": "d9e2e6604bfb8bb68286b003af5d24a3bf721772efdae49ec97239caa862b59c",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/linux-6.8/.config",
+    "source_sha256": "a030e626590ce76e4c06c8a31a468c0c5f62b257cc07479031b8c5f03b04c916",
+    "stored": "configs/linux-6.8-spr4numa.config",
+    "stored_sha256": "a030e626590ce76e4c06c8a31a468c0c5f62b257cc07479031b8c5f03b04c916",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/env_specs.json",
+    "source_sha256": "148f77f6d3826e10cfc4e1bef7d86eba4b2b580cde0a1bf47a1c764604e053ba",
+    "stored": "historical/env_specs.json",
+    "stored_sha256": "148f77f6d3826e10cfc4e1bef7d86eba4b2b580cde0a1bf47a1c764604e053ba",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/mnt/disk2/dyp/d-overlayfs/install_envs.py",
+    "source_sha256": "2f2338640cb9df071d0a11d75a35c616325627c997480827eace8531a2967c74",
+    "stored": "historical/install_envs.py",
+    "stored_sha256": "2f2338640cb9df071d0a11d75a35c616325627c997480827eace8531a2967c74",
+    "mode": "verbatim",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "git diff /home/dyp/infra/packages/orchestrator/cmd/create-build/main.go at f9a52875167889d130c9f505b1315fa56a01d749",
+    "stored": "patches/e2b-create-build.patch",
+    "stored_sha256": "4e7bf9b433c1911afd71b3a54e5c465a17f588bb2c8e72ab7c36ea6b0b1d5e14",
+    "mode": "verbatim-working-tree-diff",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/Users/bytedance/Desktop/delta/finalbench/fc_diff_dm/fc_dm_pilot.py",
+    "source_sha256": "a4b176683d32fde308a3de2020de8dcff19e76b521e50c8d2389ce0854337f9a",
+    "stored": "scripts/build_fc_dm.py",
+    "mode": "reconstructed-and-parameterized",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "/Users/bytedance/Desktop/delta/finalbench/cube_cow_peagle_mcts30_2x_numa12_realrtt/docker/Dockerfile.python",
+    "source_sha256": "22b6b5f3e33362b913ecb38b457706511900ea48255d4a4dc5c3fce2d01cd8a3",
+    "stored": "Dockerfile.cube",
+    "mode": "reconstructed-and-parameterized",
+    "collected_on": "2026-09-20"
+  },
+  {
+    "source": "https://github.com/TencentCloud/CubeSandbox/blob/v0.3.0/CubeMaster/cmd/cubemastercli/commands/cubebox/template.go",
+    "source_sha256": "68e85508cce6aa2d8fafd0206deba8e8408e0613debcb5ef5d725946dcc724d5",
+    "stored": "scripts/register_cube.sh",
+    "mode": "reconstructed-from-v0.3.0-cli-source",
+    "collected_on": "2026-09-20"
+  }
+]

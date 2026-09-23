@@ -1,0 +1,104 @@
+{
+  "date": "2026-09-20",
+  "paper": "atc26-paper158.pdf",
+  "local_checks": {
+    "recipe_tests": "8 passed after scope review",
+    "python_compile": "passed (Python 3.9)",
+    "bash_syntax": "all new shell scripts passed",
+    "historical_sha256": "checked by test_recipes.py",
+    "figure09_binding": "185 inputs / 136 distinct OCI refs, bound to paper/figure-09/files.jsonl",
+    "credential_scan": "No private-key blocks, credential-bearing URLs, API token patterns in publication files",
+    "e2b_patch": "Reverse/apply round-trip against recovered create-build main.go passed"
+  },
+  "linux_filesystem_smoke": {
+    "host": "192.168.12.79",
+    "directory": "/mnt/disk2/dyp/ae-image-recipe-check-20260920/filesystems-final",
+    "kernel": "6.8.0-124-generic",
+    "architecture": "x86_64",
+    "mkfs_xfs_version": "mkfs.xfs version 5.13.0",
+    "build": {
+      "command": "filesystems",
+      "status": "built-not-boot-tested",
+      "artifacts": [
+        {
+          "file": "ext4.img",
+          "bytes": 536870912,
+          "sha256": "47052c09b4f573338b00d314879d99fbaa80d897eb64c9c8cc8aeafaff5c6f92"
+        },
+        {
+          "file": "xfs.img",
+          "bytes": 536870912,
+          "sha256": "4a9bea5fc744ce3e27737a2a0c006149e426743837048c11a5620878e5bf1d79"
+        },
+        {
+          "file": "xfs_reflink.img",
+          "bytes": 536870912,
+          "sha256": "74b14cb1f08f7f464531f36dc06319fdb78f43f25b42677d0c442535d0ab0650"
+        }
+      ]
+    },
+    "smoke": {
+      "tests": [
+        {
+          "filesystem": "ext4",
+          "reflink_supported": false,
+          "cow_isolation_checked": false,
+          "passed": true
+        },
+        {
+          "filesystem": "xfs",
+          "reflink_supported": false,
+          "cow_isolation_checked": false,
+          "passed": true
+        },
+        {
+          "filesystem": "xfs_reflink",
+          "reflink_supported": true,
+          "cow_isolation_checked": true,
+          "passed": true
+        }
+      ],
+      "post_test_images": [
+        {
+          "file": "ext4.img",
+          "sha256": "e35bbe6bc46cc5d53a8a3a62c4cacc774efd3d997b64fe105459d4d7e64cbf32"
+        },
+        {
+          "file": "xfs.img",
+          "sha256": "e372ab43eb2b4d8c3a05070d5c9c08fd02588210a06cee2d372d90fd03eddcff"
+        },
+        {
+          "file": "xfs_reflink.img",
+          "sha256": "68af26f4aa4c17514d99386e573eccada6501a17c66dace68b4232efbcc395a6"
+        }
+      ]
+    },
+    "scripts": {
+      "build_xfs.py": "b9551ae943d482eef57b2c268c6d2315798702ed88b58fa258c2f0916bb92379",
+      "smoke_filesystems.py": "558f05ecf15bc872d593eb409410853416af58ef59b6ef1a7e4e2e240c2d4f1b"
+    }
+  },
+  "not_executed": [
+    "Full 80-environment master OCI build",
+    "Historical mother image split / OCI export into all 59 GiB images",
+    "Guest kernel compilation",
+    "Boot and replay on generated DeltaBox / FC-Diff+dm rootfs",
+    "Cube image build and live template registration",
+    "E2B L1 boot and template create-build",
+    "Figure 9 registry pulls",
+    "GPU container build / GPU profiling"
+  ],
+  "interpretation": "Only filesystem creation, mounting, reflink support and clone isolation were executed on 79. This is not full paper reproduction validation.",
+  "scope_review": {
+    "reviewed_commit": "93c05845b80eed0202fa768f9d0ac8081633470a",
+    "report": "review.md",
+    "source_bindings": "review-bindings.json",
+    "changes_since_linux_smoke": [
+      "Default data groups narrowed to django/sympy/sci/tools",
+      "Filesystem size default aligned with recovered 4096 MiB runner",
+      "mkfs/mount/reflink implementations unchanged; prior 512 MiB smoke is retained as limited evidence"
+    ],
+    "current_build_xfs_sha256": "dded3009f845360d6273374d9bb8e2bc64fef1a6c2e1661e077250a9fb11746d",
+    "full_build_or_replay_validated": false
+  }
+}

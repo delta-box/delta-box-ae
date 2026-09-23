@@ -1,0 +1,4 @@
+# Preserve original console bytes and patch context in diagnostic evidence.
+overlayfs/*.patch -whitespace
+overlayfs/evidence/** -whitespace
+criu/evidence/** -whitespace

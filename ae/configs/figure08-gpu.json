@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "model_label": "Qwen2.5-7B-Instruct",
+  "model_path": null,
+  "devices": [],
+  "batches": [1, 4, 16, 64],
+  "phases": ["generation", "training"],
+  "generation_python": null,
+  "training_python": null,
+  "timeout_s": 1800,
+  "allow_busy": false,
+  "seed": 42,
+  "generation": {
+    "prompt_mode": "paper-template",
+    "enable_prefix_caching": true,
+    "in_tokens": 256,
+    "out_tokens": 512,
+    "max_model_len": 832,
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "gpu_memory_utilization": 0.5,
+    "warmup_reps": 1,
+    "reps": 3
+  },
+  "training": {
+    "seq_len": 768,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "learning_rate": 0.0001,
+    "fsdp_gpus": 4,
+    "per_gpu_batch": 4,
+    "warmup_reps": 2,
+    "reps": 5
+  }
+}

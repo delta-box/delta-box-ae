@@ -1,0 +1,29 @@
+{
+  "host": "spr4numa",
+  "repository": "/mnt/disk2/dyp/d-overlayfs/rollbackable-sandbox-paper",
+  "commit": "c3259eb83a1fcc6637c88ec7a6d543c4c0843c4b",
+  "files": {
+    "plot/paperstyle.py": "5d090a313e34518dda37de2595ec87acfab3a187f7e7cde480c9956cf28d0048",
+    "plot/plot_fig_e2b_cube_compare.py": "734ffc3d51303a388f9c39922c949be0a13d6c8b7ba069906a6f3bba6b1a87bb",
+    "plot/plot_fig_motiv_combo_v2.py": "4cf54cc26095049c5ed1efcbc1ef1506b31efc1ae224b3a9db797f54108e1de6",
+    "plot/plot_fig_mem_combo.py": "15b44df477f7a06654ff7bd11b95373dd6749fae38dabf4f708cda0327693c54",
+    "plot/plot_fig_end2end_2sys.py": "813c7e0e6633e26db5b83d69a8a1035bd49a6051066eeac1713d2cc9c27afe3d",
+    "plot/plot_fig_rl_combo.py": "ee2287fc4b2d512ccf53197d8fa2d8609192b8506fe569da81a2d0fdd50685cd",
+    "plot/plot_fig_war.py": "701dd0723ea1760e863ce15b0530a84b0766e0924859bcc6990a5b4f135d0a53",
+    "eval.tex": "a5274b4a5373c2b6f5fda1e2c994edbd0c8f2ac9e4c32439e2702be3f9243244",
+    "background.tex": "8d0758e4d6596bfd80b3f6f2fe462feb169709889e27080990c17263dc60ed20",
+    "design.tex": "69612d6942d2fd0687a95854c307719da75845b4a79f9e7865118819d083f2af",
+    "plot/plot_fig_motiv_combo.py": "c11220b931be438c04f3a9416bc443a5341ec2313c0d4c682b277d9b111a2887"
+  },
+  "checked_on": "2026-09-22",
+  "usage": "Style and layout reference only; new AE figures must read the selected fresh analysis, never archived fallback values.",
+  "local_comparison": {
+    "commit": "9399445caac33e5b309b70f5ece67877418940f9",
+    "different_files": [
+      "plot/plot_fig_motiv_combo_v2.py",
+      "plot/plot_fig_war.py",
+      "eval.tex"
+    ],
+    "note": "Use the recorded remote versions as the reference; paperstyle.py is byte-identical."
+  }
+}

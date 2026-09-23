@@ -1,0 +1,6 @@
+{
+  "probe": 0,
+  "test_full": 0,
+  "test_cross_checkpoint_fd_cow": 0,
+  "test_deleted_open_resurrect": 0
+}

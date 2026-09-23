@@ -1,0 +1,39 @@
+{
+  "kernel": "/srv/deltabox/images/vmlinux",
+  "base_xfs": "/srv/deltabox/images/base.xfs",
+  "images_dir": "/srv/deltabox/images",
+  "deltafs": "/srv/deltabox/d-overlayfs",
+  "payload": "/srv/deltabox/spr_payload",
+  "moatless_venv": "/srv/deltabox/moatless_det_venv",
+  "checkpoint_profile": "runtime-default",
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "gpu": {
+    "enabled": false
+  },
+  "cube": {
+    "sdk": "${CUBE_SDK}",
+    "api_url": "http://127.0.0.1:3000",
+    "template": "${CUBE_TEMPLATE}",
+    "proxy_node_ip": "127.0.0.1",
+    "phase_log": "/data/log/Cubelet/Cubelet-req.log",
+    "phase_binary": "/srv/cube/cubelet"
+  },
+  "e2b": {
+    "infra": "/srv/e2b/infra",
+    "ssh_host": "ubuntu@127.0.0.1",
+    "ssh_port": 56555,
+    "ssh_key": "${E2B_L1_KEY}",
+    "remote_path": "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin",
+    "storage": "/var/tmp/e2b-slim-finalbench",
+    "from_build": "${E2B_FROM_BUILD}",
+    "api_url": "http://127.0.0.1:3000",
+    "sandbox_url": "http://127.0.0.1:3002",
+    "template": "${E2B_TEMPLATE}"
+  },
+  "prewarm_policy": "off",
+  "measurement": {
+    "pin": false
+  }
+}

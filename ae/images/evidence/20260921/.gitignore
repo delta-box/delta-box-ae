@@ -1,0 +1,2 @@
+# Keep the small, referenced build and guest logs as validation evidence.
+!*.log

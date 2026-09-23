@@ -1,0 +1,95 @@
+{
+  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "base_xfs": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
+  "images_dir": "/mnt/disk2/dyp/d-overlayfs",
+  "instance_data_images": {
+    "django__django-14672": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-django.xfs",
+    "astropy__astropy-14182": "/mnt/disk2/dyp/workload-environment-audit-20260922/data-sci.xfs"
+  },
+  "deltafs": "/mnt/disk2/dyp/d-overlayfs",
+  "payload": "/mnt/disk2/dyp/spr_payload",
+  "moatless_venv": "/mnt/disk2/dyp/moatless_det_venv",
+  "nltk_data": "/mnt/disk2/dyp/replay-offline-nltk-20260921",
+  "criu_bin": "/mnt/disk2/dyp/criu-host-diagnostic-20260921/criu-source-2cf8f13ca/criu/criu",
+  "replay_message_policy": "audit",
+  "checkpoint_profile": "async-incremental",
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "gpu": {
+    "config": "figure08-gpu.json"
+  },
+  "cube": {
+    "sdk": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/cube-sdk",
+    "api_url": "http://127.0.0.1:3000",
+    "template": "cube-official-blog-sandbox-code-2c2g-20260609",
+    "proxy_node_ip": "127.0.0.1",
+    "phase_log": "/data/log/Cubelet/Cubelet-req.log",
+    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet"
+  },
+  "e2b": {
+    "infra": "/home/dyp/infra",
+    "remote_path": "/home/dyp/.local/go1.26.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "storage": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/e2b-table2-storage",
+    "from_build": "62e2b12b-0000-4000-8000-000000000062",
+    "api_url": "http://127.0.0.1:3100",
+    "sandbox_url": "http://127.0.0.1:3102",
+    "template": "ae-e2b-base-20260922",
+    "execution": "local",
+    "sidecar_ip": "192.168.12.79",
+    "resume_binary": "/home/dyp/infra/.local-finalbench-62-e2b-lw12/bin/resume-build",
+    "sandbox_dir": "/home/dyp/infra/.local-finalbench-62-e2b-lw12/sandbox",
+    "gocache": "/home/dyp/infra/.cache-go-build",
+    "gomodcache": "/home/dyp/infra/.cache-go/pkg/mod",
+    "nbd_pool_size": 8,
+    "parent_manifest": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/e2b-table2-storage/parent-isolation.json",
+    "fanout_python": "/mnt/disk2/dyp/ae-hosted-20260922/e2b/sdk-venv/bin/python"
+  },
+  "prewarm_policy": "off",
+  "baseline_test_runtime": {
+    "backend": "none"
+  },
+  "criu_dump_binary": "/mnt/disk2/dyp/criu-exact-parent-20260922/clean-build-root/source/criu/criu",
+  "measurement": {
+    "pin": true,
+    "numa_node": 2,
+    "cpus": "52-55"
+  },
+  "review": {
+    "experiment_overrides": {
+      "figure-06-memory": {
+        "checkpoint_profile": "runtime-default",
+        "figure06_memory_policies": [
+          "none",
+          "skip",
+          "gc",
+          "warm"
+        ]
+      },
+      "figure-06-adaptive": {
+        "checkpoint_profile": "runtime-default",
+        "legacy_timing_policy": "paper-zero"
+      },
+      "figure-08-cube": {
+        "cube": {
+          "template": "cube-official-fork-bench-20260605_210553"
+        }
+      },
+      "table-02-replay": {
+        "replay_workers": 16,
+        "replay_mock_latency_policy": "recorded",
+        "baseline_storage": "tmpfs",
+        "memory_job_size_gib": 8,
+        "measurement": {
+          "pin": true,
+          "numa_node": 3,
+          "cpus": "72-95"
+        }
+      }
+    },
+    "declared_unavailable": []
+  },
+  "repository_fallback": "same-project-commit",
+  "vm_storage": "tmpfs",
+  "vm_work_dir": "../work/vm"
+}

@@ -1,0 +1,1297 @@
+[
+  {
+    "instance": "astropy__astropy-14309",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14309",
+    "base_commit": "cdb66059a2feb44ee49021874605ba90801f9986",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__astropy__astropy-14309/claude_linear__astropy__astropy-14309.json",
+    "trace_sha256": "8f35a31f76bca1f9deb7a9b5cbfbca09e1a07298eafe0a067fe17c2f8c926fd1"
+  },
+  {
+    "instance": "astropy__astropy-7606",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7606",
+    "base_commit": "3cedd79e6c121910220f8e6df77c54a0b344ea94",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__astropy__astropy-7606/claude_linear__astropy__astropy-7606.json",
+    "trace_sha256": "ed54e0ebd49f73e3c71b6d1d5e9db6c193d5c203699e5035d48d05fb94430e7f"
+  },
+  {
+    "instance": "django__django-11163",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11163",
+    "base_commit": "e6588aa4e793b7f56f4cadbfa155b581e0efc59a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-11163/claude_linear__django__django-11163.json",
+    "trace_sha256": "635c722b8c8a18d1ada3e97e6efc179509f3f17438f2b47767eeb6e7823d5e85"
+  },
+  {
+    "instance": "django__django-11276",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11276",
+    "base_commit": "28d5262fa3315690395f04e3619ed554dbaf725b",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-11276/claude_linear__django__django-11276.json",
+    "trace_sha256": "4500c8971ec7a20833e30a28d5e3651074b458fbfb18b980030408bc7d885e5f"
+  },
+  {
+    "instance": "django__django-11532",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11532",
+    "base_commit": "a5308514fb4bc5086c9a16a8a24a945eeebb073c",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-11532/claude_linear__django__django-11532.json",
+    "trace_sha256": "f4d06e9da670996ab0660b74bf32fb86625e1ff13e354919d91645b414a636f0"
+  },
+  {
+    "instance": "django__django-11880",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11880",
+    "base_commit": "06909fe084f87a65459a83bd69d7cdbe4fce9a7c",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-11880/claude_linear__django__django-11880.json",
+    "trace_sha256": "e027261fbbc49046228b5b462707031eca4861ca122071589fcc72fe9464cd90"
+  },
+  {
+    "instance": "django__django-12143",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-12143",
+    "base_commit": "5573a54d409bb98b5c5acdb308310bed02d392c2",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-12143/claude_linear__django__django-12143.json",
+    "trace_sha256": "d28c6dcda1300185ade3e2d8ad007aa5643f7d178a17156c1e31a0b90d96d208"
+  },
+  {
+    "instance": "django__django-13089",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13089",
+    "base_commit": "27c09043da52ca1f02605bf28600bfd5ace95ae4",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-13089/claude_linear__django__django-13089.json",
+    "trace_sha256": "568b5d3761816786f8f3ce187e3ab614ac9af8743402de72f0fee4556cea3c3d"
+  },
+  {
+    "instance": "django__django-13410",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13410",
+    "base_commit": "580a4341cb0b4cbfc215a70afc004875a7e815f4",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-13410/claude_linear__django__django-13410.json",
+    "trace_sha256": "590471f2892303f5f68d911751b8e19cbf1912f568d410d8c7a836e2606af76b"
+  },
+  {
+    "instance": "django__django-13786",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13786",
+    "base_commit": "bb64b99b78a579cb2f6178011a4cf9366e634438",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-13786/claude_linear__django__django-13786.json",
+    "trace_sha256": "870cfd04a3557778d34d694beed80611d678a6f92e5c4e30c219d7bcfe7ba0ab"
+  },
+  {
+    "instance": "django__django-14373",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14373",
+    "base_commit": "b1a4b1f0bdf05adbd3dc4dde14228e68da54c1a3",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-14373/claude_linear__django__django-14373.json",
+    "trace_sha256": "cdb2be10c6a10c4fc0128c4474ac395b3aa365d2b43f250dd415b13c00de2f0c"
+  },
+  {
+    "instance": "django__django-14493",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14493",
+    "base_commit": "7272e1963ffdf39c1d4fe225d5425a45dd095d11",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-14493/claude_linear__django__django-14493.json",
+    "trace_sha256": "04aa63c924c188a3092df27659934d6f14e6e41a3ea1e25f20b98e31e2b9e18b"
+  },
+  {
+    "instance": "django__django-15467",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15467",
+    "base_commit": "e0442a628eb480eac6a7888aed5a86f83499e299",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-15467/claude_linear__django__django-15467.json",
+    "trace_sha256": "05b247fffc3c8e2fec1e8f5c70ffc5b9963dfa3222a43a60ac6e0aea9dda35ae"
+  },
+  {
+    "instance": "django__django-15731",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15731",
+    "base_commit": "93cedc82f29076c824d476354527af1150888e4f",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-15731/claude_linear__django__django-15731.json",
+    "trace_sha256": "227be0234e01c93a7afe755ee1add2734aeda346eecba463d0c0e6bdd26e71e7"
+  },
+  {
+    "instance": "django__django-16429",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16429",
+    "base_commit": "6c86495bcee22eac19d7fb040b2988b830707cbd",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-16429/claude_linear__django__django-16429.json",
+    "trace_sha256": "7d44715f9e99a62c8eaa05bb9936d884c111cac913ec03fbc4dd192c00e64fb8"
+  },
+  {
+    "instance": "django__django-16569",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16569",
+    "base_commit": "278881e37619278789942513916acafaa88d26f3",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-16569/claude_linear__django__django-16569.json",
+    "trace_sha256": "e8746fc017e3f5c21bf37a215a208a0120db96eec3b9a57a23223d2c13284291"
+  },
+  {
+    "instance": "django__django-17029",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-17029",
+    "base_commit": "953f29f700a60fc09b08b2c2270c12c447490c6a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__django__django-17029/claude_linear__django__django-17029.json",
+    "trace_sha256": "65879876d130fd781f732ca8c2fc0f7ed5e7e1530725994debbab3ecf9478b94"
+  },
+  {
+    "instance": "matplotlib__matplotlib-20859",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-20859",
+    "base_commit": "64619e53e9d0ed417daba287ac0d3a06943a54d5",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__matplotlib__matplotlib-20859/claude_linear__matplotlib__matplotlib-20859.json",
+    "trace_sha256": "53a3a8d38ad010262705de7fc6b3becb57aacdcd549df3bb64dadf7ac1a5f504"
+  },
+  {
+    "instance": "matplotlib__matplotlib-25122",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-25122",
+    "base_commit": "5ec2bd279729ff534719b8bf238dbbca907b93c5",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__matplotlib__matplotlib-25122/claude_linear__matplotlib__matplotlib-25122.json",
+    "trace_sha256": "a1574c5e8a2ff0ca2b458e5620d91ed1661c5dd862261db94ae867029bc3ed2f"
+  },
+  {
+    "instance": "matplotlib__matplotlib-26113",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26113",
+    "base_commit": "5ca694b38d861c0e24cd8743753427dda839b90b",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__matplotlib__matplotlib-26113/claude_linear__matplotlib__matplotlib-26113.json",
+    "trace_sha256": "1052636ef7684689f7cf79ae78e0baa5aff3b9d6d501f911e8bae18c6488d487"
+  },
+  {
+    "instance": "pydata__xarray-2905",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-2905",
+    "base_commit": "7c4e2ac83f7b4306296ff9b7b51aaf016e5ad614",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pydata__xarray-2905/claude_linear__pydata__xarray-2905.json",
+    "trace_sha256": "9a22806885249df1733bfbf4d38f5aadcb95ce5723346f5c3d033c5a48a168b3"
+  },
+  {
+    "instance": "pydata__xarray-3677",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3677",
+    "base_commit": "ef6e6a7b86f8479b9a1fecf15ad5b88a2326b31e",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pydata__xarray-3677/claude_linear__pydata__xarray-3677.json",
+    "trace_sha256": "86071abd3051607b0a5dee1dc1124dbcf3362419c55e6e49098cee05b10d1324"
+  },
+  {
+    "instance": "pydata__xarray-4356",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4356",
+    "base_commit": "e05fddea852d08fc0845f954b79deb9e9f9ff883",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pydata__xarray-4356/claude_linear__pydata__xarray-4356.json",
+    "trace_sha256": "d032cbf9b952eb2de93a572d3401701442831057f09b929f682226c8dd277164"
+  },
+  {
+    "instance": "pydata__xarray-4629",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4629",
+    "base_commit": "a41edc7bf5302f2ea327943c0c48c532b12009bc",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pydata__xarray-4629/claude_linear__pydata__xarray-4629.json",
+    "trace_sha256": "b188212a56f6662ca505435460b99d5416b999765c3115a71772097956c0f08a"
+  },
+  {
+    "instance": "pydata__xarray-4966",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4966",
+    "base_commit": "37522e991a32ee3c0ad1a5ff8afe8e3eb1885550",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pydata__xarray-4966/claude_linear__pydata__xarray-4966.json",
+    "trace_sha256": "aae159d5c12aa4c114977b8ab8ebf7e938eaa577370c876a6ff4118f4099712a"
+  },
+  {
+    "instance": "pylint-dev__pylint-6903",
+    "image": "swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-6903",
+    "base_commit": "ca80f03a43bc39e4cc2c67dc99817b3c9f13b8a6",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pylint-dev__pylint-6903/claude_linear__pylint-dev__pylint-6903.json",
+    "trace_sha256": "11a70c0319a7dbf2b7360bdde031388aa9cc97b8a1b8dd11f7d98721f974e4ca"
+  },
+  {
+    "instance": "pylint-dev__pylint-7277",
+    "image": "swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-7277",
+    "base_commit": "684a1d6aa0a6791e20078bc524f97c8906332390",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pylint-dev__pylint-7277/claude_linear__pylint-dev__pylint-7277.json",
+    "trace_sha256": "d87f85fb96b45200dd430f7af40221af4485366534214e252d6966d91d2f16e2"
+  },
+  {
+    "instance": "pytest-dev__pytest-10051",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-10051",
+    "base_commit": "aa55975c7d3f6c9f6d7f68accc41bb7cadf0eb9a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pytest-dev__pytest-10051/claude_linear__pytest-dev__pytest-10051.json",
+    "trace_sha256": "4f0db277a7aa37f5e03a00e05b650f6fb8d59ddde4bb2e233f6a126150d3ece7"
+  },
+  {
+    "instance": "pytest-dev__pytest-5631",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5631",
+    "base_commit": "cb828ebe70b4fa35cd5f9a7ee024272237eab351",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pytest-dev__pytest-5631/claude_linear__pytest-dev__pytest-5631.json",
+    "trace_sha256": "ba55f30db4e35279dbe7a58a1e2ec3adf403425b42744bb41627cb287a96e9fd"
+  },
+  {
+    "instance": "pytest-dev__pytest-5809",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5809",
+    "base_commit": "8aba863a634f40560e25055d179220f0eefabe9a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pytest-dev__pytest-5809/claude_linear__pytest-dev__pytest-5809.json",
+    "trace_sha256": "2759bde004a461b08920809bb800abe72d64faa464322909820e1a7085f67ef3"
+  },
+  {
+    "instance": "pytest-dev__pytest-6202",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-6202",
+    "base_commit": "3a668ea6ff24b0c8f00498c3144c63bac561d925",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pytest-dev__pytest-6202/claude_linear__pytest-dev__pytest-6202.json",
+    "trace_sha256": "866d10761adeafd707607f26d38683f4ea545536ff3e254f19aa7111edc9a89e"
+  },
+  {
+    "instance": "pytest-dev__pytest-7205",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-7205",
+    "base_commit": "5e7f1ab4bf58e473e5d7f878eb2b499d7deabd29",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__pytest-dev__pytest-7205/claude_linear__pytest-dev__pytest-7205.json",
+    "trace_sha256": "7a71f43379c0526a42cf3b219c4a6e7c5ee4980b9f66a3c2833ba5e073a19df1"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-12973",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-12973",
+    "base_commit": "a7b8b9e9e16d4e15fabda5ae615086c2e1c47d8a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-12973/claude_linear__scikit-learn__scikit-learn-12973.json",
+    "trace_sha256": "dac3ca06c8e672242596d685d2818f5a9f5382a1fd2a6c7117c8d44448110fa7"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-13135",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-13135",
+    "base_commit": "a061ada48efccf0845acae17009553e01764452b",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-13135/claude_linear__scikit-learn__scikit-learn-13135.json",
+    "trace_sha256": "76919f0bd277e58610fe9372c1dc49520af1641ece712ba8784f85129139a8f9"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-14629",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-14629",
+    "base_commit": "4aded39b5663d943f6a4809abacfa9cae3d7fb6a",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-14629/claude_linear__scikit-learn__scikit-learn-14629.json",
+    "trace_sha256": "b3adb68d17dc248624097caf220fbba4a27be56c5f7245a36f3032c9c803fd85"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-14710",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-14710",
+    "base_commit": "4b6273b87442a4437d8b3873ea3022ae163f4fdf",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-14710/claude_linear__scikit-learn__scikit-learn-14710.json",
+    "trace_sha256": "7cf823cd70510176e25093964a1381d7d102a3b8a9f3f6670e1b529663b47219"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-25931",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25931",
+    "base_commit": "e3d1f9ac39e4bf0f31430e779acc50fb05fe1b64",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-25931/claude_linear__scikit-learn__scikit-learn-25931.json",
+    "trace_sha256": "c50754c0040decb390005170626293b11ea72310b19a3fff8b44fd78ced23470"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-26323",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-26323",
+    "base_commit": "586f4318ffcdfbd9a1093f35ad43e81983740b66",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__scikit-learn__scikit-learn-26323/claude_linear__scikit-learn__scikit-learn-26323.json",
+    "trace_sha256": "f65b104e8dfbf85469ec4c63c6d76e9847318e51a0168eda00c9ec7bde5b6b95"
+  },
+  {
+    "instance": "sympy__sympy-13091",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13091",
+    "base_commit": "d1320814eda6549996190618a21eaf212cfd4d1e",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-13091/claude_linear__sympy__sympy-13091.json",
+    "trace_sha256": "3c78a97207f559fc773b96a2f2e7e6bf26681f2d085d1e738a893fdea394c256"
+  },
+  {
+    "instance": "sympy__sympy-13372",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13372",
+    "base_commit": "30379ea6e225e37833a764ac2da7b7fadf5fe374",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-13372/claude_linear__sympy__sympy-13372.json",
+    "trace_sha256": "e945cf84f09728fdfc7f0b260025734b84075a161f3d13dbef4eed7ced7311b5"
+  },
+  {
+    "instance": "sympy__sympy-14711",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-14711",
+    "base_commit": "c6753448b5c34f95e250105d76709fe4d349ca1f",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-14711/claude_linear__sympy__sympy-14711.json",
+    "trace_sha256": "97c57a445a0d30fac1a1a345cc567f7a889b545c535dac8a2c87389ea80572b0"
+  },
+  {
+    "instance": "sympy__sympy-15349",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15349",
+    "base_commit": "768da1c6f6ec907524b8ebbf6bf818c92b56101b",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-15349/claude_linear__sympy__sympy-15349.json",
+    "trace_sha256": "14acd57846c57d1cac2e07d2cdac380de3b23869d9422a6851b1d4f2400fe426"
+  },
+  {
+    "instance": "sympy__sympy-15599",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15599",
+    "base_commit": "5e17a90c19f7eecfa10c1ab872648ae7e2131323",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-15599/claude_linear__sympy__sympy-15599.json",
+    "trace_sha256": "d13f36155843599b02a92ec009b6f7c4c40b641e3906900ce633b466a903e064"
+  },
+  {
+    "instance": "sympy__sympy-15976",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15976",
+    "base_commit": "701441853569d370506514083b995d11f9a130bd",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-15976/claude_linear__sympy__sympy-15976.json",
+    "trace_sha256": "644e7a7fca692686a27ddba02cb51b49a4eec153ccaf398506d54a37b796a91c"
+  },
+  {
+    "instance": "sympy__sympy-17318",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-17318",
+    "base_commit": "d4e0231b08147337745dcf601e62de7eefe2fb2d",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-17318/claude_linear__sympy__sympy-17318.json",
+    "trace_sha256": "92bd198e8181fe970fb77d81735a2abb22b3b51c3bad7093bf494c4a9d649399"
+  },
+  {
+    "instance": "sympy__sympy-19954",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19954",
+    "base_commit": "6f54459aa0248bf1467ad12ee6333d8bc924a642",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-19954/claude_linear__sympy__sympy-19954.json",
+    "trace_sha256": "85a0137f6541b898d90a15fa3f545e8a6abc282752b6462c6905e1f0e674018b"
+  },
+  {
+    "instance": "sympy__sympy-24443",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-24443",
+    "base_commit": "809c53c077485ca48a206cee78340389cb83b7f1",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-24443/claude_linear__sympy__sympy-24443.json",
+    "trace_sha256": "0b47464984cf35d3512260e9d3f6be1bc479b8585c307890a05550a2af5aa154"
+  },
+  {
+    "instance": "sympy__sympy-24539",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-24539",
+    "base_commit": "193e3825645d93c73e31cdceb6d742cc6919624d",
+    "trace": "paper/figure-09/data/inputs/war/claude_linear__sympy__sympy-24539/claude_linear__sympy__sympy-24539.json",
+    "trace_sha256": "36c6d7fb88f626a9a6826f6c984aaa37ebff1cf7e5c23fb11a81e374b679fc1f"
+  },
+  {
+    "instance": "astropy__astropy-14309",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14309",
+    "base_commit": "cdb66059a2feb44ee49021874605ba90801f9986",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__astropy__astropy-14309/claude_mcts__astropy__astropy-14309.json",
+    "trace_sha256": "e6c03bac55c297eb1782c05d6130a84f429a8deb9e50119700d6cf04c659107c"
+  },
+  {
+    "instance": "django__django-11066",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11066",
+    "base_commit": "4b45b6c8e4d7c9701a332e80d3b1c84209dc36e2",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-11066/claude_mcts__django__django-11066.json",
+    "trace_sha256": "f0d4776cecbae30d8c242a897cc32fdb5520d6fc0bad4bf396f4b8360efaf47a"
+  },
+  {
+    "instance": "django__django-11603",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11603",
+    "base_commit": "f618e033acd37d59b536d6e6126e6c5be18037f6",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-11603/claude_mcts__django__django-11603.json",
+    "trace_sha256": "75c0f016493637b5f5c2652526fd8af1f3f6501a746428ade7740e046cc4181c"
+  },
+  {
+    "instance": "django__django-12143",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-12143",
+    "base_commit": "5573a54d409bb98b5c5acdb308310bed02d392c2",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-12143/claude_mcts__django__django-12143.json",
+    "trace_sha256": "ae529fe21c4c6a696e8d19c570b2a00a08cd977723bb01003254b38bd6e52afa"
+  },
+  {
+    "instance": "django__django-12276",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-12276",
+    "base_commit": "53d8646f799de7f92ab9defe9dc56c6125448102",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-12276/claude_mcts__django__django-12276.json",
+    "trace_sha256": "e84da22d36ffe32935da285f50c4d8ae5c38b4a63f7a2713e66cafbfa0c297ce"
+  },
+  {
+    "instance": "django__django-13089",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13089",
+    "base_commit": "27c09043da52ca1f02605bf28600bfd5ace95ae4",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-13089/claude_mcts__django__django-13089.json",
+    "trace_sha256": "1512f5cb3600ae09fd6e8c857d687b5ec2ed053b45075dc97b37956f88113f65"
+  },
+  {
+    "instance": "django__django-13410",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13410",
+    "base_commit": "580a4341cb0b4cbfc215a70afc004875a7e815f4",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-13410/claude_mcts__django__django-13410.json",
+    "trace_sha256": "5fbed1aeeb6fdf717476f3e126f7f55e06ba2ab9b436fc271f63a6145948b93a"
+  },
+  {
+    "instance": "django__django-13670",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13670",
+    "base_commit": "c448e614c60cc97c6194c62052363f4f501e0953",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-13670/claude_mcts__django__django-13670.json",
+    "trace_sha256": "8b0968b2eff243c1860db803f29dbc7dfb83b751a1682e61938af1f0b29ab9f1"
+  },
+  {
+    "instance": "django__django-13741",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13741",
+    "base_commit": "d746f28949c009251a8741ba03d156964050717f",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-13741/claude_mcts__django__django-13741.json",
+    "trace_sha256": "2c5025997a2c678714626f39c8af5530d6f613e5ba73b6a2bb57c3053c564af9"
+  },
+  {
+    "instance": "django__django-13786",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13786",
+    "base_commit": "bb64b99b78a579cb2f6178011a4cf9366e634438",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-13786/claude_mcts__django__django-13786.json",
+    "trace_sha256": "8eb5cf6c7107b7b89fd1a2407e224f5004247041d3fab017c25d0cca8fc767db"
+  },
+  {
+    "instance": "django__django-14373",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14373",
+    "base_commit": "b1a4b1f0bdf05adbd3dc4dde14228e68da54c1a3",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-14373/claude_mcts__django__django-14373.json",
+    "trace_sha256": "367a08ea4fcbb0afb9e6bfcdbf64eb1e4e3066066596f4bb73f43bbce8b7e5a1"
+  },
+  {
+    "instance": "django__django-15467",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15467",
+    "base_commit": "e0442a628eb480eac6a7888aed5a86f83499e299",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-15467/claude_mcts__django__django-15467.json",
+    "trace_sha256": "b24cdd755fc8fb1ffe459f846643daa104caa4daed065a2597d7842981e49f2c"
+  },
+  {
+    "instance": "django__django-16429",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16429",
+    "base_commit": "6c86495bcee22eac19d7fb040b2988b830707cbd",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-16429/claude_mcts__django__django-16429.json",
+    "trace_sha256": "57f000d104286fb4ff3abca92d7ab39f288b62f13d4206a77e21a02824fe909d"
+  },
+  {
+    "instance": "django__django-16569",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16569",
+    "base_commit": "278881e37619278789942513916acafaa88d26f3",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-16569/claude_mcts__django__django-16569.json",
+    "trace_sha256": "fe8afbb74e3f1cae3154a7201bccb4c34210bfdb40ee6fe2a71cef9b36662c3e"
+  },
+  {
+    "instance": "django__django-9296",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-9296",
+    "base_commit": "84322a29ce9b0940335f8ab3d60e55192bef1e50",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__django__django-9296/claude_mcts__django__django-9296.json",
+    "trace_sha256": "c7c7c9aea524c8c4ab3c9d93d027887e3c4ca297339bb95fa223ab1fe6afa24b"
+  },
+  {
+    "instance": "pylint-dev__pylint-6903",
+    "image": "swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-6903",
+    "base_commit": "ca80f03a43bc39e4cc2c67dc99817b3c9f13b8a6",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__pylint-dev__pylint-6903/claude_mcts__pylint-dev__pylint-6903.json",
+    "trace_sha256": "7b31a1c50dd128c1e270c3dbf23c5abd6e036f173a7995de4adbc28129d7a317"
+  },
+  {
+    "instance": "pylint-dev__pylint-7277",
+    "image": "swebench/sweb.eval.x86_64.pylint-dev_1776_pylint-7277",
+    "base_commit": "684a1d6aa0a6791e20078bc524f97c8906332390",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__pylint-dev__pylint-7277/claude_mcts__pylint-dev__pylint-7277.json",
+    "trace_sha256": "5b8ea8781b6b1aa4c61853980486a0d34d67575e5351af580f32b011aa5767ed"
+  },
+  {
+    "instance": "pytest-dev__pytest-5809",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-5809",
+    "base_commit": "8aba863a634f40560e25055d179220f0eefabe9a",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__pytest-dev__pytest-5809/claude_mcts__pytest-dev__pytest-5809.json",
+    "trace_sha256": "0d921c75ec12b4cf4c2c28d2aef51324cf123526c5a0fe4a127d669806934267"
+  },
+  {
+    "instance": "pytest-dev__pytest-6202",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-6202",
+    "base_commit": "3a668ea6ff24b0c8f00498c3144c63bac561d925",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__pytest-dev__pytest-6202/claude_mcts__pytest-dev__pytest-6202.json",
+    "trace_sha256": "1c1885fb4339a6e8c18c24ccbdaa19a7ec43f08674efe31a0cd0b68fffb19b33"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-10844",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-10844",
+    "base_commit": "97523985b39ecde369d83352d7c3baf403b60a22",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__scikit-learn__scikit-learn-10844/claude_mcts__scikit-learn__scikit-learn-10844.json",
+    "trace_sha256": "c6d1e3315909a2c858d6997e6b6864849e38270875a23ea9660d33f20c9e8967"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-12585",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-12585",
+    "base_commit": "bfc4a566423e036fbdc9fb02765fd893e4860c85",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__scikit-learn__scikit-learn-12585/claude_mcts__scikit-learn__scikit-learn-12585.json",
+    "trace_sha256": "07f3772938184159dba63a2e6fa034f385b4bdb5119c6f24943f0a3cc232b1a9"
+  },
+  {
+    "instance": "sympy__sympy-14711",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-14711",
+    "base_commit": "c6753448b5c34f95e250105d76709fe4d349ca1f",
+    "trace": "paper/figure-09/data/inputs/war/claude_mcts__sympy__sympy-14711/claude_mcts__sympy__sympy-14711.json",
+    "trace_sha256": "c600e05770b288ded07dab1291fc8d11c1bee7dd7b51f89691a6329ad1fb6d32"
+  },
+  {
+    "instance": "astropy__astropy-14096",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-14096",
+    "base_commit": "1a4462d72eb03f30dc83a879b1dd57aac8b2c18b",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__astropy__astropy-14096/mimo_linear__astropy__astropy-14096.json",
+    "trace_sha256": "d2f0118bf18d2b15319fd1482656abb104792e6f84c1a58e19e62f8895db7481"
+  },
+  {
+    "instance": "astropy__astropy-7336",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7336",
+    "base_commit": "732d89c2940156bdc0e200bb36dc38b5e424bcba",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__astropy__astropy-7336/mimo_linear__astropy__astropy-7336.json",
+    "trace_sha256": "b35adc92e5ad9398df745540b11f5bd219d3a16ee86544c1f785aacc077c110f"
+  },
+  {
+    "instance": "astropy__astropy-7606",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7606",
+    "base_commit": "3cedd79e6c121910220f8e6df77c54a0b344ea94",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__astropy__astropy-7606/mimo_linear__astropy__astropy-7606.json",
+    "trace_sha256": "74ff2594cc917f63bd69ef1c7a50fcf80e389b3fcb9e31f882880bdee055c95b"
+  },
+  {
+    "instance": "astropy__astropy-8707",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-8707",
+    "base_commit": "a85a0747c54bac75e9c3b2fe436b105ea029d6cf",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__astropy__astropy-8707/mimo_linear__astropy__astropy-8707.json",
+    "trace_sha256": "62c1c5e7e0595f281ab3eee15378f49a54f8e0b1c4f763ce16c403e559ff17b6"
+  },
+  {
+    "instance": "astropy__astropy-8872",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-8872",
+    "base_commit": "b750a0e6ee76fb6b8a099a4d16ec51977be46bf6",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__astropy__astropy-8872/mimo_linear__astropy__astropy-8872.json",
+    "trace_sha256": "27e506023f2d7b7132dfad41d6fb861f11dc38f0db7e2f807eea2bb9291f5e82"
+  },
+  {
+    "instance": "django__django-11095",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11095",
+    "base_commit": "7d49ad76562e8c0597a0eb66046ab423b12888d8",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11095/mimo_linear__django__django-11095.json",
+    "trace_sha256": "78fea3266ffde6e3c217f0c52f8670095f3a2bf8033378463be8950e82365c65"
+  },
+  {
+    "instance": "django__django-11163",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11163",
+    "base_commit": "e6588aa4e793b7f56f4cadbfa155b581e0efc59a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11163/mimo_linear__django__django-11163.json",
+    "trace_sha256": "85bbf103fc6324b8e2b801e4144e34c7f2d58e8125430eb3927e452b39bf6411"
+  },
+  {
+    "instance": "django__django-11276",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11276",
+    "base_commit": "28d5262fa3315690395f04e3619ed554dbaf725b",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11276/mimo_linear__django__django-11276.json",
+    "trace_sha256": "eb5237d2a68ec18ced7f0402956dd9de2304ef79c8ee97e68c8e8779faee58aa"
+  },
+  {
+    "instance": "django__django-11532",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11532",
+    "base_commit": "a5308514fb4bc5086c9a16a8a24a945eeebb073c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11532/mimo_linear__django__django-11532.json",
+    "trace_sha256": "f5554b80b5279d99c04585346ec720cc688cf146d1eaf9a56db11ab238e0341e"
+  },
+  {
+    "instance": "django__django-11551",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11551",
+    "base_commit": "7991111af12056ec9a856f35935d273526338c1f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11551/mimo_linear__django__django-11551.json",
+    "trace_sha256": "13d0ed7b73a36a47991033c3411dbc6ed38656c32820e4a25fbb9433c307acd0"
+  },
+  {
+    "instance": "django__django-11880",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11880",
+    "base_commit": "06909fe084f87a65459a83bd69d7cdbe4fce9a7c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-11880/mimo_linear__django__django-11880.json",
+    "trace_sha256": "145ad056561f4700d456ed25dd1b745cd33af520affa247709ab472f563ae63e"
+  },
+  {
+    "instance": "django__django-12419",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-12419",
+    "base_commit": "7fa1a93c6c8109010a6ff3f604fda83b604e0e97",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-12419/mimo_linear__django__django-12419.json",
+    "trace_sha256": "6c089bb5704d489de32f4826fa8477a1d05ba9b9b8f36685ae35c364e7290482"
+  },
+  {
+    "instance": "django__django-12713",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-12713",
+    "base_commit": "5b884d45ac5b76234eca614d90c83b347294c332",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-12713/mimo_linear__django__django-12713.json",
+    "trace_sha256": "20c17a9c3d65ccaf7dfa369f0df0aed33c2d61666971c3f9a92baf5302dbb629"
+  },
+  {
+    "instance": "django__django-13109",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13109",
+    "base_commit": "fbe82f82555bc25dccb476c749ca062f0b522be3",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-13109/mimo_linear__django__django-13109.json",
+    "trace_sha256": "2f3598a871b284a43dc6256914232391ed2cad6b3e3cf1cf8519848065de4538"
+  },
+  {
+    "instance": "django__django-13363",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13363",
+    "base_commit": "76e0151ea0e0f56dca66cee846a78b89346d2c4c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-13363/mimo_linear__django__django-13363.json",
+    "trace_sha256": "0cc42ee3da01c6942a08d849db5deb552fb57652b6e17582d2fe118974c8e1ed"
+  },
+  {
+    "instance": "django__django-13809",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13809",
+    "base_commit": "bef6f7584280f1cc80e5e2d80b7ad073a93d26ec",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-13809/mimo_linear__django__django-13809.json",
+    "trace_sha256": "94f3fc361be0762c5e68742d03da281408df637ef83601cd0cb998021d3ee062"
+  },
+  {
+    "instance": "django__django-13820",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-13820",
+    "base_commit": "98ad327864aed8df245fd19ea9d2743279e11643",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-13820/mimo_linear__django__django-13820.json",
+    "trace_sha256": "ec6ee1700581bcf80e1b730102aaf594c678ce993bd9d5126a9cc210a2592412"
+  },
+  {
+    "instance": "django__django-14053",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14053",
+    "base_commit": "179ee13eb37348cd87169a198aec18fedccc8668",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-14053/mimo_linear__django__django-14053.json",
+    "trace_sha256": "e21b39a7668d69b3384148b7e11d4a063653725e947094486e4db3da2d476d6a"
+  },
+  {
+    "instance": "django__django-14349",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14349",
+    "base_commit": "a708f39ce67af174df90c5b5e50ad1976cec7cb8",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-14349/mimo_linear__django__django-14349.json",
+    "trace_sha256": "d573b32780d634afbfbedf6534e2a884de15c0aa793c0758b07706b2de54c679"
+  },
+  {
+    "instance": "django__django-14493",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-14493",
+    "base_commit": "7272e1963ffdf39c1d4fe225d5425a45dd095d11",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-14493/mimo_linear__django__django-14493.json",
+    "trace_sha256": "1593d44a253c54a843f2ac52eb1762a0b125db9206f120b12402418bd1b33fab"
+  },
+  {
+    "instance": "django__django-15277",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15277",
+    "base_commit": "30613d6a748fce18919ff8b0da166d9fda2ed9bc",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-15277/mimo_linear__django__django-15277.json",
+    "trace_sha256": "0d1ebb1e1b0559d302c8236f339ed9c63b28ca85e4d3ba74c5f12d0f6e06077c"
+  },
+  {
+    "instance": "django__django-15368",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15368",
+    "base_commit": "e972620ada4f9ed7bc57f28e133e85c85b0a7b20",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-15368/mimo_linear__django__django-15368.json",
+    "trace_sha256": "ec706e9f8dd859b4ab45d2e4fc770a932c309d555d6e6e690dfb35a2c6b1fa9e"
+  },
+  {
+    "instance": "django__django-15569",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15569",
+    "base_commit": "884b4c27f506b3c29d58509fc83a35c30ea10d94",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-15569/mimo_linear__django__django-15569.json",
+    "trace_sha256": "3f5dfb4c1e15aef61029aa90834cb305a90918bd2cf043718bb56bd21b20c700"
+  },
+  {
+    "instance": "django__django-15731",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-15731",
+    "base_commit": "93cedc82f29076c824d476354527af1150888e4f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-15731/mimo_linear__django__django-15731.json",
+    "trace_sha256": "cfdef6fdb0e8d839a9b2d1c83e132e856f10defb8d02750078412dbd0d662877"
+  },
+  {
+    "instance": "django__django-16333",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16333",
+    "base_commit": "60a7bd89860e504c0c33b02c78edcac87f6d1b5a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-16333/mimo_linear__django__django-16333.json",
+    "trace_sha256": "393b225d3d66fac72f85af008d61fc2a0bef590ddb8b4801da43aa990a6450c9"
+  },
+  {
+    "instance": "django__django-16485",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16485",
+    "base_commit": "39f83765e12b0e5d260b7939fc3fe281d879b279",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-16485/mimo_linear__django__django-16485.json",
+    "trace_sha256": "e371b60950a9442f0b0bafb3e111bc580d988f64ba5c0286f29e9c7dce3d6441"
+  },
+  {
+    "instance": "django__django-16493",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16493",
+    "base_commit": "e3a4cee081cf60650b8824f0646383b79cb110e7",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-16493/mimo_linear__django__django-16493.json",
+    "trace_sha256": "8d60bcd488b45d81cf9c7ba2d8f4a33f361ec0c954a4a69ab75d6cb172e0b76b"
+  },
+  {
+    "instance": "django__django-16612",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-16612",
+    "base_commit": "55bcbd8d172b689811fae17cde2f09218dd74e9c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__django__django-16612/mimo_linear__django__django-16612.json",
+    "trace_sha256": "884a4a3ec3eb70d5bf670cc7606b30b4257773d5571c1b44a541477c3404875b"
+  },
+  {
+    "instance": "matplotlib__matplotlib-13989",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-13989",
+    "base_commit": "a3e2897bfaf9eaac1d6649da535c4e721c89fa69",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-13989/mimo_linear__matplotlib__matplotlib-13989.json",
+    "trace_sha256": "cec704c987a53f1c5a8ddc18fee2d513fae2c18bbd418279362a66b72b3b8cb3"
+  },
+  {
+    "instance": "matplotlib__matplotlib-14623",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-14623",
+    "base_commit": "d65c9ca20ddf81ef91199e6d819f9d3506ef477c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-14623/mimo_linear__matplotlib__matplotlib-14623.json",
+    "trace_sha256": "a62c3945fa2abc3f93407bf49268f8f3fb809a3705a190743681ca88de25d1ee"
+  },
+  {
+    "instance": "matplotlib__matplotlib-20488",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-20488",
+    "base_commit": "b7ce415c15eb39b026a097a2865da73fbcf15c9c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-20488/mimo_linear__matplotlib__matplotlib-20488.json",
+    "trace_sha256": "a9aa3d898257e91917bb727ce93a6fc5d2e95b2247650c92f49aa446aac787a3"
+  },
+  {
+    "instance": "matplotlib__matplotlib-20826",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-20826",
+    "base_commit": "a0d2e399729d36499a1924e5ca5bc067c8396810",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-20826/mimo_linear__matplotlib__matplotlib-20826.json",
+    "trace_sha256": "b1a920bdfd87e434fece801913c7272475cb02385d8f1594178ffd4f2ce4efa9"
+  },
+  {
+    "instance": "matplotlib__matplotlib-20859",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-20859",
+    "base_commit": "64619e53e9d0ed417daba287ac0d3a06943a54d5",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-20859/mimo_linear__matplotlib__matplotlib-20859.json",
+    "trace_sha256": "b9036f1d170bb662ed0b691b2befe17975c94814a8d50c7c006d1c7d6a321bde"
+  },
+  {
+    "instance": "matplotlib__matplotlib-23412",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-23412",
+    "base_commit": "f06c2c3abdaf4b90285ce5ca7fedbb8ace715911",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-23412/mimo_linear__matplotlib__matplotlib-23412.json",
+    "trace_sha256": "53dc4793995f465d4f3181fdc1823b75c84e70ecca86443dbf0e7ea285dc68dc"
+  },
+  {
+    "instance": "matplotlib__matplotlib-25122",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-25122",
+    "base_commit": "5ec2bd279729ff534719b8bf238dbbca907b93c5",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-25122/mimo_linear__matplotlib__matplotlib-25122.json",
+    "trace_sha256": "eff280ff584078af563ac9e847ef55cd98673ff76d72f87a2d48e42e6ef9ff68"
+  },
+  {
+    "instance": "matplotlib__matplotlib-26291",
+    "image": "swebench/sweb.eval.x86_64.matplotlib_1776_matplotlib-26291",
+    "base_commit": "fa68f46289adf4a8a4bc7ba97ded8258ec9d079c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__matplotlib__matplotlib-26291/mimo_linear__matplotlib__matplotlib-26291.json",
+    "trace_sha256": "7b7460dd0b1d3dfebbeff95484e948bbdb4bd3f50593772db2b07eae9e50b48a"
+  },
+  {
+    "instance": "psf__requests-1724",
+    "image": "swebench/sweb.eval.x86_64.psf_1776_requests-1724",
+    "base_commit": "1ba83c47ce7b177efe90d5f51f7760680f72eda0",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__psf__requests-1724/mimo_linear__psf__requests-1724.json",
+    "trace_sha256": "0c021268706153186f9386975a8b6acba6cbfe5848e289bb8f1a190bf4ac3e9c"
+  },
+  {
+    "instance": "psf__requests-5414",
+    "image": "swebench/sweb.eval.x86_64.psf_1776_requests-5414",
+    "base_commit": "39d0fdd9096f7dceccbc8f82e1eda7dd64717a8e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__psf__requests-5414/mimo_linear__psf__requests-5414.json",
+    "trace_sha256": "7fc8eb132f463b532bcef9aa2ff13432cebd23955082e64d5df73da9fb930306"
+  },
+  {
+    "instance": "pydata__xarray-2905",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-2905",
+    "base_commit": "7c4e2ac83f7b4306296ff9b7b51aaf016e5ad614",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-2905/mimo_linear__pydata__xarray-2905.json",
+    "trace_sha256": "b1dc09d14f2ba309e0e57f0491930c53e8397f5224a0b0634898391acaf41b56"
+  },
+  {
+    "instance": "pydata__xarray-3095",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3095",
+    "base_commit": "1757dffac2fa493d7b9a074b84cf8c830a706688",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-3095/mimo_linear__pydata__xarray-3095.json",
+    "trace_sha256": "2a9d09d7cfcb9a3e9048934cc6db3b4cbc54ad8ce13e1b64aaf973c8c9d5822b"
+  },
+  {
+    "instance": "pydata__xarray-3151",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3151",
+    "base_commit": "118f4d996e7711c9aced916e6049af9f28d5ec66",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-3151/mimo_linear__pydata__xarray-3151.json",
+    "trace_sha256": "87909c2815a696e88f85063a04ea5163b8d0ac491d417a41d2bca469327aa58d"
+  },
+  {
+    "instance": "pydata__xarray-3305",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3305",
+    "base_commit": "69c7e01e5167a3137c285cb50d1978252bb8bcbf",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-3305/mimo_linear__pydata__xarray-3305.json",
+    "trace_sha256": "5f2b5e83613b77de600f078d566c719b4396cf7ab1d2530314035fdc03ed17d3"
+  },
+  {
+    "instance": "pydata__xarray-3677",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3677",
+    "base_commit": "ef6e6a7b86f8479b9a1fecf15ad5b88a2326b31e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-3677/mimo_linear__pydata__xarray-3677.json",
+    "trace_sha256": "d5497bc7872c19ecf933bdc94b0512dc2f6e67eb0ad3dc0978745001dca0720c"
+  },
+  {
+    "instance": "pydata__xarray-3993",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-3993",
+    "base_commit": "8cc34cb412ba89ebca12fc84f76a9e452628f1bc",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-3993/mimo_linear__pydata__xarray-3993.json",
+    "trace_sha256": "80df519329026109391cecb43cba262ddbe5f0d35bacb113786acddf52ecfa9d"
+  },
+  {
+    "instance": "pydata__xarray-4356",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4356",
+    "base_commit": "e05fddea852d08fc0845f954b79deb9e9f9ff883",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-4356/mimo_linear__pydata__xarray-4356.json",
+    "trace_sha256": "dabd572c2b5b28bac48159b7af42d763ec6b7425a14465247e8c641fe2e45a72"
+  },
+  {
+    "instance": "pydata__xarray-4629",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4629",
+    "base_commit": "a41edc7bf5302f2ea327943c0c48c532b12009bc",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-4629/mimo_linear__pydata__xarray-4629.json",
+    "trace_sha256": "f9868823a8f7fedd179c68ce7d389de94b4ca67421dca4921aebc1720eb40397"
+  },
+  {
+    "instance": "pydata__xarray-4687",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4687",
+    "base_commit": "d3b6aa6d8b997df115a53c001d00222a0f92f63a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-4687/mimo_linear__pydata__xarray-4687.json",
+    "trace_sha256": "b26256c7062d0ece3d406b042c6af861a2d55ad0bb142a29b29a5c812f7edb41"
+  },
+  {
+    "instance": "pydata__xarray-4966",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-4966",
+    "base_commit": "37522e991a32ee3c0ad1a5ff8afe8e3eb1885550",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-4966/mimo_linear__pydata__xarray-4966.json",
+    "trace_sha256": "b05627668176b2dda4e0b5479b247448e0dcfd3ae79f1828555a0393b725a284"
+  },
+  {
+    "instance": "pydata__xarray-6461",
+    "image": "swebench/sweb.eval.x86_64.pydata_1776_xarray-6461",
+    "base_commit": "851dadeb0338403e5021c3fbe80cbc9127ee672d",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pydata__xarray-6461/mimo_linear__pydata__xarray-6461.json",
+    "trace_sha256": "a3eba57f3f24544e78003273f8f0181eabcdced03b8d8d9577698e68463c068f"
+  },
+  {
+    "instance": "pytest-dev__pytest-10051",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-10051",
+    "base_commit": "aa55975c7d3f6c9f6d7f68accc41bb7cadf0eb9a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pytest-dev__pytest-10051/mimo_linear__pytest-dev__pytest-10051.json",
+    "trace_sha256": "fdeed96e169c99c14acfb7c38415c8631e275392019612a95ef335fa86c8515f"
+  },
+  {
+    "instance": "pytest-dev__pytest-7205",
+    "image": "swebench/sweb.eval.x86_64.pytest-dev_1776_pytest-7205",
+    "base_commit": "5e7f1ab4bf58e473e5d7f878eb2b499d7deabd29",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__pytest-dev__pytest-7205/mimo_linear__pytest-dev__pytest-7205.json",
+    "trace_sha256": "751f220385ae8e601cd2eb407c4fdac68b68b550c544e61914fd0b168ed8a33c"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-11310",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-11310",
+    "base_commit": "553b5fb8f84ba05c8397f26dd079deece2b05029",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-11310/mimo_linear__scikit-learn__scikit-learn-11310.json",
+    "trace_sha256": "1323e9733003fccd43412536c4ec9ef162fb06ec5a0682a0e3be69dea2096454"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-11578",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-11578",
+    "base_commit": "dd69361a0d9c6ccde0d2353b00b86e0e7541a3e3",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-11578/mimo_linear__scikit-learn__scikit-learn-11578.json",
+    "trace_sha256": "ee713452e95fa5d7fd3c15eb10eb4fe6f7581491e70124616e8e64591e30dbf9"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-12973",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-12973",
+    "base_commit": "a7b8b9e9e16d4e15fabda5ae615086c2e1c47d8a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-12973/mimo_linear__scikit-learn__scikit-learn-12973.json",
+    "trace_sha256": "8fa09514a33b48a3243bf99e698c9930ec007f94b7b396319e3709d83eeb0a1f"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-13124",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-13124",
+    "base_commit": "9f0b959a8c9195d1b6e203f08b698e052b426ca9",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-13124/mimo_linear__scikit-learn__scikit-learn-13124.json",
+    "trace_sha256": "fa82db9b11683dc2a33ac24fefff033273c73a72d2212f14203f83b5a1e74493"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-13135",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-13135",
+    "base_commit": "a061ada48efccf0845acae17009553e01764452b",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-13135/mimo_linear__scikit-learn__scikit-learn-13135.json",
+    "trace_sha256": "21c10ec6c3b16cc34d241407156117ddd8ebbfd02cad04d0b916b93a6c1bc54c"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-13328",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-13328",
+    "base_commit": "37b0e66c871e8fb032a9c7086b2a1d5419838154",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-13328/mimo_linear__scikit-learn__scikit-learn-13328.json",
+    "trace_sha256": "70e29ef37ca1623273475a01c46d58a54b1e9b2b8679505eccfc9f91c3e0b41c"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-14629",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-14629",
+    "base_commit": "4aded39b5663d943f6a4809abacfa9cae3d7fb6a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-14629/mimo_linear__scikit-learn__scikit-learn-14629.json",
+    "trace_sha256": "2c5704424f01f92d092565d76a83c62db1e887d73b1ac8543600e64921f78895"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-14710",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-14710",
+    "base_commit": "4b6273b87442a4437d8b3873ea3022ae163f4fdf",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-14710/mimo_linear__scikit-learn__scikit-learn-14710.json",
+    "trace_sha256": "4a415226800c6857c0868d55b3209edfa767061d4dd083b7c0441fcc83eac504"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-15100",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-15100",
+    "base_commit": "af8a6e592a1a15d92d77011856d5aa0ec4db4c6c",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-15100/mimo_linear__scikit-learn__scikit-learn-15100.json",
+    "trace_sha256": "5d615e030a14e5563b8f3471fbdf40b4aa88579c0d57015ff81b07c4169958ea"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-25102",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25102",
+    "base_commit": "f9a1cf072da9d7375d6c2163f68a6038b13b310f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-25102/mimo_linear__scikit-learn__scikit-learn-25102.json",
+    "trace_sha256": "354eb487b110849ea9ba81101b402907d0e7ff0addab297e96f0ba5a284ce3fd"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-25973",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-25973",
+    "base_commit": "10dbc142bd17ccf7bd38eec2ac04b52ce0d1009e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-25973/mimo_linear__scikit-learn__scikit-learn-25973.json",
+    "trace_sha256": "dcd0f5044909623be6e3174537cf59c00b17c594835754b355f7a0ca5a1bf360"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-26323",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-26323",
+    "base_commit": "586f4318ffcdfbd9a1093f35ad43e81983740b66",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-26323/mimo_linear__scikit-learn__scikit-learn-26323.json",
+    "trace_sha256": "8b8ea8faa38a945e18e6679da5ce8b28b31ea2d8261869ca58bc6182af4d0756"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-9288",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-9288",
+    "base_commit": "3eacf948e0f95ef957862568d87ce082f378e186",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__scikit-learn__scikit-learn-9288/mimo_linear__scikit-learn__scikit-learn-9288.json",
+    "trace_sha256": "d6e697b2723b6afb9acec26a9feaef3e35c315cc06d0e3feea4d26dd08e68bf5"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-10449",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10449",
+    "base_commit": "36367765fe780f962bba861bf368a765380bbc68",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-10449/mimo_linear__sphinx-doc__sphinx-10449.json",
+    "trace_sha256": "9b1e218954ec212463b757ea7383b739bd1f61684e9b36077891d88e23bdfc60"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-10466",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10466",
+    "base_commit": "cab2d93076d0cca7c53fac885f927dde3e2a5fec",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-10466/mimo_linear__sphinx-doc__sphinx-10466.json",
+    "trace_sha256": "7028d387cc7b76bd9d46ab586f6ee8cfe890176f336d46edc39057837fd82aee"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-10673",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-10673",
+    "base_commit": "f35d2a6cc726f97d0e859ca7a0e1729f7da8a6c8",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-10673/mimo_linear__sphinx-doc__sphinx-10673.json",
+    "trace_sha256": "26c1b8d844d32de9ba1922470d65d80399c7c22123acaf6a61848d8a7e72a8f8"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-7462",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7462",
+    "base_commit": "b3e26a6c851133b82b50f4b68b53692076574d13",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-7462/mimo_linear__sphinx-doc__sphinx-7462.json",
+    "trace_sha256": "435e2f40a95709caa539e1473542ecbb190775d8797c572773cf1f3acab276a8"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-7757",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-7757",
+    "base_commit": "212fd67b9f0b4fae6a7c3501fdf1a9a5b2801329",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-7757/mimo_linear__sphinx-doc__sphinx-7757.json",
+    "trace_sha256": "c740ed98c338c18c854df831976a35158650aaf342a051d70bd0426a68b0ea1a"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-8035",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-8035",
+    "base_commit": "5e6da19f0e44a0ae83944fb6ce18f18f781e1a6e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-8035/mimo_linear__sphinx-doc__sphinx-8035.json",
+    "trace_sha256": "ad69b18b88ceb0d0344de7be5f606133884f3e74a797ba561af85a0ded0ee37b"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-8269",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-8269",
+    "base_commit": "1e2ccd8f0eca0870cf6f8fce6934e2da8eba9b72",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-8269/mimo_linear__sphinx-doc__sphinx-8269.json",
+    "trace_sha256": "a2f1170518f26d2d8c3c3ab04651cbd4c04c6a40509025dba052ed41a0020bcc"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-8551",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-8551",
+    "base_commit": "57ed10c68057c96491acbd3e62254ccfaf9e3861",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-8551/mimo_linear__sphinx-doc__sphinx-8551.json",
+    "trace_sha256": "cd7b49eb3c8c8adf2abb1783204680ff6826540f9a55d97f0dbebb2dd11819da"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-8593",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-8593",
+    "base_commit": "07983a5a8704ad91ae855218ecbda1c8598200ca",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-8593/mimo_linear__sphinx-doc__sphinx-8593.json",
+    "trace_sha256": "f18befce6b21697ead45d138dd151a144792586afde8546abf45d35d288f6270"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-8638",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-8638",
+    "base_commit": "4b452338f914d4f6b54704222d70ae8a746e3db5",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-8638/mimo_linear__sphinx-doc__sphinx-8638.json",
+    "trace_sha256": "0be27ef7965b56bef116e15dc49ce9f9b5bc30013a40ebfe97a8e24340040415"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-9230",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9230",
+    "base_commit": "567ff22716ac258b9edd2c1711d766b440ac0b11",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-9230/mimo_linear__sphinx-doc__sphinx-9230.json",
+    "trace_sha256": "99b3d91edde2bf89b8a860c87cc0a9c56c622d61d66d563222dcb4b3eabd3c56"
+  },
+  {
+    "instance": "sphinx-doc__sphinx-9673",
+    "image": "swebench/sweb.eval.x86_64.sphinx-doc_1776_sphinx-9673",
+    "base_commit": "5fb51fb1467dc5eea7505402c3c5d9b378d3b441",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sphinx-doc__sphinx-9673/mimo_linear__sphinx-doc__sphinx-9673.json",
+    "trace_sha256": "fdca81382197ce62770814260c6b46a8e17c02becfbef93996c634fe8c35782d"
+  },
+  {
+    "instance": "sympy__sympy-12096",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-12096",
+    "base_commit": "d7c3045115693e887bcd03599b7ca4650ac5f2cb",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-12096/mimo_linear__sympy__sympy-12096.json",
+    "trace_sha256": "cb375a9b7269ec01182df05a4fa0378c49a798e148c59e0f68dfe0ee07a2b260"
+  },
+  {
+    "instance": "sympy__sympy-13091",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13091",
+    "base_commit": "d1320814eda6549996190618a21eaf212cfd4d1e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13091/mimo_linear__sympy__sympy-13091.json",
+    "trace_sha256": "fa34d7b588f47a96072ae62be98a022a1df9930c0e61e9270b2202d6e7e344a7"
+  },
+  {
+    "instance": "sympy__sympy-13372",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13372",
+    "base_commit": "30379ea6e225e37833a764ac2da7b7fadf5fe374",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13372/mimo_linear__sympy__sympy-13372.json",
+    "trace_sha256": "22cfdaea839fe5bac692b8f0a8ab35d686365b828767fd5b57dd6d537f91ed35"
+  },
+  {
+    "instance": "sympy__sympy-13551",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13551",
+    "base_commit": "9476425b9e34363c2d9ac38e9f04aa75ae54a775",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13551/mimo_linear__sympy__sympy-13551.json",
+    "trace_sha256": "426f38d0e5694c38c44bdfec1747ba586e963f477cca38c47182f9ec53e15fbd"
+  },
+  {
+    "instance": "sympy__sympy-13615",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13615",
+    "base_commit": "50d8a102f0735da8e165a0369bbb994c7d0592a6",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13615/mimo_linear__sympy__sympy-13615.json",
+    "trace_sha256": "2318844207b9612d3938673ca10d5b2532153d300d14d6fd97fe54604b14f1fc"
+  },
+  {
+    "instance": "sympy__sympy-13798",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13798",
+    "base_commit": "7121bdf1facdd90d05b6994b4c2e5b2865a4638a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13798/mimo_linear__sympy__sympy-13798.json",
+    "trace_sha256": "f596085dc9d195654555ff68e5458b94907dc8667894ad6914f6f1b1a10b8d53"
+  },
+  {
+    "instance": "sympy__sympy-13877",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13877",
+    "base_commit": "1659712001810f5fc563a443949f8e3bb38af4bd",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13877/mimo_linear__sympy__sympy-13877.json",
+    "trace_sha256": "7201edf6ec441713930dd3eeb04df133e5f4ca1525f1534a016b2cf2c87a4026"
+  },
+  {
+    "instance": "sympy__sympy-13878",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13878",
+    "base_commit": "7b127bdf71a36d85216315f80c1b54d22b060818",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13878/mimo_linear__sympy__sympy-13878.json",
+    "trace_sha256": "210e668a4920c801de46688a81144b6c2f614d0e73272264236746f0ce8a0582"
+  },
+  {
+    "instance": "sympy__sympy-13974",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-13974",
+    "base_commit": "84c125972ad535b2dfb245f8d311d347b45e5b8a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-13974/mimo_linear__sympy__sympy-13974.json",
+    "trace_sha256": "0522c845a32748a9bb0c5d94fbd1eff1a8ab91c87ce6c4e152c52af3a95e8725"
+  },
+  {
+    "instance": "sympy__sympy-14248",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-14248",
+    "base_commit": "9986b38181cdd556a3f3411e553864f11912244e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-14248/mimo_linear__sympy__sympy-14248.json",
+    "trace_sha256": "0a9e7210c4ca3b441e86150055c106caff994be4fba602694fc437c136e21248"
+  },
+  {
+    "instance": "sympy__sympy-14976",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-14976",
+    "base_commit": "9cbea134220b0b951587e11b63e2c832c7246cbc",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-14976/mimo_linear__sympy__sympy-14976.json",
+    "trace_sha256": "3fdbbeab4e866a739dd39bf09f53898c8ac95cbaf4959e2758d67e5e430fda14"
+  },
+  {
+    "instance": "sympy__sympy-15017",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15017",
+    "base_commit": "6810dee426943c1a2fe85b5002dd0d4cf2246a05",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-15017/mimo_linear__sympy__sympy-15017.json",
+    "trace_sha256": "68e4f030cdd1c7ea433bf75ae5a0c7617c9763b98acb97674079f7e0e9e5d97b"
+  },
+  {
+    "instance": "sympy__sympy-15349",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15349",
+    "base_commit": "768da1c6f6ec907524b8ebbf6bf818c92b56101b",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-15349/mimo_linear__sympy__sympy-15349.json",
+    "trace_sha256": "4101b00813af6f216ac546beea20099d37f3636209a8fb72dd8d4235b0f066aa"
+  },
+  {
+    "instance": "sympy__sympy-15599",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15599",
+    "base_commit": "5e17a90c19f7eecfa10c1ab872648ae7e2131323",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-15599/mimo_linear__sympy__sympy-15599.json",
+    "trace_sha256": "1fe0b2d88c23b80cc934f3217d4d1155df3073ad0267cd6a6a62210696341ebc"
+  },
+  {
+    "instance": "sympy__sympy-15976",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-15976",
+    "base_commit": "701441853569d370506514083b995d11f9a130bd",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-15976/mimo_linear__sympy__sympy-15976.json",
+    "trace_sha256": "01e30a916db9ced4e6790af4e1a0d3cf7792a64860ca0627773695e72c239d6f"
+  },
+  {
+    "instance": "sympy__sympy-16450",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-16450",
+    "base_commit": "aefdd023dc4f73c441953ed51f5f05a076f0862f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-16450/mimo_linear__sympy__sympy-16450.json",
+    "trace_sha256": "5254fa36db0f52ed7e1c89c3b9e39a0691b93fa0bd242df2ea6994ff2b31b61b"
+  },
+  {
+    "instance": "sympy__sympy-16597",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-16597",
+    "base_commit": "6fd65310fa3167b9626c38a5487e171ca407d988",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-16597/mimo_linear__sympy__sympy-16597.json",
+    "trace_sha256": "057b417c909e60afeb7e0bb153d6816c25630336333fd8d006d6ff417e254f8e"
+  },
+  {
+    "instance": "sympy__sympy-17318",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-17318",
+    "base_commit": "d4e0231b08147337745dcf601e62de7eefe2fb2d",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-17318/mimo_linear__sympy__sympy-17318.json",
+    "trace_sha256": "291d49931e9be6a7de4c37ebf966211597d7cbbfac4fbe667d556ceabe62d11e"
+  },
+  {
+    "instance": "sympy__sympy-19040",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19040",
+    "base_commit": "b9179e80d2daa1bb6cba1ffe35ca9e6612e115c9",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-19040/mimo_linear__sympy__sympy-19040.json",
+    "trace_sha256": "ff28ff4328e307710c4f2a9bb5ca0614e675e7e7d97348f6a08718277fae1473"
+  },
+  {
+    "instance": "sympy__sympy-19495",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19495",
+    "base_commit": "25fbcce5b1a4c7e3956e6062930f4a44ce95a632",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-19495/mimo_linear__sympy__sympy-19495.json",
+    "trace_sha256": "c89e8e9b2595f7cc38b5e984557e2af9acf6c890d0acbe2995f686256fbac686"
+  },
+  {
+    "instance": "sympy__sympy-19637",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19637",
+    "base_commit": "63f8f465d48559fecb4e4bf3c48b75bf15a3e0ef",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-19637/mimo_linear__sympy__sympy-19637.json",
+    "trace_sha256": "41122d48aeeab8a7334076cc1aaaf001f8eda58db37c611fdf49cc81e613d1f6"
+  },
+  {
+    "instance": "sympy__sympy-19783",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19783",
+    "base_commit": "586a43201d0357e92e8c93548d69a9f42bf548f4",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-19783/mimo_linear__sympy__sympy-19783.json",
+    "trace_sha256": "92f16d6a555c5ae1f9494c44fed942b1e20ba30988d901d2cab4c62dbe8c6ec2"
+  },
+  {
+    "instance": "sympy__sympy-19954",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-19954",
+    "base_commit": "6f54459aa0248bf1467ad12ee6333d8bc924a642",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-19954/mimo_linear__sympy__sympy-19954.json",
+    "trace_sha256": "f9ca8793c5bee8f766c5b0ddd4872d1eb53f3c6b0ec58d5c45b2bf160d5a9390"
+  },
+  {
+    "instance": "sympy__sympy-20428",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-20428",
+    "base_commit": "c0e85160406f9bf2bcaa2992138587668a1cd0bc",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-20428/mimo_linear__sympy__sympy-20428.json",
+    "trace_sha256": "508b05d5ad9db4c129de9cb924b9004e3c30c51b93f4ce70908482118d8de0fd"
+  },
+  {
+    "instance": "sympy__sympy-20438",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-20438",
+    "base_commit": "33b47e4bd60e2302e42616141e76285038b724d6",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-20438/mimo_linear__sympy__sympy-20438.json",
+    "trace_sha256": "85322847dfd9791e0c50e0167d131452803b3ed00f289414dd7ed598257f304d"
+  },
+  {
+    "instance": "sympy__sympy-21596",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-21596",
+    "base_commit": "110997fe18b9f7d5ba7d22f624d156a29bf40759",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-21596/mimo_linear__sympy__sympy-21596.json",
+    "trace_sha256": "5293453141ad37025571e102b54f8e6ee4813e9c6fdd96b27f3db17e790a66b5"
+  },
+  {
+    "instance": "sympy__sympy-21930",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-21930",
+    "base_commit": "de446c6d85f633271dfec1452f6f28ea783e293f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-21930/mimo_linear__sympy__sympy-21930.json",
+    "trace_sha256": "beffe6afdfc2a2c8f45f448be7533b05c232a299fb69567ae00cad19ba38c16d"
+  },
+  {
+    "instance": "sympy__sympy-23534",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-23534",
+    "base_commit": "832c24fec1046eaa544a4cab4c69e3af3e651759",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-23534/mimo_linear__sympy__sympy-23534.json",
+    "trace_sha256": "29afe97feda8f02a4731ece1cd308f4c2ab79508fc078617e0afa980a2828b56"
+  },
+  {
+    "instance": "sympy__sympy-23824",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-23824",
+    "base_commit": "39de9a2698ad4bb90681c0fdb70b30a78233145f",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-23824/mimo_linear__sympy__sympy-23824.json",
+    "trace_sha256": "86f67cb12b751f4166b20fb03db74e200d834fd0bcad8fc24b50b1e43484f93a"
+  },
+  {
+    "instance": "sympy__sympy-23950",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-23950",
+    "base_commit": "88664e6e0b781d0a8b5347896af74b555e92891e",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-23950/mimo_linear__sympy__sympy-23950.json",
+    "trace_sha256": "c732d01bdbec93849668058cbed5230c722b2a8ee019203d138b23fe2e490094"
+  },
+  {
+    "instance": "sympy__sympy-24443",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-24443",
+    "base_commit": "809c53c077485ca48a206cee78340389cb83b7f1",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-24443/mimo_linear__sympy__sympy-24443.json",
+    "trace_sha256": "f3deee0617f94c0f5bc3154345c51a17d729e7de7d08c0a39b4f39479c4c5cac"
+  },
+  {
+    "instance": "sympy__sympy-24539",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-24539",
+    "base_commit": "193e3825645d93c73e31cdceb6d742cc6919624d",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-24539/mimo_linear__sympy__sympy-24539.json",
+    "trace_sha256": "7233fc0d33e4b357d363b722eae0aad6c9a19fa6c94bd344b07bee85c78b5d30"
+  },
+  {
+    "instance": "sympy__sympy-24661",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-24661",
+    "base_commit": "a36caf5c74fe654cedc488e8a8a05fad388f8406",
+    "trace": "paper/figure-09/data/inputs/war/mimo_linear__sympy__sympy-24661/mimo_linear__sympy__sympy-24661.json",
+    "trace_sha256": "5d4504c28c4a2828ccca2bc360a9f88c0e4b554da45b6850173ececd2f1ed99a"
+  },
+  {
+    "instance": "astropy__astropy-7336",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7336",
+    "base_commit": "732d89c2940156bdc0e200bb36dc38b5e424bcba",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__astropy__astropy-7336/mimo_mcts__astropy__astropy-7336.json",
+    "trace_sha256": "5e21c35b01863400e0c4a7d7b64c310fb1ce865489502059100e00e9b9e955f6"
+  },
+  {
+    "instance": "astropy__astropy-7606",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7606",
+    "base_commit": "3cedd79e6c121910220f8e6df77c54a0b344ea94",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__astropy__astropy-7606/mimo_mcts__astropy__astropy-7606.json",
+    "trace_sha256": "bb31dee40bac539fcd3152aa71033c9149c002f49009e74ce6f3892c9e6f2e38"
+  },
+  {
+    "instance": "astropy__astropy-7671",
+    "image": "swebench/sweb.eval.x86_64.astropy_1776_astropy-7671",
+    "base_commit": "a7141cd90019b62688d507ae056298507678c058",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__astropy__astropy-7671/mimo_mcts__astropy__astropy-7671.json",
+    "trace_sha256": "f7751f2a62d68a0623ea9910e58a87ae8e86eb85d08fc3a16c7e5ffb01c99474"
+  },
+  {
+    "instance": "django__django-11163",
+    "image": "swebench/sweb.eval.x86_64.django_1776_django-11163",
+    "base_commit": "e6588aa4e793b7f56f4cadbfa155b581e0efc59a",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__django__django-11163/mimo_mcts__django__django-11163.json",
+    "trace_sha256": "291168877183bbf0ff4fdb6b5883caa81be27507b7166349d5a91293e81985ee"
+  },
+  {
+    "instance": "scikit-learn__scikit-learn-11578",
+    "image": "swebench/sweb.eval.x86_64.scikit-learn_1776_scikit-learn-11578",
+    "base_commit": "dd69361a0d9c6ccde0d2353b00b86e0e7541a3e3",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__scikit-learn__scikit-learn-11578/mimo_mcts__scikit-learn__scikit-learn-11578.json",
+    "trace_sha256": "9bf8c628f06e6d3f9523620fb0266fbdb0b1a23b8fd50b3dffcb015aeca60057"
+  },
+  {
+    "instance": "sympy__sympy-12096",
+    "image": "swebench/sweb.eval.x86_64.sympy_1776_sympy-12096",
+    "base_commit": "d7c3045115693e887bcd03599b7ca4650ac5f2cb",
+    "trace": "paper/figure-09/data/inputs/war/mimo_mcts__sympy__sympy-12096/mimo_mcts__sympy__sympy-12096.json",
+    "trace_sha256": "f4ab8587035fde330c384c2069b7e6e0b72805ab5b75737cab3ad59a587bc73b"
+  }
+]

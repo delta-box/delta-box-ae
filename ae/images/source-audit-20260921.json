@@ -1,0 +1,299 @@
+{
+  "host": "spr4numa",
+  "user": "dyp",
+  "inspection": "Read-only loop mounts in a private mount namespace; original images not modified",
+  "images": [
+    {
+      "kind": "master",
+      "source": "/mnt/disk1/dyp/d-overlayfs_xfs/ubuntu-24.04.xfs",
+      "bytes": 21474836480,
+      "etc/fstab": "/dev/vda / ext4 defaults 0 1\n",
+      "opt": {
+        "entries": [
+          "miniconda3"
+        ]
+      },
+      "opt/miniconda3/envs": {
+        "entries": [
+          ".conda_envs_dir_test",
+          "astropy__1.3",
+          "astropy__3.1",
+          "astropy__4.3",
+          "astropy__5.0",
+          "astropy__5.1",
+          "astropy__5.2",
+          "django__1.11",
+          "django__2.2",
+          "django__3.0",
+          "django__3.1",
+          "django__3.2",
+          "django__4.0",
+          "django__4.1",
+          "django__4.2",
+          "django__5.0",
+          "flask__2.3",
+          "matplotlib__3.0",
+          "matplotlib__3.5",
+          "matplotlib__3.6",
+          "matplotlib__3.7",
+          "pylint__2.10",
+          "pylint__2.14",
+          "pylint__2.15",
+          "pylint__2.9",
+          "pylint__3.0",
+          "pytest__4.5",
+          "pytest__4.6",
+          "pytest__5.0",
+          "pytest__5.1",
+          "pytest__5.2",
+          "pytest__5.4",
+          "pytest__6.0",
+          "pytest__6.2",
+          "pytest__6.3",
+          "pytest__7.2",
+          "requests__1.1",
+          "requests__2.0",
+          "requests__2.26",
+          "requests__2.27",
+          "requests__2.3",
+          "requests__2.4",
+          "requests__2.9",
+          "scikit-learn__0.20",
+          "scikit-learn__0.21",
+          "scikit-learn__0.22",
+          "scikit-learn__1.3",
+          "seaborn__0.12",
+          "sphinx__3.0",
+          "sphinx__3.1",
+          "sphinx__3.2",
+          "sphinx__3.3",
+          "sphinx__3.4",
+          "sphinx__3.5",
+          "sphinx__4.0",
+          "sphinx__4.1",
+          "sphinx__4.2",
+          "sphinx__4.3",
+          "sphinx__5.0",
+          "sphinx__5.1",
+          "sphinx__5.2",
+          "sphinx__7.1",
+          "sphinx__7.2",
+          "sympy__1.0",
+          "sympy__1.1",
+          "sympy__1.10",
+          "sympy__1.11",
+          "sympy__1.12",
+          "sympy__1.2",
+          "sympy__1.4",
+          "sympy__1.5",
+          "sympy__1.6",
+          "sympy__1.7",
+          "sympy__1.8",
+          "sympy__1.9",
+          "testbed",
+          "xarray__0.12",
+          "xarray__2022.03",
+          "xarray__2022.06",
+          "xarray__2022.09"
+        ]
+      },
+      "testbed": {
+        "entries": [
+          "astropy__1.3",
+          "astropy__3.1",
+          "astropy__4.3",
+          "astropy__5.0",
+          "astropy__5.1",
+          "astropy__5.2",
+          "django__1.11",
+          "django__2.2",
+          "django__3.0",
+          "django__3.1",
+          "django__3.2",
+          "django__4.0",
+          "django__4.1",
+          "django__4.2",
+          "django__5.0",
+          "flask__2.3",
+          "matplotlib__3.0",
+          "matplotlib__3.5",
+          "matplotlib__3.6",
+          "matplotlib__3.7",
+          "pylint__2.10",
+          "pylint__2.14",
+          "pylint__2.15",
+          "pylint__2.9",
+          "pylint__3.0",
+          "pytest__4.5",
+          "pytest__4.6",
+          "pytest__5.0",
+          "pytest__5.1",
+          "pytest__5.2",
+          "pytest__5.4",
+          "pytest__6.0",
+          "pytest__6.2",
+          "pytest__6.3",
+          "pytest__7.2",
+          "requests__1.1",
+          "requests__2.0",
+          "requests__2.26",
+          "requests__2.27",
+          "requests__2.3",
+          "requests__2.4",
+          "requests__2.9",
+          "scikit-learn__0.20",
+          "scikit-learn__0.21",
+          "scikit-learn__0.22",
+          "scikit-learn__1.3",
+          "seaborn__0.12",
+          "sphinx__3.0",
+          "sphinx__3.1",
+          "sphinx__3.2",
+          "sphinx__3.3",
+          "sphinx__3.4",
+          "sphinx__3.5",
+          "sphinx__4.0",
+          "sphinx__4.1",
+          "sphinx__4.2",
+          "sphinx__4.3",
+          "sphinx__5.0",
+          "sphinx__5.1",
+          "sphinx__5.2",
+          "sphinx__7.1",
+          "sphinx__7.2",
+          "sympy__1.0",
+          "sympy__1.1",
+          "sympy__1.10",
+          "sympy__1.11",
+          "sympy__1.12",
+          "sympy__1.2",
+          "sympy__1.4",
+          "sympy__1.5",
+          "sympy__1.6",
+          "sympy__1.7",
+          "sympy__1.8",
+          "sympy__1.9",
+          "xarray__0.12",
+          "xarray__2022.03",
+          "xarray__2022.06",
+          "xarray__2022.09"
+        ]
+      },
+      "testbeds": {
+        "exists": false
+      },
+      "usr/local/sbin/criu": {
+        "exists": true
+      },
+      "usr/sbin/criu": {
+        "exists": false
+      },
+      "sbin/init": {
+        "symlink": "../lib/systemd/systemd"
+      },
+      "opt/miniconda3/envs/testbed/bin/python": {
+        "exists": true
+      },
+      "var/log/bootstrap.log": {
+        "exists": true
+      },
+      "debootstrap": {
+        "exists": false
+      }
+    },
+    {
+      "kind": "base",
+      "source": "/mnt/disk1/dyp/d-overlayfs_xfs/base.xfs",
+      "bytes": 3221225472,
+      "etc/fstab": "/dev/vda / xfs defaults 0 1\n/dev/vdb  /mnt/data  xfs  ro,nouuid,noatime  0  0\n",
+      "opt": {
+        "symlink": "/mnt/data/opt"
+      },
+      "opt/miniconda3/envs": {
+        "exists": false
+      },
+      "testbed": {
+        "entries": []
+      },
+      "testbeds": {
+        "exists": false
+      },
+      "usr/local/sbin/criu": {
+        "exists": true
+      },
+      "usr/sbin/criu": {
+        "exists": false
+      },
+      "sbin/init": {
+        "symlink": "../lib/systemd/systemd"
+      },
+      "opt/miniconda3/envs/testbed/bin/python": {
+        "exists": false
+      },
+      "var/log/bootstrap.log": {
+        "exists": false
+      },
+      "debootstrap": {
+        "exists": false
+      }
+    },
+    {
+      "kind": "django",
+      "source": "/mnt/disk1/dyp/d-overlayfs_xfs/data-django.xfs",
+      "bytes": 9663676416,
+      "opt": {
+        "entries": [
+          "miniconda3"
+        ]
+      },
+      "opt/miniconda3/envs": {
+        "entries": [
+          "django__1.11",
+          "django__2.2",
+          "django__3.0",
+          "django__3.1",
+          "django__3.2",
+          "django__4.0",
+          "django__4.1",
+          "django__4.2",
+          "django__5.0",
+          "testbed"
+        ]
+      },
+      "testbed": {
+        "exists": false
+      },
+      "testbeds": {
+        "entries": [
+          "django__1.11",
+          "django__2.2",
+          "django__3.0",
+          "django__3.1",
+          "django__3.2",
+          "django__4.0",
+          "django__4.1",
+          "django__4.2",
+          "django__5.0"
+        ]
+      },
+      "usr/local/sbin/criu": {
+        "exists": false
+      },
+      "usr/sbin/criu": {
+        "exists": false
+      },
+      "sbin/init": {
+        "exists": false
+      },
+      "opt/miniconda3/envs/testbed/bin/python": {
+        "exists": true
+      },
+      "var/log/bootstrap.log": {
+        "exists": false
+      },
+      "debootstrap": {
+        "exists": false
+      }
+    }
+  ]
+}

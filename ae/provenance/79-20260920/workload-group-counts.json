@@ -1,0 +1,82 @@
+{
+  "group_source": "traces/supplement/79-20260920/finalbench/replay_copytree/results/table2_family_aggregate_zero_llm.json",
+  "rows": [
+    {
+      "label": "DeltaBox",
+      "cohort": "table2-deltabox-12",
+      "counts": {
+        "Django": 2,
+        "SymPy": 2,
+        "Scientific": 5,
+        "Tools/Small repos": 3
+      },
+      "total": 12
+    },
+    {
+      "label": "Cube canonical",
+      "cohort": "table2-cube-canonical-12",
+      "counts": {
+        "Django": 2,
+        "SymPy": 2,
+        "Scientific": 5,
+        "Tools/Small repos": 3
+      },
+      "total": 12
+    },
+    {
+      "label": "E2B（论文原表）",
+      "cohort": "table2-e2b-original-8",
+      "counts": {
+        "Django": 2,
+        "SymPy": 2,
+        "Scientific": 2,
+        "Tools/Small repos": 2
+      },
+      "total": 8
+    },
+    {
+      "label": "FC-Diff（聚合 OK）",
+      "cohort": "table2-fc-actual",
+      "counts": {
+        "Scientific": 47,
+        "Django": 103,
+        "Tools/Small repos": 43,
+        "SymPy": 45
+      },
+      "total": 238
+    },
+    {
+      "label": "CRIU（聚合 ok，含 4 条 TAIL_CRASH_OK）",
+      "cohort": "table2-criu-all-attempts",
+      "counts": {
+        "Scientific": 47,
+        "Django": 105,
+        "Tools/Small repos": 43,
+        "SymPy": 46
+      },
+      "total": 241
+    },
+    {
+      "label": "Replay（汇总记录）",
+      "cohort": "table2-replay-actual",
+      "counts": {
+        "Scientific": 47,
+        "Django": 106,
+        "Tools/Small repos": 43,
+        "SymPy": 48
+      },
+      "total": 244
+    },
+    {
+      "label": "E2B（另一轮 P-EAGLE，非论文原表）",
+      "cohort": "e2b-separate-peagle-12",
+      "counts": {
+        "Django": 2,
+        "SymPy": 2,
+        "Scientific": 5,
+        "Tools/Small repos": 3
+      },
+      "total": 12
+    }
+  ]
+}

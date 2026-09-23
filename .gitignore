@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.runtime_cache/
+
+# Local environments
+.venv
+venv/
+env/
+
+# Runtime and benchmark outputs
+benchresults/
+results/
+logs/
+work/
+tmp/
+*.log
+*.jsonl.tmp
+
+# DeltaBox/CRIU/VM generated state
+snapshots/
+layers/
+*.img
+*.qcow2
+*.raw
+*.xfs
+*.sock
+*.pid
+dump.log
+restore.log
+
+# Large external payloads should stay outside this repository.
+repos/
+index_store/
+mock_traces/
+det_traces/
+moatless-det-src/
+
+# Native test build outputs
+backends/deltabox/test/fork_template/mock_active
+backends/deltabox/test/workload
+*.o
+
+# Editor/system noise
+.DS_Store
+*.swp
+*~
+
+# Paper inputs are committed as a verified, content-addressed compressed bundle.
+/ae/paper/*/data
+/ae/traces/objects
+/ae/traces/archives/
+/ae/traces/raw/
+/ae/traces/supplement/
+/ae/dist/
+/ae/results/
+/ae/work/
+/ae/images/out/
+/ae/configs/local*.json
+
+# Pinned Figure 2 instrumentation is source, not an external payload checkout.
+!/ae/vendor/spr_payload/moatless-det-src/
+!/ae/vendor/spr_payload/moatless-det-src/**
+!/ae/vendor/d-overlayfs/benchresults/
+!/ae/vendor/d-overlayfs/benchresults/**

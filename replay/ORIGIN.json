@@ -1,0 +1,34 @@
+{
+  "source": "current-remote-20260920 snapshot of benchmarks/table4 and scripts/vm.py",
+  "capture": "ae-plan-20260920/evidence/current-remote-20260920",
+  "files": {
+    "benchmarks/table4/make_schedule.py": "00def55d9fc160f4314cd05dd9f62f566acb1df5e5ee8281ec6f201d3ba48795",
+    "benchmarks/table4/tree_to_schedule.py": "46808370250f084afd24f63813b271d4e8dae552bfb141058afddf9eabddff8c",
+    "benchmarks/table4/host_execution.py": "65c82898fc3f1415abecf39a9c15a9974c9a74f6b5c6a4b604d1d8ee69658f1b",
+    "benchmarks/table4/summarize.py": "3db7bd028fdceba26ab1fb1173cd8b1c6ff69db469c271030e49b80c6435e377",
+    "benchmarks/table4/instances.txt": "27214cbc8cec0857aba0578bf44da1b4cc1f90e8b6daaac81e6fc3fb9233dc17",
+    "benchmarks/table4/run_instance.py": "a0e9a2b1498ff98aad494a59e2e6bbf3ce1793df2d0fc3fc7678ba9c2e1f5cde",
+    "benchmarks/table4/guest/trace_replay_main.py": "b452f6a27803d06773c583b8e179f4c77fd1b933146343aea9d0602623479a6e",
+    "benchmarks/table4/guest/agent.py": "25b1c213f1d39a544865dbaa9d7035f0993aca4aea13f72c74ad94faf89a1b61",
+    "benchmarks/table4/guest/mock_npd.py": "92312fbcca8873273e52ca189529dfcb5a5c10f94520c0b75e21ce2fa0dca374",
+    "benchmarks/table4/guest/index_sidecar.py": "c45a1730cc69d33339aafa08e2e70cb6c7c5e58abcae5d4da16546cab863ad8f",
+    "benchmarks/table4/guest/bringup.py": "d92a395b94b90897bd3bc99bd5bc09700fcbf250f70e73d623ec7b15a2084aff",
+    "benchmarks/table4/guest/entry.py": "cb5b15825f67d6705ad089191303f95ff182f1ec931e7b484cc1d45a0352c6ae",
+    "scripts/vm.py": "f7c85b3c176bf0fa050bc4752a9f131d8905150645a48d4132f0d2727b966a25"
+  },
+  "excluded_runtime_copies": [
+    "sandbox_controller.py",
+    "template_fork.py",
+    "namespace_launcher.py",
+    "semantic_parser.py",
+    "memory_classifier.py",
+    "prewarm.py"
+  ],
+  "adaptations": [
+    "Dynamically inject current backends/deltabox/gsd/*.py and pycriu/*.py",
+    "Task-owned VM, tap, namespace and rootfs lifecycle",
+    "Host and guest source verification and complete-event validation",
+    "Wrapper API timing measured with perf_counter_ns",
+    "CLI configuration for images, full trace vs prefix, policies and batch mode"
+  ]
+}

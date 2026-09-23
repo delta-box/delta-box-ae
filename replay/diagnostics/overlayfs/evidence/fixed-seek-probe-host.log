@@ -1,0 +1,19 @@
+[host] copying rootfs: /mnt/disk2/dyp/d-overlayfs/base.xfs -> /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/rootfs.xfs
++ mkdir -p /tmp/deltafs-rootfs-uhe5sx5k
++ mount -o loop /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/rootfs.xfs /tmp/deltafs-rootfs-uhe5sx5k
+[host] injected SSH public key: /home/dyp/.ssh/id_ed25519.pub
++ umount /tmp/deltafs-rootfs-uhe5sx5k
++ ip tuntap add dev ovl-qci6s4za mode tap
++ ip addr add 172.16.0.1/24 dev ovl-qci6s4za
++ ip link set ovl-qci6s4za up
++ ip route replace 172.16.0.2/32 dev ovl-qci6s4za src 172.16.0.1
+[host] starting Firecracker; log=/mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/firecracker.log
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/machine-config -H 'Content-Type: application/json' -d '{"vcpu_count": 2, "mem_size_mib": 2048, "smt": false}'
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/boot-source -H 'Content-Type: application/json' -d '{"kernel_image_path": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed", "boot_args": "console=ttyS0,115200n8 reboot=k panic=1 pci=off acpi=off ip=172.16.0.2::172.16.0.1:255.255.255.0::eth0:off rw init=/lib/systemd/systemd systemd.unit=multi-user.target"}'
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/drives/rootfs -H 'Content-Type: application/json' -d '{"drive_id": "rootfs", "path_on_host": "/mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/rootfs.xfs", "is_root_device": true, "is_read_only": false}'
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/network-interfaces/eth0 -H 'Content-Type: application/json' -d '{"iface_id": "eth0", "guest_mac": "AA:FC:00:00:00:02", "host_dev_name": "ovl-qci6s4za"}'
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/drives/data -H 'Content-Type: application/json' -d '{"drive_id": "data", "path_on_host": "/mnt/disk2/dyp/d-overlayfs/data-tools.xfs", "is_root_device": false, "is_read_only": true}'
++ curl --unix-socket /mnt/disk2/dyp/overlay-stale-fd-20260921/fixed-seek-probe/ovl-probe-qci6s4za/fc.sock -sS --fail-with-body -X PUT http://localhost/actions -H 'Content-Type: application/json' -d '{"action_type": "InstanceStart"}'
+[host] waiting for SSH on root@172.16.0.2
+[host] SSH not ready yet (attempt 1, rc=255): ssh: connect to host 172.16.0.2 port 22: Connection timed out
++ ip link del ovl-qci6s4za
