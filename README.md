@@ -1,4 +1,4 @@
-# DeltaBox — ATC 2026 Artifact Evaluation The prebuilt patched Linux kernel is in [linux/](linux/README.md).
+# DeltaBox — ATC 2026 Artifact Evaluation
 
 **English** | [简体中文](README-zh.md)
 

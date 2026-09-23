@@ -4,7 +4,7 @@
 
 **申请徽章：Available、Functional、Reproduced。**
 
-DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。 修改版 Linux 内核见 [linux/](linux/README.md)。
+DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
 建议先完成约 **5 分钟的快速检查**，再运行完整实验，预留约 **10 小时**。也可按[实验索引](#experiments)选择单项。一键运行脚本中的 GPU 相关测试有可能因为 GPU 资源全部繁忙而失败，如有相关报错请联系作者为 AE 机器分配 GPU 资源。
 
