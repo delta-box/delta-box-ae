@@ -164,7 +164,7 @@ class FreshAnalysisTests(unittest.TestCase):
     def test_distinct_delta_profiles_purposes_not_pooled(self):
         delta(self.root,'historical',checkpoint=10.)
         delta(self.root,'runtime',profile='runtime-default',checkpoint=30.)
-        delta(self.root,'smoke',purpose='smoke',checkpoint=100.)
+        delta(self.root,'quick-check',purpose='quick-check',checkpoint=100.)
         delta(self.root,'adaptive',experiment='figure-06-adaptive',adaptive=True,checkpoint=300.)
         summary=analyze_fresh(self.root, self.root/'analysis')
         rows=[r for r in summary['experiments']['table-02']['metrics'] if r['group']=='All' and r['metric']=='checkpoint_ms']
@@ -213,7 +213,7 @@ class FreshAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'estimate'):analyze_fresh(self.root)
 
     def test_profiles_use_measured_fs_total_and_separate_purposes(self):
-        for purpose,value in [('full-trace',2048),('smoke',4096)]:
+        for purpose,value in [('full-trace',2048),('quick-check',4096)]:
             manifest(self.root,purpose,dict(experiment='figure-02-filesystem',instance='sympy__sympy-22840',
                      step_count=2,rss_sample_count=1,run_purpose=purpose,filesystem_baseline_bytes=value),
                      {'step_metrics.jsonl':([dict(soft_dirty_bytes=1024,action_write_bytes=0),dict(soft_dirty_bytes=2048,action_write_bytes=value)],True),
@@ -234,24 +234,24 @@ class FreshAnalysisTests(unittest.TestCase):
         self.assertEqual(population['arms']['xfs']['grouped_units'],2)
         self.assertIs(result['historical_annotation'],False)
 
-    def test_war_disjoint_smoke_and_full_inputs_are_separate_populations(self):
-        for purpose,value in [('smoke',10),('full-cohort',100)]:
+    def test_war_disjoint_quick_check_and_full_inputs_are_separate_populations(self):
+        for purpose,value in [('quick-check',10),('full-cohort',100)]:
             key=purpose+'__sympy__sympy-22840'
             manifest(self.root,purpose,dict(experiment='figure-09',input_key=key,arm='xfs',expected_edits=1,run_purpose=purpose),
                      {'measurements/'+key+'_xfs.jsonl':([dict(instance=key,fs_arm='xfs',applied_ok=True,file_path='same.py',
                          file_size_bytes=4096,copyup_bytes=value,phys_bytes=2*value)],True)})
         result=analyze_fresh(self.root)['experiments']['figure-09']
         rows=[row for row in result['series'] if row['metric']=='copyup_bytes' and row['n_units']]
-        self.assertEqual({row['run_purpose']:row['y'] for row in rows},{'smoke':10.,'full-cohort':100.})
+        self.assertEqual({row['run_purpose']:row['y'] for row in rows},{'quick-check':10.,'full-cohort':100.})
         self.assertEqual(len({row['cohort'] for row in rows}),2)
         self.assertEqual(len({row['plot_group'] for row in rows}),2)
         self.assertTrue(all(row['n_units']==1 for row in rows))
-        self.assertEqual({row['run_purpose'] for row in result['selection'].values()},{'smoke','full-cohort'})
+        self.assertEqual({row['run_purpose'] for row in result['selection'].values()},{'quick-check','full-cohort'})
         self.assertEqual(len({row['plot_group'] for row in result['selection'].values()}),2)
 
     def test_war_same_input_allowed_across_purposes_but_not_within_population(self):
         key='claude__sympy__sympy-22840'
-        for name,purpose in [('smoke','smoke'),('full','full-cohort')]:
+        for name,purpose in [('quick-check','quick-check'),('full','full-cohort')]:
             manifest(self.root,name,dict(experiment='figure-09',input_key=key,arm='xfs',expected_edits=1,run_purpose=purpose),
                      {'measurements/'+key+'_xfs.jsonl':([dict(instance=key,fs_arm='xfs',applied_ok=True,file_path='same.py',
                          file_size_bytes=4096,copyup_bytes=10,phys_bytes=20)],True)})
@@ -273,7 +273,7 @@ class FreshAnalysisTests(unittest.TestCase):
         data=dict(ok=True,instance='sympy__sympy-22840',ckpts=[dict(checkpoint_total_ms=10.,fs_checkpoint_ms=3.,criu_dump_ms=7.)],
                   restore_events=[dict(restore_total_ms=20.,fs_restore_ms=4.,criu_restore_ms=10.)])
         base,document=manifest(original,'criu',dict(experiment='table-02-criu',backend='criu',instance=data['instance'],
-                         counts={'checkpoints':1,'restores':1},run_purpose='smoke'),{'pilot_result.json':(data,False)})
+                         counts={'checkpoints':1,'restores':1},run_purpose='quick-check'),{'pilot_result.json':(data,False)})
         document['result']=dict(document['artifacts'][0])
         write(base/'run.json',document)
         moved=self.root/'moved'
@@ -295,11 +295,11 @@ class FreshAnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'not bound'):analyze_fresh(self.root)
 
     def test_keep_going_success_and_non_success_manifests(self):
-        delta(self.root,'good',purpose='smoke')
+        delta(self.root,'good',purpose='quick-check')
         for status in ('failed','preparing','prepared','planned','cancelled'):
             directory=self.root/status
             write(directory/'run.json',dict(analysis_mode='fresh-measurement',experiment='table-02-deltabox',
-                                           status=status,instance='sympy__sympy-22840',run_purpose='smoke',error='injected '+status))
+                                           status=status,instance='sympy__sympy-22840',run_purpose='quick-check',error='injected '+status))
             # Incomplete output is never parsed or promoted to measurements.
             (directory/'incomplete.results.jsonl').write_text('{incomplete output')
         summary=analyze_fresh(self.root)
@@ -325,12 +325,12 @@ class FreshAnalysisTests(unittest.TestCase):
 
     def test_declared_full_cohort_is_not_coverage_proof(self):
         delta(self.root,'partial',purpose='full-cohort')
-        delta(self.root,'smoke',purpose='smoke',checkpoint=30.)
+        delta(self.root,'quick-check',purpose='quick-check',checkpoint=30.)
         selection=analyze_fresh(self.root)['selection']
         self.assertFalse(selection['paper_cohort_verified'])
         self.assertEqual(selection['actual_run_count'],2)
         self.assertEqual(selection['actual_instance_count'],1)
-        self.assertEqual({r['run_purpose'] for r in selection['populations']},{'smoke','full-cohort'})
+        self.assertEqual({r['run_purpose'] for r in selection['populations']},{'quick-check','full-cohort'})
         self.assertTrue(all(r['actual_instance_count']==1 and not r['paper_cohort_verified'] for r in selection['populations']))
 
     def test_cube_control_and_unclassified_must_close(self):

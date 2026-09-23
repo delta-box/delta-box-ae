@@ -221,7 +221,8 @@ def parser():
         p.add_argument('--batches', help='Comma-separated subset of 1,4,16,64')
         p.add_argument('--phase', choices=('all', *protocol.PHASES), default='all')
         p.add_argument('--prompt-mode', choices=('paper-template', 'fixed-tokens'))
-        p.add_argument('--smoke', action='store_true', help='B1 only, one warmup and one measured repetition per phase')
+        p.add_argument('--test', dest='quick_check', action='store_true', help='Quick check: B1 only, one warmup and one measured repetition per phase')
+        p.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
         p.add_argument('--allow-busy', action='store_true', default=None, help='Explicitly allow contended diagnostic runs')
         p.add_argument('--output', type=Path, required=name == 'run', help='New result directory for run; optional JSON file for plan/check')
         if name == 'run':
@@ -240,13 +241,13 @@ def main(argv=None):
             from repro.figure08_plots import plot_gpu_timing
             print(json.dumps(plot_gpu_timing(json.loads(args.input.read_text()), args.output), indent=2))
             return 0
-        if args.smoke and args.batches:
-            raise ValueError('choose --smoke or an explicit --batches list')
+        if args.quick_check and args.batches:
+            raise ValueError('choose --test or an explicit --batches list')
         config = protocol.load_config(args.config, model_path=args.model_path, devices=args.devices,
             generation_python=args.generation_python, training_python=args.training_python,
             batches=[int(x) for x in args.batches.split(',')] if args.batches else None,
             phases=[args.phase] if args.phase != 'all' else None, prompt_mode=args.prompt_mode,
-            allow_busy=args.allow_busy, smoke=args.smoke)
+            allow_busy=args.allow_busy, quick_check=args.quick_check)
         if args.command == 'run':
             result = run_suite(config, args.output, keep_going=args.keep_going)
             print(json.dumps({'status': result['status'], 'summary': str(args.output / 'summary.json')}, indent=2))

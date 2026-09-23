@@ -55,14 +55,15 @@ def parser():
     selection = p.add_mutually_exclusive_group()
     selection.add_argument('--available', action='store_true', help='Explicit partial run for self-built/debug environments; report missing prerequisites')
     selection.add_argument('--all', action='store_true', help='Require the complete CPU and GPU catalog (default); unavailable jobs make the final exit nonzero')
-    selection.add_argument('--smoke', action='store_true', help='One DeltaBox instance, three C/R events; not a full cohort')
+    selection.add_argument('--test', dest='quick_check', action='store_true', help='Quick check: one DeltaBox instance and three checkpoint/restore events')
+    selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
     p.add_argument('--output', type=Path, help='New output directory; never overwritten')
     p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
-    p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked smoke')
+    p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
     p.add_argument('--max-events', type=int, help='Explicit event prefix; units depend on backend')
     p.add_argument('--no-pin', action='store_true', help='Explicitly opt out of NUMA and frequency controls')
     p.add_argument('--numa-node', type=int, default=None, help='Default: config measurement.numa_node, or 2')
@@ -120,8 +121,8 @@ def default_output(args):
         measured = json.loads(review.read_text())['release']
         return REPO / 'ae/results' / result_version(measured) / 'rendering' / result_version(working_source())
     root = REPO / 'ae/results' / result_version(current_source())
-    if args.smoke:
-        return root / 'checks/smoke'
+    if args.quick_check:
+        return root / 'checks/quick-check'
     if args.max_events is not None:
         return root / 'checks/selected'
     return root / 'full'
@@ -410,7 +411,7 @@ class Review:
         selected = list(args.experiment or [])
         for group in args.group or []:
             selected += GROUPS[group]
-        self.experiments = ['table-02-deltabox'] if args.smoke else list(dict.fromkeys(selected or EXPERIMENTS))
+        self.experiments = ['table-02-deltabox'] if args.quick_check else list(dict.fromkeys(selected or EXPERIMENTS))
         self.available = args.available
         self.overrides = {}
         for override in args.experiment_config:
@@ -420,15 +421,15 @@ class Review:
             if name == GPU:
                 raise ValueError('Configure GPU with gpu.config; --experiment-config selects CPU configurations')
             self.overrides[name] = Path(path).resolve()
-        self.limits = ['--limit', '1', '--max-events', '3'] if args.smoke else []
-        if not args.smoke:
+        self.limits = ['--limit', '1', '--max-events', '3'] if args.quick_check else []
+        if not args.quick_check:
             for flag, value in (('--limit', args.limit), ('--max-events', args.max_events)):
                 if value is not None:
                     self.limits += [flag, str(value)]
         self.attempt = 'attempt-001'
         self.record = dict(schema_version=2, status='running', experiments=self.experiments,
                            selection_mode='available' if self.available else 'required',
-                           run_purpose='smoke' if self.limits else 'available-cohorts' if self.available else 'full-cohorts',
+                           run_purpose='quick-check' if self.limits else 'available-cohorts' if self.available else 'full-cohorts',
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=SKIPPED, coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
@@ -779,8 +780,8 @@ def main(argv=None):
         for path in args.publish_output:
             make_output_accessible(path)
         return 0
-    if args.smoke and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
-        p.error('--smoke already selects one DeltaBox instance and three events')
+    if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
+        p.error('--test already selects one DeltaBox instance and three events')
     if args.all and (args.experiment or args.group):
         p.error('--all cannot be combined with a selected experiment/group')
     if any(value is not None and value <= 0 for value in (args.limit, args.max_events)):

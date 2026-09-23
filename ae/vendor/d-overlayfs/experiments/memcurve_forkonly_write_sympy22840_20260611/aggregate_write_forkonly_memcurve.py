@@ -231,7 +231,7 @@ def main():
         "",
         "Common env: `DELTABOX_MEMCURVE=1`, `DELTABOX_FORK_ONLY_MEMCURVE=1`, `DELTABOX_RESTAMP_PARENT_INVENTORY=0`. Checkpoint never runs CRIU; restore hard-fails if it cannot fork from a warm template. Host CPUs are NUMA2 `48-55` and were already on the `performance` governor.",
         "",
-        "| arm | status | ckpt strategies | rs paths | fork-only logs | lightweight logs | upper dirty | CRIU logs | max lower layers | final tmpfs MB | final templates PSS MB | final active PSS MB | final combined MB | final templates | ck mean ms | rs wall mean ms | rs critical mean ms | replay cmds | worker failed |",
+        "| arm | status | ckpt strategies | rs paths | fork-only logs | lightweight logs | upper dirty | CRIU logs | max lower layers | final tmpfs MB | final templates PSS MB | final active PSS MB | final combined MB | final templates | ck mean ms | rs mean elapsed ms | rs critical mean ms | replay cmds | worker failed |",
         "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for arm in ARMS:

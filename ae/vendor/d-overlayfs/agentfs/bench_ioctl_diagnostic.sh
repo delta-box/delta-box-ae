@@ -193,7 +193,7 @@ echo "# Diagnostic bench: fast (fork) vs slow (criu) — CPU${BENCH_CPU}"
 echo "Generated: $(date)"
 echo "N=${N_REPS}  BENCH_CPU=${BENCH_CPU}  LOAD_CPU=${LOAD_CPU}  freq=${MIN} Hz"
 echo
-echo "## ioctl wall-time summary"
+echo "## ioctl elapsed time summary"
 echo '```'
 echo "fast: $(cat ${OUT_DIR}/fast/ioctl_summary.txt)"
 echo "slow: $(cat ${OUT_DIR}/slow/ioctl_summary.txt)"

@@ -720,7 +720,7 @@ def run_instance(args: argparse.Namespace, row: dict[str, str]) -> dict[str, Any
         "llm_replay_mode": "schedule_latency_sleep",
         "llm_sleep_ms_total": llm_sleep_ms_total,
         "warm_action_worker": bool(args.warm_action_worker),
-        "measurement_scope": "host-side CubeSandbox SDK API wall time",
+        "measurement_scope": "host-side CubeSandbox SDK API elapsed time",
         "create_ms": create_ms,
         "setup": setup_info,
         "iterations": iterations,

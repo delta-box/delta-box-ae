@@ -243,7 +243,8 @@ def parse_arguments(argv):
                         help='Checkout used by run_all.sh; must match the fixed runtime')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--all', action='store_true', help='Require all CPU and GPU experiments (default)')
-    mode.add_argument('--test', '--smoke', dest='smoke', action='store_true', help='Run the minimum DeltaBox check')
+    mode.add_argument('--test', dest='quick_check', action='store_true', help='Run the minimum DeltaBox check')
+    mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
     parser.add_argument('--limit', type=positive_integer, action=Once)
@@ -253,8 +254,8 @@ def parse_arguments(argv):
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
     parser.add_argument('--list', action='store_true')
     args = parser.parse_args(argv)
-    if args.smoke and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
-        parser.error('--smoke already selects one DeltaBox instance and three events')
+    if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
+        parser.error('--test already selects one DeltaBox instance and three events')
     if args.all and (args.experiment or args.group):
         parser.error('--all cannot be combined with a selected experiment/group')
     if args.list and (args.output or args.resume):
@@ -338,8 +339,8 @@ def default_result(policy, args, *, trust=None):
     if not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit):
         raise ValueError('The release lock must identify the full source commit')
     root = Path(commit[:12])
-    if args.smoke:
-        return root / 'checks/smoke'
+    if args.quick_check:
+        return root / 'checks/quick-check'
     if args.max_events is not None:
         return root / 'checks/selected'
     return root / 'full'
@@ -348,9 +349,9 @@ def default_result(policy, args, *, trust=None):
 def command_line(policy, args, output):
     command = [str(policy['python']), '-I', str(policy['runtime_root'] / 'ae/scripts/run_review.py'),
                '--config', str(policy['config'])]
-    for key in ('all', 'smoke', 'list'):
+    for key, flag in (('all', '--all'), ('quick_check', '--test'), ('list', '--list')):
         if getattr(args, key):
-            command.append('--' + key)
+            command.append(flag)
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]

@@ -294,7 +294,7 @@ def bench_cube(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any
                 raise RuntimeError(prep.error)
 
             # Cube's official RL fan-out wrapper includes creating and cleaning
-            # an internal snapshot. Its wall time is the e2e fork time for the
+            # an internal snapshot. Its elapsed time is the e2e fork time for the
             # public clone API.
             clones, clone_step = run_timed(lambda: source.clone(n=n, concurrency=n))
             row["official_clone"] = asdict(clone_step)

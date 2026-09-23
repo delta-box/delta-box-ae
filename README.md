@@ -6,7 +6,7 @@
 
 DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
 
-Start with the **approximately 5-minute smoke check**, then allow **approximately 10 hours** for the complete evaluation. Alternatively, select an experiment from the [index](#experiments). GPU tests in the one-click script may fail if all GPU resources are busy. If this happens, contact the authors to allocate GPU resources for the AE machine.
+Start with the **approximately 5-minute quick check**, then allow **approximately 10 hours** for the complete evaluation. Alternatively, select an experiment from the [index](#experiments). GPU tests in the one-click script may fail if all GPU resources are busy. If this happens, contact the authors to allocate GPU resources for the AE machine.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
 
@@ -22,19 +22,19 @@ Provide your SSH public key in the artifact submission system's comments. After 
 
 ```bash
 ssh atc-ae@HOST
-cd ~/deltabox-runtime
-bash ae/run_all.sh --smoke
+cd ~/delta-box-ae
+bash ae/run_test.sh
 ```
 
-The hosted machine provides Linux x86-64, KVM, experiment images, recorded inputs, and baseline services. Run all commands below from the **deltabox-runtime repository root** on that machine; image building is not a prerequisite. For your own machine, follow the [self-hosting guide](ae/docs/self-hosting.md).
+The hosted machine provides Linux x86-64, KVM, experiment images, recorded inputs, and baseline services. Run all commands below from the **delta-box-ae repository root** on that machine; image building is not a prerequisite. For your own machine, follow the [self-hosting guide](ae/docs/self-hosting.md).
 
-The smoke check starts DeltaBox, executes a minimal checkpoint/restore sequence, validates the restored state, analyzes the data, and generates figures. **Success** means exit code 0 and this terminal message:
+The quick check starts DeltaBox, executes a minimal checkpoint/restore sequence, validates the restored state, analyzes the data, and generates figures. **Success** means exit code 0 and this terminal message:
 
 ```text
-ok: /mnt/disk2/dyp/deltabox-runtime/ae/results/<source-version>/checks/smoke/SUMMARY.md
+ok: <result-directory>/SUMMARY.md
 ```
 
-Open that `SUMMARY.md`; each step should be `ok`. The smoke check verifies the execution pipeline. The full experiments below evaluate the paper's claims.
+Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the execution pipeline. The full experiments below evaluate the paper's claims.
 
 ### Run the complete evaluation
 

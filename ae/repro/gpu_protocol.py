@@ -55,7 +55,7 @@ def load_config(path=DEFAULT_CONFIG, **overrides):
             continue
         if key == 'prompt_mode':
             config['generation']['prompt_mode'] = value
-        elif key == 'smoke':
+        elif key in ('quick_check', 'smoke'):
             if value:
                 config['batches'] = [1]
                 for phase in ('generation', 'training'):

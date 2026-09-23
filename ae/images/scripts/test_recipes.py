@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-privileged guardrail/provenance checks; Linux fs smoke is separate."""
+"""Non-privileged guardrail/provenance checks; Linux fs quick-check is separate."""
 import hashlib
 import csv
 import json

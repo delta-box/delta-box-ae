@@ -1318,7 +1318,7 @@ class TemplatePool:
         The control FIFO has a single shared reader set (active + stopped
         templates).  If a request times out, its command may still be buffered
         in CTRL_IN_FIFO; sending the next command can make an agent read two
-        JSON lines in one wakeup.  That poisoned the async-full-dump smoke
+        JSON lines in one wakeup.  That poisoned the async-full-dump quick-check
         with '{"op":"stash_template"}\\n{"op":"fork"}'.  Drain before each
         host-side request so old commands cannot attach to the next one.
         """

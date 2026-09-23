@@ -281,7 +281,7 @@ def table2(plt, result):
         _rule(ax, .156, heavy=True)
         replay_methods = {row.get("replay_timing_method") for row in result.get("metrics", [])
                           if _table2_backend(row, result.get("source")) == "replay"}
-        replay_note = ("rs subtracts recorded LLM wait from measured wall time."
+        replay_note = ("rs subtracts recorded LLM wait from measured elapsed time."
                        if replay_methods == {"recorded-sleep-subtracted"}
                        else "rs uses the declared timing policy; see the sample manifest.")
         ax.text(.5, .112, "† Replay ck is the per-trace pristine-repo copy; " + replay_note,

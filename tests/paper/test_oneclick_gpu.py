@@ -90,9 +90,9 @@ class OneClickGPUTests(unittest.TestCase):
             dict(schema_version=1, source="fresh", experiments={"figure-08": dict(status="analyzed", series=series)})))
         return directory
 
-    def test_full_defaults_and_figure8_include_gpu_but_smoke_and_cpu_do_not(self):
+    def test_full_defaults_and_figure8_include_gpu_but_quick_check_and_cpu_do_not(self):
         for flags, expected in (([], True), (["--all"], True), (["--group", "figure-08"], True),
-                                (["--group", "gpu"], True), (["--smoke"], False), (["--group", "cpu"], False),
+                                (["--group", "gpu"], True), (["--test"], False), (["--group", "cpu"], False),
                                 (["--group", "figure-08-cpu"], False)):
             with self.subTest(flags=flags), patch.object(review, "current_source", return_value=SOURCE):
                 instance = review.Review(review.parser().parse_args(flags), {}, self.root)

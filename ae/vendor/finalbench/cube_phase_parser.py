@@ -197,12 +197,12 @@ def write_markdown(summary: dict, path: Path) -> None:
         "Canonical input: all raw schedule ckpt/restore events from the DeltaBox Table 2 local run.",
         "",
         "Classification:",
-        "- ck filesystem/storage = `rootfs_dump`; ck process/VM = `memory_prepare + memory_dump`; ck control = API wall minus logged commit phase union.",
-        "- rs filesystem/storage = rootfs resolve/derive/delete/persist; rs process/VM = `shim_update_restore`; rs control = metadata phases plus API wall minus `rollback_total`.",
+        "- ck filesystem/storage = `rootfs_dump`; ck process/VM = `memory_prepare + memory_dump`; ck control = API duration minus logged commit phase union.",
+        "- rs filesystem/storage = rootfs resolve/derive/delete/persist; rs process/VM = `shim_update_restore`; rs control = metadata phases plus API duration minus `rollback_total`.",
         "",
         "## Aggregate",
         "",
-        "| flow | wall | filesystem/storage | process/VM | control/orchestration | events |",
+        "| flow | elapsed time | filesystem/storage | process/VM | control/orchestration | events |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for name in ["ck", "rs"]:
@@ -219,7 +219,7 @@ def write_markdown(summary: dict, path: Path) -> None:
         "",
         "## Per Workload",
         "",
-        "| Workload | flow | wall | filesystem/storage | process/VM | control/orchestration | events |",
+        "| Workload | flow | elapsed time | filesystem/storage | process/VM | control/orchestration | events |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for group in summary["per_group"]:
@@ -235,7 +235,7 @@ def write_markdown(summary: dict, path: Path) -> None:
         "",
         "## Per Instance",
         "",
-        "| group | instance | flow | wall | filesystem/storage | process/VM | control | events |",
+        "| group | instance | flow | elapsed time | filesystem/storage | process/VM | control | events |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for inst in summary["per_instance"]:

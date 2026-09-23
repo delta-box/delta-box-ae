@@ -58,10 +58,10 @@ class HostedTests(unittest.TestCase):
     def test_default_results_group_full_run_and_checks_under_the_same_version(self):
         with self.owned_fixture():
             full = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
-            smoke = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime), '--smoke']))
+            quick_check = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime), '--test']))
         self.assertEqual(full, Path('aaaaaaaaaaaa/full'))
-        self.assertEqual(smoke, Path('aaaaaaaaaaaa/checks/smoke'))
-        self.assertEqual(full.parts[0], smoke.parts[0])
+        self.assertEqual(quick_check, Path('aaaaaaaaaaaa/checks/quick-check'))
+        self.assertEqual(full.parts[0], quick_check.parts[0])
 
     def test_default_result_rejects_path_content_in_source_identity(self):
         (self.runtime / 'release/candidate-lock.json').write_text(json.dumps({'source_commit': '../outside'}))
@@ -101,25 +101,25 @@ class HostedTests(unittest.TestCase):
         def owned_stat(path):
             return root_metadata(lstat(path), outside=not path.is_relative_to(self.root),
                                  owner=self.owners.get(path, (0, 0)), untrusted=path in self.untrusted)
-        with patch.object(Path, 'lstat', owned_stat), \
-             patch.object(hosted.os, 'getxattr', side_effect=OSError(errno.ENODATA, 'No ACL'), create=True), \
+        with patch.object(Path, 'lstat', owned_stat),\
+             patch.object(hosted.os, 'getxattr', side_effect=OSError(errno.ENODATA, 'No ACL'), create=True),\
              patch.object(hosted.os, 'fstat', side_effect=lambda fd: root_metadata(fstat(fd))):
             yield
 
     @contextlib.contextmanager
     def launcher(self, extra_env=None):
         env = {'SUDO_UID': str(REVIEWER.pw_uid), **(extra_env or {})}
-        with self.owned_fixture(), \
-             patch.object(hosted, 'POLICY_PATH', self.policy_path), \
-             patch.object(hosted.os, 'geteuid', return_value=0), \
-             patch.object(hosted.os, 'getuid', return_value=0), \
-             patch.object(hosted.pwd, 'getpwnam', side_effect=lambda name: next(user for user in self.users if user.pw_name == name)), \
-             patch.object(hosted.pwd, 'getpwuid', side_effect=lambda uid: ROOT_USER if uid == 0 else REVIEWER), \
-             patch.object(hosted.pwd, 'getpwall', side_effect=lambda: self.users), \
-             patch.object(hosted.grp, 'getgrgid', side_effect=lambda gid: SimpleNamespace(gr_gid=gid, gr_mem=self.groups[gid])), \
-             patch.dict(hosted.os.environ, env, clear=True), \
-             patch.object(hosted.os, 'chdir'), patch.object(hosted.os, 'umask'), \
-             patch.object(hosted.os, 'execve') as execute, \
+        with self.owned_fixture(),\
+             patch.object(hosted, 'POLICY_PATH', self.policy_path),\
+             patch.object(hosted.os, 'geteuid', return_value=0),\
+             patch.object(hosted.os, 'getuid', return_value=0),\
+             patch.object(hosted.pwd, 'getpwnam', side_effect=lambda name: next(user for user in self.users if user.pw_name == name)),\
+             patch.object(hosted.pwd, 'getpwuid', side_effect=lambda uid: ROOT_USER if uid == 0 else REVIEWER),\
+             patch.object(hosted.pwd, 'getpwall', side_effect=lambda: self.users),\
+             patch.object(hosted.grp, 'getgrgid', side_effect=lambda gid: SimpleNamespace(gr_gid=gid, gr_mem=self.groups[gid])),\
+             patch.dict(hosted.os.environ, env, clear=True),\
+             patch.object(hosted.os, 'chdir'), patch.object(hosted.os, 'umask'),\
+             patch.object(hosted.os, 'execve') as execute,\
              contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()) as stderr:
             yield execute, stdout, stderr
 
@@ -175,19 +175,24 @@ class HostedTests(unittest.TestCase):
                ['--analyze-existing', '/other'], ['--no-pin'], ['--cpus', '0'], ['--numa-node', '0'],
                ['--temporary-root', '/other'],
                ['--experiment', 'invented'], ['--group', 'invented'], ['--limit', '0'],
-               ['--smoke', '--limit', '1'], ['--all', '--experiment', 'correctness'],
+               ['--test', '--limit', '1'], ['--all', '--experiment', 'correctness'],
                ['--checkout', '/other'], ['--list', '--output', 'other'])
         for flags in bad:
             with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):
                     hosted.parse_arguments(['--checkout', str(self.runtime), *flags])
 
+    def test_legacy_check_option_is_supported_but_hidden(self):
+        new = hosted.parse_arguments(['--checkout', str(self.runtime), '--test'])
+        old = hosted.parse_arguments(['--checkout', str(self.runtime), '--smoke'])
+        self.assertEqual(vars(new), vars(old))
+
     def test_test_alias_uses_the_fixed_minimum_check(self):
         with self.launcher() as (execute, _, _):
             self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 0)
         command = execute.call_args.args[1]
-        self.assertIn('--smoke', command)
-        self.assertNotIn('--test', command)
+        self.assertIn('--test', command)
+        self.assertNotIn('--smoke', command)
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             hosted.parse_arguments(['--checkout', str(self.runtime), '--test', '--limit', '1'])
 
@@ -287,7 +292,7 @@ class HostedTests(unittest.TestCase):
                 if path == self.runtime and name == 'system.posix_acl_access':
                     return acl
                 raise OSError(errno.ENODATA, 'No ACL')
-            with self.subTest(uid=uid), self.launcher() as (execute, _, stderr), \
+            with self.subTest(uid=uid), self.launcher() as (execute, _, stderr),\
                  patch.object(hosted.os, 'getxattr', side_effect=access_acl):
                 self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), expected, stderr.getvalue())
                 self.assertEqual(execute.called, expected == 0)
@@ -302,7 +307,7 @@ class HostedTests(unittest.TestCase):
                 return acl
             raise OSError(errno.ENODATA, 'No ACL')
         self.assertEqual(self.output.stat().st_mode & 0o022, 0)
-        with self.launcher() as (execute, _, stderr), \
+        with self.launcher() as (execute, _, stderr),\
              patch.object(hosted.os, 'getxattr', side_effect=inherited_acl):
             self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 2)
             execute.assert_not_called()
@@ -605,7 +610,7 @@ class HostedTests(unittest.TestCase):
 
     def test_lock_is_still_held_and_inheritable_at_exec(self):
         observed = []
-        with self.launcher() as (execute, _, _), \
+        with self.launcher() as (execute, _, _),\
              patch.object(hosted.os, 'set_inheritable', wraps=os.set_inheritable) as inherit:
             def inspect_exec(*_):
                 fd = inherit.call_args.args[0]
@@ -643,7 +648,7 @@ class HostedTests(unittest.TestCase):
         sudo.chmod(0o755)
         env = {**os.environ, 'PATH': str(binary) + ':' + os.environ.get('PATH', ''),
                'AE_HOSTED_LAUNCHER': '/usr/local/sbin/deltabox-ae-run', 'AE_PYTHON': '/must-not-run'}
-        flags = ['--runtime-repo', '/other', '--smoke']
+        flags = ['--runtime-repo', '/other', '--test']
         result = subprocess.run(['bash', str(ROOT / 'ae/run_all.sh'), *flags], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), ['-n', '--', env['AE_HOSTED_LAUNCHER'],

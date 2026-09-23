@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,11 +21,35 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 
 
 class ReviewTests(unittest.TestCase):
+    def test_quick_check_entrypoint_forwards_paths_and_returns_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            fake = base / 'python'
+            fake.write_text('#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps(sys.argv[1:]))\nsys.exit(7)\n')
+            fake.chmod(0o755)
+            flags = ['--config', str(base / 'config with spaces.json'),
+                     '--output', str(base / 'output with spaces')]
+            env = {**os.environ, 'AE_PYTHON': str(fake), 'AE_HOSTED_LAUNCHER': ''}
+            completed = subprocess.run(['bash', str(ROOT / 'ae/run_test.sh'), *flags],
+                                       cwd=base, env=env, capture_output=True, text=True)
+            self.assertEqual(completed.returncode, 7, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout),
+                             [str(ROOT / 'ae/scripts/run_review.py'), '--test', *flags])
+
+    def test_legacy_check_option_is_supported_but_not_advertised(self):
+        self.assertEqual(vars(review.parser().parse_args(['--test'])),
+                         vars(review.parser().parse_args(['--smoke'])))
+        self.assertNotIn('--smoke', review.parser().format_help())
+        identity = {'source_commit': 'a' * 40, 'source_sha256': 'b' * 64}
+        with patch.object(review, 'current_source', return_value=identity):
+            path = review.default_output(review.parser().parse_args(['--test']))
+        self.assertEqual(path, ROOT / 'ae/results/aaaaaaaaaaaa/checks/quick-check')
+
     def test_summary_links_existing_bilingual_pages_for_current_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with patch.object(review, "current_source", return_value=SOURCE):
-                runner = review.Review(review.parser().parse_args(["--smoke"]), {}, root)
+                runner = review.Review(review.parser().parse_args(["--test"]), {}, root)
             old = root / "comparison/attempt-001"
             old.mkdir(parents=True)
             for filename in ("README.md", "README-zh.md"):
@@ -77,7 +102,7 @@ class ReviewTests(unittest.TestCase):
                     suite = Path(argv[argv.index('--output') + 1])
                     content = {'jobs': [{'experiment': exp, 'key': exp + '__' + str(n),
                                         'command': ['python', 'fixture.py', '--out', str(suite / (exp + '__' + str(n)))],
-                                        'run_purpose': 'smoke' if runner.limits else 'full-cohort', **(timing or {})} for n in range(2)]}
+                                        'run_purpose': 'quick-check' if runner.limits else 'full-cohort', **(timing or {})} for n in range(2)]}
                     plans[exp] = content
                 elif name.endswith('-inputs'):
                     exp = name.removesuffix('-inputs')
@@ -98,8 +123,8 @@ class ReviewTests(unittest.TestCase):
             def fake_gpu(runner):
                 runner.record['coverage'].append(dict(experiment='figure-08-gpu', status='failed' if gpu_failure else 'ok',
                                                        planned_jobs=8, available_jobs=8, successful_jobs=0 if gpu_failure else 8))
-            with patch.object(review, 'execute', side_effect=fake_execute), \
-                    patch.object(review, 'run_gpu', side_effect=fake_gpu), \
+            with patch.object(review, 'execute', side_effect=fake_execute),\
+                    patch.object(review, 'run_gpu', side_effect=fake_gpu),\
                     patch.object(review, 'finish_gpu', return_value=None), contextlib.redirect_stdout(io.StringIO()):
                 if interrupt:
                     with self.assertRaises(KeyboardInterrupt):
@@ -185,11 +210,11 @@ class ReviewTests(unittest.TestCase):
                 row = next(row for row in record['coverage'] if row['experiment'] == 'table-02-replay')
                 self.assertEqual((row['status'], row['planned_jobs'], row['successful_jobs']), ('partial', 2, 1))
 
-    def test_smoke_stays_small_and_defaults_to_requested_numa_frequency_controls(self):
-        code, record, commands, _ = self.exercise(['--smoke'])
+    def test_quick_check_stays_small_and_defaults_to_requested_numa_frequency_controls(self):
+        code, record, commands, _ = self.exercise(['--test'])
         self.assertEqual(code, 0)
         self.assertEqual(record['experiments'], ['table-02-deltabox'])
-        self.assertEqual(record['run_purpose'], 'smoke')
+        self.assertEqual(record['run_purpose'], 'quick-check')
         self.assertEqual(commands['table-02-deltabox-plan'][-4:], ['--limit', '1', '--max-events', '3'])
         command = commands['table-02-deltabox-run']
         self.assertEqual(command[command.index('--node') + 1], '2')
@@ -197,12 +222,12 @@ class ReviewTests(unittest.TestCase):
         self.assertIn(str(ROOT / 'ae/scripts/run_pinned_measurement.py'), command)
 
     def test_no_pin_requires_explicit_flag(self):
-        _, record, commands, _ = self.exercise(['--smoke', '--no-pin'])
+        _, record, commands, _ = self.exercise(['--test', '--no-pin'])
         self.assertFalse(record['pinned'])
         self.assertNotIn('--node', commands['table-02-deltabox-run'])
 
     def test_self_built_config_can_disable_host_pin_without_cli_flag(self):
-        _, record, commands, _ = self.exercise(['--smoke'], config_extra={'measurement': {'pin': False}})
+        _, record, commands, _ = self.exercise(['--test'], config_extra={'measurement': {'pin': False}})
         self.assertFalse(record['pinned'])
         self.assertFalse(record['coverage'][0]['measurement']['pinned'])
         self.assertNotIn('--node', commands['table-02-deltabox-run'])
@@ -210,7 +235,7 @@ class ReviewTests(unittest.TestCase):
     def test_explicit_pin_flags_enable_unless_no_pin_overrides(self):
         for flags, expected in [(['--numa-node', '0', '--cpus', '0-3'], True),
                                 (['--numa-node', '0', '--no-pin'], False)]:
-            _, record, commands, _ = self.exercise(['--smoke', *flags], config_extra={'measurement': {'pin': False}})
+            _, record, commands, _ = self.exercise(['--test', *flags], config_extra={'measurement': {'pin': False}})
             self.assertEqual(record['coverage'][0]['measurement']['pinned'], expected)
             self.assertEqual('--node' in commands['table-02-deltabox-run'], expected)
 
@@ -263,14 +288,14 @@ class ReviewTests(unittest.TestCase):
                     self.assertEqual(Path(prefix), environment)
 
     def test_failed_analysis_still_generates_missing_comparison_panels(self):
-        code, _, commands, _ = self.exercise(['--smoke'], failures={'analyze'})
+        code, _, commands, _ = self.exercise(['--test'], failures={'analyze'})
         self.assertEqual(code, 1)
         self.assertNotIn('plot', commands)
         self.assertIn('paper-comparison', commands)
         self.assertNotIn('--analysis', commands['paper-comparison'])
 
     def test_comparison_coverage_is_immutable_after_live_review_finishes(self):
-        _, record, commands, files = self.exercise(['--smoke'])
+        _, record, commands, files = self.exercise(['--test'])
         coverage = record['comparison_coverage']
         snapshot = files['coverage/attempt-001/review.json']
         self.assertEqual(hashlib.sha256(snapshot.encode()).hexdigest(), coverage['sha256'])
@@ -287,10 +312,10 @@ class ReviewTests(unittest.TestCase):
         self.assertNotIn('paper-comparison', commands)
 
     def test_failed_dependency_and_interruption_preserve_failure(self):
-        code, record, commands, _ = self.exercise(['--smoke'], failures={'verify'})
+        code, record, commands, _ = self.exercise(['--test'], failures={'verify'})
         self.assertEqual((code, record['status']), (1, 'failed'))
         self.assertEqual(set(commands), {'prepare', 'verify'})
-        code, record, _, _ = self.exercise(['--smoke'], interrupt='table-02-deltabox-run')
+        code, record, _, _ = self.exercise(['--test'], interrupt='table-02-deltabox-run')
         self.assertEqual((code, record['status']), (130, 'interrupted'))
         self.assertEqual(record['steps'][-1]['status'], 'interrupted')
         self.assertEqual(record['coverage'][-1]['status'], 'interrupted')
@@ -370,8 +395,8 @@ class ReviewTests(unittest.TestCase):
                 image.write_bytes(b'modified')
                 # Preserve all five stat fields, then advance the clock:
                 # neither the old manifest nor an aged ambiguous cache is proof.
-                with patch.object(review, 'REPO', root), \
-                     patch.object(provenance, 'signature', return_value=identity), \
+                with patch.object(review, 'REPO', root),\
+                     patch.object(provenance, 'signature', return_value=identity),\
                      patch.object(provenance.time, 'time_ns', return_value=stamp + 10 * provenance._RACY_STAT_NS):
                     with self.assertRaisesRegex(ValueError, 'source image changed'):
                         review.verify_reused_images(manifest, cache=cache)
@@ -386,8 +411,8 @@ class ReviewTests(unittest.TestCase):
             stamp = max(identity['mtime_ns'], identity['ctime_ns'])
             manifest = {'images': {'data_xfs': {**identity, 'sha256': hashlib.sha256(b'original').hexdigest()}}}
             cache = root / 'resume-images.json'
-            with patch.object(review, 'REPO', root), \
-                 patch.object(provenance.time, 'time_ns', return_value=stamp + 2 * provenance._RACY_STAT_NS), \
+            with patch.object(review, 'REPO', root),\
+                 patch.object(provenance.time, 'time_ns', return_value=stamp + 2 * provenance._RACY_STAT_NS),\
                  patch.object(provenance, 'file_digest', wraps=provenance.file_digest) as hash_file:
                 review.verify_reused_images(manifest, cache=cache)
                 review.verify_reused_images(manifest, cache=cache)
@@ -416,8 +441,8 @@ class ReviewTests(unittest.TestCase):
             output = root / 'output'
             output.mkdir()
             cache = output / f'.resume-image-hashes-{review.os.geteuid()}.json'
-            with patch.object(review, 'REPO', root / 'repo'), \
-                 patch.object(provenance.time, 'time_ns', return_value=stamp + 2 * provenance._RACY_STAT_NS), \
+            with patch.object(review, 'REPO', root / 'repo'),\
+                 patch.object(provenance.time, 'time_ns', return_value=stamp + 2 * provenance._RACY_STAT_NS),\
                  patch.object(provenance, 'file_digest', wraps=provenance.file_digest) as hash_file:
                 review.verify_reused_images(manifest, cache=cache)
                 review.verify_reused_images(manifest, cache=cache)
@@ -455,7 +480,7 @@ class ReviewTests(unittest.TestCase):
                 runner.prepare_resume(plan, suite, row)
 
     def test_pinning_envelope_sums_per_job_deadlines(self):
-        _, record, commands, _ = self.exercise(['--smoke'], timing={'timeout_s': 1000, 'recorded_wait_s': 500})
+        _, record, commands, _ = self.exercise(['--test'], timing={'timeout_s': 1000, 'recorded_wait_s': 500})
         command = commands['table-02-deltabox-run']
         self.assertEqual(float(command[command.index('--timeout') + 1]), 2240)
         self.assertEqual(record['coverage'][0]['recorded_wait_s'], 1000)
@@ -478,7 +503,7 @@ class ReviewTests(unittest.TestCase):
     def test_analysis_only_does_not_verify_current_measurement_source_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = review.parser().parse_args(['--analyze-existing', tmp])
-            with patch.object(review, 'current_source', side_effect=ValueError('new source differs')), \
+            with patch.object(review, 'current_source', side_effect=ValueError('new source differs')),\
                  patch.object(review, 'working_source', return_value=SOURCE):
                 runner = review.Review(args, {}, Path(tmp) / 'new')
             self.assertEqual(runner.record['release'], {})
@@ -505,10 +530,10 @@ class ReviewTests(unittest.TestCase):
             def verified():
                 observed.append(review.os.environ.get('DELTABOX_RELEASE_LOCK'))
                 return SOURCE
-            with patch.dict(review.os.environ, {}, clear=True), \
-                 patch.object(review.sys, 'platform', 'linux'), \
-                 patch.object(review, 'from_environment', side_effect=verified), \
-                 patch.object(review, 'working_source', side_effect=AssertionError('must be locked')), \
+            with patch.dict(review.os.environ, {}, clear=True),\
+                 patch.object(review.sys, 'platform', 'linux'),\
+                 patch.object(review, 'from_environment', side_effect=verified),\
+                 patch.object(review, 'working_source', side_effect=AssertionError('must be locked')),\
                  patch.object(review.Review, 'run', return_value=0), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.main(['--config', str(config), '--output', str(base / 'new')]), 0)
                 self.assertEqual(review.os.environ['DELTABOX_RELEASE_LOCK'], str(ROOT / 'release/candidate-lock.json'))
@@ -520,9 +545,9 @@ class ReviewTests(unittest.TestCase):
             config = base / 'config.json'
             config.write_text('{}')
             explicit = 'selected-release-lock.json'
-            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': explicit}), \
-                 patch.object(review.sys, 'platform', 'linux'), \
-                 patch.object(review, 'from_environment', side_effect=ValueError('release source mismatch')), \
+            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': explicit}),\
+                 patch.object(review.sys, 'platform', 'linux'),\
+                 patch.object(review, 'from_environment', side_effect=ValueError('release source mismatch')),\
                  patch.object(review, 'working_source', side_effect=AssertionError('no unlocked fallback')):
                 with self.assertRaisesRegex(ValueError, 'release source mismatch'):
                     review.main(['--config', str(config), '--output', str(base / 'new')])
@@ -532,10 +557,10 @@ class ReviewTests(unittest.TestCase):
     def test_list_and_analysis_do_not_select_or_verify_current_release_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/stale-lock.json'}), \
-                 patch.object(review, 'select_measurement_lock', side_effect=AssertionError('measurement only')), \
-                 patch.object(review, 'from_environment', side_effect=AssertionError('measurement only')), \
-                 patch.object(review, 'working_source', return_value=SOURCE), \
+            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/stale-lock.json'}),\
+                 patch.object(review, 'select_measurement_lock', side_effect=AssertionError('measurement only')),\
+                 patch.object(review, 'from_environment', side_effect=AssertionError('measurement only')),\
+                 patch.object(review, 'working_source', return_value=SOURCE),\
                  patch.object(review.Review, 'run', return_value=0), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.main(['--list']), 0)
                 self.assertEqual(review.main(['--analyze-existing', str(base), '--output', str(base / 'new')]), 0)
@@ -574,7 +599,7 @@ class ReviewTests(unittest.TestCase):
             outside.write_text('not an output')
             outside.chmod(0o666)
             (output / 'source').symlink_to(outside)
-            with patch.dict(review.os.environ, {'AE_HOSTED_CALLER_UID': '7001', 'SUDO_UID': '7001', 'SUDO_GID': '7001'}), \
+            with patch.dict(review.os.environ, {'AE_HOSTED_CALLER_UID': '7001', 'SUDO_UID': '7001', 'SUDO_GID': '7001'}),\
                  patch.object(review.os, 'geteuid', return_value=0), patch.object(review.os, 'chown') as chown:
                 review.make_output_accessible(output)
             self.assertTrue(all(call.args[1:3] == (0, 0) for call in chown.call_args_list))
@@ -596,8 +621,8 @@ class ReviewTests(unittest.TestCase):
                 calls.append(argv)
                 budgets.append(kwargs['timeout'])
                 return dict(status='failed' if argv == ['false'] else 'ok')
-            with patch.object(review, 'execute', side_effect=execute), patch.object(review, 'repository_state', return_value={}), \
-                 patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE), \
+            with patch.object(review, 'execute', side_effect=execute), patch.object(review, 'repository_state', return_value={}),\
+                 patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
             self.assertEqual(calls, [['false'], ['true']])
@@ -622,9 +647,9 @@ class ReviewTests(unittest.TestCase):
                 if path.name == 'cleanup-error':
                     raise ValueError('artifact conflict')
                 return dict(status='ok', removed=[])
-            with patch.object(review, 'execute', side_effect=execute), patch.object(review, 'repository_state', return_value={}), \
-                 patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE), \
-                 patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=cleanup), \
+            with patch.object(review, 'execute', side_effect=execute), patch.object(review, 'repository_state', return_value={}),\
+                 patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE),\
+                 patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=cleanup),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
             self.assertEqual(order, ['producer-exited:bad', 'producer-exited:cleanup-error', 'cleanup:cleanup-error',
@@ -640,11 +665,11 @@ class ReviewTests(unittest.TestCase):
             suite = root / 'suite'
             review.write_json(plan, dict(review_output=str(suite), review_timeout=1, jobs=[
                 dict(key='fixture', command=['true'], run_purpose='full-trace')]))
-            with patch.object(review, 'execute', return_value=dict(status='ok')), \
-                 patch.object(review, 'repository_state', return_value={}), \
-                 patch.object(review, 'host_state', return_value={}), \
-                 patch.object(review, 'from_environment', return_value=SOURCE), \
-                 patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=KeyboardInterrupt()), \
+            with patch.object(review, 'execute', return_value=dict(status='ok')),\
+                 patch.object(review, 'repository_state', return_value={}),\
+                 patch.object(review, 'host_state', return_value={}),\
+                 patch.object(review, 'from_environment', return_value=SOURCE),\
+                 patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=KeyboardInterrupt()),\
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(KeyboardInterrupt):
                     review.execute_plan(plan)

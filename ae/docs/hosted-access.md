@@ -19,14 +19,16 @@ root 策略、私有环境、启动程序和运行控制文件继续由 root 管
 仅检查入口权限和可选实验名称，不执行实验：
 
 ```bash
-cd ~/deltabox-runtime
+cd ~/delta-box-ae
 bash ae/run_all.sh --list
 ```
 
 
-## 完整 CPU/GPU 一键入口
+## 快速检查与完整实验入口
 
-作者更新部署时，同步安装仓库中的 `ae/scripts/hosted_launcher.py`，使托管入口接受 `--group gpu`、`--group cpu` 和 `--group figure-08-cpu`。默认完整运行输出到 `ae/results/<源码版本>/full/`；`--smoke` 仍为最小 CPU 检查。
+评审账号的 `~/delta-box-ae` 应指向策略中 `runtime_root` 配置的发布仓库。发布时一并更新 `ae/run_test.sh` 和 `ae/run_all.sh`。
+
+作者更新部署时，同步安装仓库中的 `ae/scripts/hosted_launcher.py`，使托管入口接受 `--group gpu`、`--group cpu` 和 `--group figure-08-cpu`。默认完整运行输出到 `ae/results/<源码版本>/full/`；`bash ae/run_test.sh` 仍为最小 CPU 检查。
 
 在 root 管理的 `/etc/deltabox-ae/review.json` 中，通过 `gpu.config` 指向作者配置的 GPU JSON，填写本机模型、Python 环境和分配的设备，删除旧的 `gpu.enabled=false` 设置。具体字段见[自建环境指南](self-hosting-zh.md#gpu-setup)。完整运行要求同节点四张空闲 GPU；评审者不通过命令行覆盖这些固定配置。
 

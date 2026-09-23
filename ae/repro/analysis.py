@@ -142,7 +142,7 @@ def select_delta(ev, table="table-02", mode="fast", allow_missing=False):
         elif not completed(rows):
             reason = "failed or missing final run_summary"
         elif any(counts[k] != int(cohort[instance]["n_" + k]) for k in ("ckpt", "restore")):
-            reason = "event counts differ from complete cohort schedule (smoke or incomplete)"
+            reason = "event counts differ from complete cohort schedule (quick-check or incomplete)"
         rel = str(path.relative_to(ev.root))
         if reason:
             rejected.append(dict(path=rel, instance=instance, reason=reason))
@@ -298,7 +298,7 @@ def table2(ev):
         "FC and CRIU raw events are absent; their means are recomputed from per-trace summaries.",
         "Replay zero-LLM correction is aggregate-only; per-restore served completion prefixes are absent.",
         "Replay checkpoint is once per trace; FC checkpoint includes its initial full snapshot.",
-        "Fast run_config.json was overwritten by a later smoke run; historical full-run settings remain unresolved."])
+        "Fast run_config.json was overwritten by a later quick-check run; historical full-run settings remain unresolved."])
 
 
 FAST_COMPONENTS = ("checkpoint_overlay_ms", "checkpoint_fork_ms", "checkpoint_sync_no_dump_ms", "ckpt_wall_ms",
@@ -1329,14 +1329,14 @@ def fresh_e2b_derived(runs):
         for name, value, unit in (('floor_s', floor/1000, 's'), ('wall_s', (floor+state)/1000, 's'), ('ratio', 1+state/floor, 'ratio')):
             metrics.append(metric(name, value, unit, len(values), 'derived_model', backend='e2b', group=group,
                                   statistic='ratio-of-sums' if name == 'ratio' else 'sum',
-                                  modeled=True, formula='1 + sum(resume + checkpoint_persist) / sum(served controller build_action RTT + action wall including execution LLM waits)',
+                                  modeled=True, formula='1 + sum(resume + checkpoint_persist) / sum(served controller build_action RTT + action elapsed time including execution LLM waits)',
                                   **values[0][2]))
     selected = [r for r in selected if fresh_labels(r.config)['cohort'] not in incomplete]
     if not metrics:
         return unavailable('No complete E2B controller RTT/action evidence', missing=missing)
     return measured_result(metrics=metrics, runs=selected, selection=dict(missing=missing), limitations=[
-        'E2B serialized component model (worker mode is part of the population), not measured end-to-end wall time. Setup, command transport and controller scaffolding are excluded.',
-        'Only served controller build_action RTT is added to action wall; execution LLM waits already inside action wall are not added again. This corrects the archived all-RTT-plus-action formula.'])
+        'E2B serialized component model (worker mode is part of the population), not measured end-to-end elapsed time. Setup, command transport and controller scaffolding are excluded.',
+        'Only served controller build_action RTT is added to action elapsed time; execution LLM waits already inside action elapsed time are not added again. This corrects the archived all-RTT-plus-action formula.'])
 
 
 def analyze_fresh(input_root, output=None):
@@ -1458,7 +1458,7 @@ def analyze_fresh(input_root, output=None):
     if metrics:
         results["table-02"] = measured_result(metrics=metrics, runs=table_runs, selection=dict(runs=selections), limitations=[
             "Full controller API latency is distinct from the paper's internal critical timers.",
-            "Experiments, modes, checkpoint profiles, adaptive/policy arms and smoke/full purposes remain separate.",
+            "Experiments, modes, checkpoint profiles, adaptive/policy arms and quick-check/full purposes remain separate.",
             "Replay checkpoint is a pristine-copy proxy. Paper replay-sleep-subtracted-estimate subtracts the served completion prefix's recorded RTT after execution, replay-including-llm retains it, and replay-zero-llm reports the measured duration with zero LLM delay. These populations remain separate."])
     if components:
         results["table-03"] = measured_result(metrics=components, runs=table_runs, limitations=[

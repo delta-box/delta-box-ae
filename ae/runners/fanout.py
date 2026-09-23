@@ -34,7 +34,7 @@ def main():
         command+=['--'+args.backend+'-'+key.replace('_','-'),value]
     if args.backend=='e2b':command+=['--e2b-batch-size','16','--max-workers','16']
     record={'experiment':'figure-08-'+args.backend,'backend':args.backend,'runtime':repository_state(),'release':release,'host':host_state(),
-        'analysis_mode':'fresh-measurement','run_purpose':run_purpose('smoke' if forks != [1,4,16,64] else 'full-trace'),'driver':file_record(driver),'command':command,
+        'analysis_mode':'fresh-measurement','run_purpose':run_purpose('quick-check' if forks != [1,4,16,64] else 'full-trace'),'driver':file_record(driver),'command':command,
         'status':'planned' if args.dry_run else 'running','expected_forks':forks,
         'protocol':'E2B: one snapshot; measured sequential <=16-child batches, including inter-batch cleanup. No estimated timing.'}
     if args.backend == 'cube' and not args.dry_run:

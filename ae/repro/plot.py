@@ -410,7 +410,7 @@ def render(input_path, output):
             variants = [('', dict(result, plot_populations=groups))]
         elif summary["source"] == "fresh":
             # Plot each population independently; a line must never join different
-            # checkpoint profiles or smoke/full measurements at the same x.
+            # checkpoint profiles or quick-check/full measurements at the same x.
             field = ("run_purpose" if key == "figure-08" and not any(
                 "plot_group" in row for row in result["metrics"]+result["series"]) else "plot_group")
             keys = sorted({r.get(field, "") for r in result["metrics"]+result["series"]})

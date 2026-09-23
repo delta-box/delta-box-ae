@@ -37,7 +37,7 @@ S = (T_sandbox + T_gen) / T_train
 
 ```sh
 python3 ae/runners/gpu_timing.py plan
-python3 ae/runners/gpu_timing.py plan --smoke
+python3 ae/runners/gpu_timing.py plan --test
 ```
 
 默认生成八个任务：
@@ -59,7 +59,7 @@ python3 ae/runners/gpu_timing.py plan --smoke
 ## GPU 机器需要提供什么
 
 - 单节点四张可独占的完整 NVIDIA GPU，支持 BF16 和 NCCL；论文使用 H20、96 GB/卡。其他型号也可记录为新硬件条件。
-- 原记录的单卡训练 peak allocated 约 38 GiB，四卡 FSDP 约 34 GiB/卡；generation 在 96 GB 卡上配置了 0.5 显存利用率。这些不含所有驱动/缓存保留空间，不能当作最低显存保证。建议提供 80/96 GB 卡；小卡先运行 B1 smoke，不自动缩小正式参数。
+- 原记录的单卡训练 peak allocated 约 38 GiB，四卡 FSDP 约 34 GiB/卡；generation 在 96 GB 卡上配置了 0.5 显存利用率。这些不含所有驱动/缓存保留空间，不能当作最低显存保证。建议提供 80/96 GB 卡；小卡先运行 B1 快速检查，不自动缩小正式参数。
 - 本地 `Qwen2.5-7B-Instruct` Hugging Face 权重、config 与 tokenizer 文件。脚本不自动下载模型。
 - Linux、Python 3.10+ 和匹配驱动的 CUDA 环境。generation 需要 vLLM；training 需要 torch、transformers、peft、accelerate。可使用两个独立 Python 环境。
 - 建议主机 RAM 至少 128 GB：FSDP 初始化时每个 rank 会加载模型。另需模型所在磁盘和可写结果目录。GPU 机器不需要部署 sandbox/KVM 服务来测量 (b)。
@@ -77,11 +77,11 @@ python3 ae/runners/gpu_timing.py check \
   --training-python /envs/lora/bin/python
 
 # 先验证单卡完整调用链，不代表八个正式任务完成。
-python3 ae/runners/gpu_timing.py run --smoke \
+python3 ae/runners/gpu_timing.py run --test \
   --model /models/Qwen2.5-7B-Instruct --devices 0 \
   --generation-python /envs/vllm/bin/python \
   --training-python /envs/lora/bin/python \
-  --output ae/results/figure08-gpu-smoke
+  --output ae/results/figure08-gpu-check
 
 # 完整矩阵；每个任务单独进程，串行运行以释放模型显存。
 python3 ae/runners/gpu_timing.py run \

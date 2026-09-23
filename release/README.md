@@ -5,7 +5,7 @@
 spr4numa 的开发和验收统一使用 `/mnt/disk2/dyp/deltabox-runtime`。托管配置是 `/etc/deltabox-ae/review.json`，可公开的路径说明见 [`spr4numa-review.json`](../ae/configs/spr4numa-review.json)。API 凭据留在机器的私有环境文件中，不进入仓库。评审账号登录后直接执行：
 
 ```bash
-cd ~/deltabox-runtime
+cd ~/delta-box-ae
 bash ae/run_all.sh
 ```
 
@@ -56,7 +56,7 @@ sudo -n python3 replay/run_release.py --config ae/configs/spr4numa-replay-fixes.
 
 `run_release.py` 每次启动及 suite 每个 job 前验证源码锁；实验结束再次验证。
 默认跑 Table 2 DeltaBox 12 条完整轨迹（317 checkpoint / 334 restore），NUMA 2 / CPU 52–55，
-请求最高 P-state 并保存实际频率。结果目录不可复用。`--limit`、`--max-events` 总是标为 smoke。
+请求最高 P-state 并保存实际频率。结果目录不可复用。`--limit`、`--max-events` 总是标为 快速检查。
 `--plan` 只生成计划。本轮配置和镜像路径见 `ae/configs/spr4numa-replay-fixes.json`。
 
 ```bash

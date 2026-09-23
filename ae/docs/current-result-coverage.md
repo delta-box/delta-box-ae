@@ -21,4 +21,4 @@
 - [Figure 9 完整结果与输入审计](https://github.com/delta-box/deltabox-runtime/blob/main/ae/results/6728d7c47a22/figure09-memory/README.md)
 - [其余图片所用首输入批次](https://github.com/delta-box/deltabox-runtime/blob/main/ae/results/c775a9215718/README.md)
 
-图上都有数据不等于全部输入已完成。E2B 失败轨迹、暂停的 DeltaBox 5/12 批次和短程 smoke 均未混入所选统计。原始 run.json 保留真实测量源码、配置与状态；重新分析与绘图版本另行绑定。完整 1,392-job CPU 评测仍未全部完成。
+图上都有数据不等于全部输入已完成。E2B 失败轨迹、暂停的 DeltaBox 5/12 批次和短程 快速检查 均未混入所选统计。原始 run.json 保留真实测量源码、配置与状态；重新分析与绘图版本另行绑定。完整 1,392-job CPU 评测仍未全部完成。

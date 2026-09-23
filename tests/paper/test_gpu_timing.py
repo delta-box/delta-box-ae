@@ -88,8 +88,8 @@ class ProtocolTests(unittest.TestCase):
                                     'plan', '--output', str(output)], cwd=ROOT, capture_output=True)
             self.assertNotEqual(again.returncode, 0)
 
-    def test_smoke_needs_only_one_gpu_and_is_not_full_matrix(self):
-        config = self.config(smoke=True)
+    def test_quick_check_needs_only_one_gpu_and_is_not_full_matrix(self):
+        config = self.config(quick_check=True)
         plan = runner.plan(config)
         self.assertEqual(plan['required_simultaneous_gpus'], 1)
         self.assertEqual([(c['batch'], c['reps']) for c in plan['cases']], [(1, 1), (1, 1)])
@@ -143,7 +143,7 @@ class ProtocolTests(unittest.TestCase):
     def test_generation_applies_and_records_prefix_cache_policy(self):
         for enabled in (True, False):
             with self.subTest(enabled=enabled):
-                config = self.config(devices=['0'], smoke=True)
+                config = self.config(devices=['0'], quick_check=True)
                 config['generation']['enable_prefix_caching'] = enabled
                 case = protocol.cases(config)[0]
                 output = SimpleNamespace(prompt_token_ids=[1], outputs=[
@@ -152,9 +152,9 @@ class ProtocolTests(unittest.TestCase):
                 engine.generate.return_value = [output]
                 llm = Mock(return_value=engine)
                 sampler = SimpleNamespace(samples=[], errors=[])
-                with patch.dict(sys.modules, {'vllm': SimpleNamespace(LLM=llm, SamplingParams=Mock())}), \
-                     patch.object(worker, 'generation_inputs', return_value=(['prompt'], [1], [1])), \
-                     patch.object(worker, 'UtilSampler', side_effect=lambda _: contextlib.nullcontext(sampler)), \
+                with patch.dict(sys.modules, {'vllm': SimpleNamespace(LLM=llm, SamplingParams=Mock())}),\
+                     patch.object(worker, 'generation_inputs', return_value=(['prompt'], [1], [1])),\
+                     patch.object(worker, 'UtilSampler', side_effect=lambda _: contextlib.nullcontext(sampler)),\
                      patch.object(worker, 'hardware', return_value={}):
                     result = worker.generation(config, case, Mock())
                 self.assertIs(llm.call_args.kwargs['enable_prefix_caching'], enabled)
@@ -181,7 +181,7 @@ class ProtocolTests(unittest.TestCase):
             cuDeviceGet = Function(lambda pointer, ordinal: assign(pointer, ordinal))
             cuDeviceGetUuid = Function(identity)
         expected = ['GPU-' + str(item) for item in physical]
-        with patch.dict(os.environ, {'CUDA_VISIBLE_DEVICES': '6,8', 'CUDA_DEVICE_ORDER': 'PCI_BUS_ID'}), \
+        with patch.dict(os.environ, {'CUDA_VISIBLE_DEVICES': '6,8', 'CUDA_DEVICE_ORDER': 'PCI_BUS_ID'}),\
                 patch('ctypes.CDLL', return_value=Driver()):
             selection = worker.verify_visible_cuda_devices(expected)
             self.assertEqual(selection['verified_device_uuids'], expected)
@@ -194,7 +194,7 @@ class ProtocolTests(unittest.TestCase):
             load.assert_not_called()
 
     def test_invalid_measurement_never_becomes_an_average(self):
-        case = protocol.cases(self.config(smoke=True))[0]
+        case = protocol.cases(self.config(quick_check=True))[0]
         raw = measurement(case)
         self.assertAlmostEqual(protocol.validate_result(raw, case, 'sha', ['GPU-fixture'])['mean'], .25)
         for update in ({'gpu_verified': False}, {'batch': 64}, {'config_sha256': 'other'},
@@ -280,7 +280,7 @@ class SuiteTests(unittest.TestCase):
         (model / 'config.json').write_text('{"model_type":"qwen2"}')
         (model / 'model.safetensors').write_bytes(b'fixture weights, never loaded')
         with patch.dict(os.environ, {'CUDA_VISIBLE_DEVICES': ''}):
-            self.config = protocol.load_config(model_path=str(model), devices=['0'], smoke=True)
+            self.config = protocol.load_config(model_path=str(model), devices=['0'], quick_check=True)
         self.ready = dict(ok=True, selected_gpus=[{'uuid': 'GPU-fixture', 'index': '0'}], initial_gpu_processes=[])
 
     def executor(self, argv, output, **kwargs):

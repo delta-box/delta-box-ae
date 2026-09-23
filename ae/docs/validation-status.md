@@ -231,7 +231,7 @@ Host CRIU 与 guest CRIU 是不同依赖；历史 DeltaBox VM 使用镜像内的
 **最新异步增量实测使用另一份独立产物：**
 
 - kernel：`/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed`，SHA-256 `fa09edb1891d893dbad6136b0dcfb4deac9c5126513df3b6312c278b0d521808`。在独立源码副本修复旧 FD 的匿名 backing，增量重编译；原 kernel、rootfs 未改。构建位置、补丁与语义用例见[OverlayFS 修复证据][overlay-fix]，不声称 clean build 或论文 53-case 全通过。
-- CRIU：基于 4.2 commit `2cf8f13ca1f11a0491977e438b262e646137256c` 的 `exact-parent-v1` 扩展；实测 ELF SHA-256 `ce39d625bef154708270f92b8dad37b1002b2f7183f474995dabd0674bdb6d6f`。新 profile 的 dump / restore 使用同一固定 ELF，精确比较开关仅给 dump；stock 4.2 restore 兼容性另有独立探针和 Requests cold smoke。见[构建锁与使用边界][async-criu]。
+- CRIU：基于 4.2 commit `2cf8f13ca1f11a0491977e438b262e646137256c` 的 `exact-parent-v1` 扩展；实测 ELF SHA-256 `ce39d625bef154708270f92b8dad37b1002b2f7183f474995dabd0674bdb6d6f`。新 profile 的 dump / restore 使用同一固定 ELF，精确比较开关仅给 dump；stock 4.2 restore 兼容性另有独立探针和 Requests cold 快速检查。见[构建锁与使用边界][async-criu]。
 - host baseline 的私有原版 CRIU 4.2、上述 guest 扩展和系统 3.16.1 分别记录，不能混称“同一个 CRIU”；没有覆盖系统二进制。该历史批次使用 `spr4numa:/mnt/disk2/dyp/async-incremental-frozen-20260922`；当前开发和验收统一使用 `/mnt/disk2/dyp/deltabox-runtime`。
 
 

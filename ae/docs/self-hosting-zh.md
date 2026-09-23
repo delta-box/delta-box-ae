@@ -75,7 +75,7 @@ sudo -v
 sudo -E "$AE_PYTHON" ae/reproduce.py doctor --config "$AE_CONFIG" --all
 "$AE_PYTHON" ae/reproduce.py plan --config "$AE_CONFIG" --all \
   > ae/work/local-cpu-plan.json
-bash ae/run_all.sh --config "$AE_CONFIG" --smoke
+bash ae/run_test.sh --config "$AE_CONFIG"
 ```
 
 `doctor` 检查依赖，`plan` 列出工作负载和命令，不启动实验。完成预检后，使用根 README 的单项命令；导出的 `AE_CONFIG` 会作为默认配置。
@@ -99,7 +99,7 @@ bash ae/run_all.sh --config "$AE_CONFIG" --smoke
 
 在主配置 `AE_CONFIG` 中添加 `"gpu": {"config": "/absolute/path/to/ae/work/gpu-local.json"}`。`gpu.config` 的相对路径以主配置文件所在目录为基准。托管机器由作者在固定配置中设置这些路径和设备；评审者无需传入模型或设备参数。不要保留旧的 `gpu.enabled=false` 设置。
 
-`bash ae/run_all.sh` 默认运行 CPU 和 GPU；`--group cpu` 只选 CPU，`--group gpu` 只选生成/训练，`--group figure-08` 包含 CPU fan-out、GPU 和理论计算。`--smoke` 保持最小 CPU 快速检查。GPU 预检失败不启动训练，也不会终止其他独立 CPU 实验；整轮仍为失败并保留日志。续跑时会校验并复用已成功的 GPU 矩阵；失败矩阵在新 attempt 中重试，原失败记录保留。
+`bash ae/run_all.sh` 默认运行 CPU 和 GPU；`--group cpu` 只选 CPU，`--group gpu` 只选生成/训练，`--group figure-08` 包含 CPU fan-out、GPU 和理论计算。`bash ae/run_test.sh` 保持最小 CPU 快速检查。GPU 预检失败不启动训练，也不会终止其他独立 CPU 实验；整轮仍为失败并保留日志。续跑时会校验并复用已成功的 GPU 矩阵；失败矩阵在新 attempt 中重试，原失败记录保留。
 
 ## 4. 专用配置与内存盘入口
 

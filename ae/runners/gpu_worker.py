@@ -224,7 +224,7 @@ def generation(config, case, torch):
                     context_limited=any(n + settings['out_tokens'] > settings['max_model_len'] for n in input_lengths),
                     prefix_caching=settings['enable_prefix_caching'],
                     warmup_batch=min(case['batch'], 2),
-                    timing='synchronous llm.generate API wall; explicit warmup/load excluded; first-use work may remain'),
+                    timing='synchronous llm.generate API duration; explicit warmup/load excluded; first-use work may remain'),
                 hardware=[hardware(torch, 0)])
 
 

@@ -15,7 +15,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = ("agent", "replay", "backends", "common", "upper", "worker", "npd", "pycriu",
-         "ae/run_all.sh", "ae/run_figure09.sh", "ae/run_table3.sh", "ae/reproduce.py", "ae/repro", "ae/runners", "ae/scripts", "ae/configs",
+         "ae/run_all.sh", "ae/run_test.sh", "ae/run_figure09.sh", "ae/run_table3.sh", "ae/reproduce.py", "ae/repro", "ae/runners", "ae/scripts", "ae/configs",
          "ae/vendor", "release", "run.py", "run_root_mcts.py", "run_root_sandbox.py")
 
 

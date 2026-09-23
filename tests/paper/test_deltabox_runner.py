@@ -164,7 +164,7 @@ class DeltaBoxProvenanceTests(unittest.TestCase):
             image.write_bytes(b'modified')
             # Force the real Linux same-tick collision deterministically. It
             # must still be detected if the caller comes back much later.
-            with patch.object(provenance, 'signature', return_value=identity), \
+            with patch.object(provenance, 'signature', return_value=identity),\
                  patch.object(provenance.time, 'time_ns', return_value=stamp + 10 * provenance._RACY_STAT_NS):
                 second = provenance.cached_digest(image, cache)
             self.assertEqual(second['sha256'], hashlib.sha256(b'modified').hexdigest())
@@ -255,8 +255,8 @@ class DeltaBoxRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             spec = run_instance.prepare_single_run(options(Path(tmp), ('--memory-policy', 'warm')))
             machine = SimpleNamespace(ssh_ready=True)
-            with patch.object(run_instance, 'collect_jsonl'), \
-                 patch.object(run_instance, 'collect_dmesg'), \
+            with patch.object(run_instance, 'collect_jsonl'),\
+                 patch.object(run_instance, 'collect_dmesg'),\
                  patch.object(run_instance, 'collect_diagnostics', side_effect=RuntimeError('warm evidence failed')):
                 with self.assertRaisesRegex(RuntimeError, 'warm evidence failed'):
                     with run_instance.collect_results_on_exit(machine, spec):
@@ -266,7 +266,7 @@ class DeltaBoxRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             args = options(Path(tmp), ("--mode", "slow", "--max-events", "3"))
             spec = run_instance.prepare_single_run(args)
-            self.assertEqual(spec.config["run_purpose"], "smoke")
+            self.assertEqual(spec.config["run_purpose"], "quick-check")
             self.assertEqual((spec.config["n_ckpt"], spec.config["n_restore"]), (2, 1))
             self.assertTrue(spec.config["incremental_dump_enabled"])
             self.assertEqual(spec.config["guest_env"]["DELTABOX_FORCE_CRIU_RESTORE"], "1")
@@ -329,11 +329,11 @@ class DeltaBoxRunnerTests(unittest.TestCase):
                     yield machine
                 finally:
                     stopped.append(True)
-            with patch.object(run_instance, "managed_vm", managed), \
-                 patch.object(run_instance, "upload_inputs"), \
-                 patch.object(run_instance, "execute_replay", side_effect=RuntimeError("guest failed")), \
-                 patch.object(run_instance, "collect_jsonl", side_effect=RuntimeError("collection failed")), \
-                 patch.object(run_instance, "collect_dmesg") as dmesg, \
+            with patch.object(run_instance, "managed_vm", managed),\
+                 patch.object(run_instance, "upload_inputs"),\
+                 patch.object(run_instance, "execute_replay", side_effect=RuntimeError("guest failed")),\
+                 patch.object(run_instance, "collect_jsonl", side_effect=RuntimeError("collection failed")),\
+                 patch.object(run_instance, "collect_dmesg") as dmesg,\
                  patch.object(run_instance, "collect_diagnostics") as diagnostics:
                 with self.assertRaisesRegex(RuntimeError, "guest failed"):
                     run_instance.run_guest(spec.config_path)
@@ -350,15 +350,15 @@ class DeltaBoxRunnerTests(unittest.TestCase):
             args.run_rootfs.parent.mkdir()
             process = Mock(pid=321)
             process.poll.return_value = None
-            with patch.object(run_instance.vm, "require_root"), \
-                 patch.object(run_instance.vm, "check_prereqs"), \
-                 patch.object(run_instance.vm, "prepare_rootfs"), \
-                 patch.object(run_instance.vm, "inject_ssh_key"), \
-                 patch.object(run_instance.vm, "setup_tap"), \
-                 patch.object(run_instance.vm, "route_guest_to_tap"), \
-                 patch.object(run_instance.vm.subprocess, "Popen", return_value=process), \
-                 patch.object(run_instance.vm.time, "sleep"), \
-                 patch.object(run_instance.vm, "fc_put", side_effect=RuntimeError("boot config failed")), \
+            with patch.object(run_instance.vm, "require_root"),\
+                 patch.object(run_instance.vm, "check_prereqs"),\
+                 patch.object(run_instance.vm, "prepare_rootfs"),\
+                 patch.object(run_instance.vm, "inject_ssh_key"),\
+                 patch.object(run_instance.vm, "setup_tap"),\
+                 patch.object(run_instance.vm, "route_guest_to_tap"),\
+                 patch.object(run_instance.vm.subprocess, "Popen", return_value=process),\
+                 patch.object(run_instance.vm.time, "sleep"),\
+                 patch.object(run_instance.vm, "fc_put", side_effect=RuntimeError("boot config failed")),\
                  patch.object(run_instance.vm, "run") as command:
                 with self.assertRaisesRegex(RuntimeError, "boot config failed"):
                     run_instance.vm.start_vm(args)

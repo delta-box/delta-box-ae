@@ -288,7 +288,7 @@ def run_one_restore(
         "mock_completion_wait_ms": mock_sleep_ms,
         "mock_sleep_wall_ms": mock_sleep_wall_ms,
         "llm_accounting": "served-completion-recorded-rtt-prefix" if MOCK_LATENCY_POLICY == "recorded" else "zero-injected-delay",
-        # Preserve both measured wall time and the paper sleep-subtracted view.
+        # Preserve both measured elapsed time and the paper sleep-subtracted view.
         "restore_zero_llm_ms": restore_ms - mock_sleep_ms,
         "replay_zero_llm_ms": replay_s * 1000.0 - mock_sleep_ms,
         "mock_latency_policy": MOCK_LATENCY_POLICY,

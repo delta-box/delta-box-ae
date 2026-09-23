@@ -125,8 +125,8 @@ def main():
     for name in ('doctor','plan','run'):
         p=sub.add_parser(name);p.add_argument('--config',type=Path,default=AE_ROOT/'configs/spr4numa.json')
         p.add_argument('--experiment',action='append',choices=EXPERIMENTS);p.add_argument('--all',action='store_true')
-        p.add_argument('--output',type=Path);p.add_argument('--limit',type=int,help='First N instances only; always marked smoke')
-        p.add_argument('--max-events',type=int,help='Explicit prefix smoke; units are documented per backend')
+        p.add_argument('--output',type=Path);p.add_argument('--limit',type=int,help='First N instances only; always marked quick-check')
+        p.add_argument('--max-events',type=int,help='Explicit prefix quick-check; units are documented per backend')
         if name=='run':p.add_argument('--keep-going',action='store_true',help='Continue independent jobs after failure; final exit stays nonzero')
     for name in ('analyze','plot'):
         p=sub.add_parser(name);p.add_argument('--output',type=Path,required=True);p.add_argument('--input',type=Path)
@@ -154,7 +154,7 @@ def main():
     record={'schema_version':1,'analysis_mode':'fresh-measurement','runtime':repository_state(),'host':host_state(),'config':public_config(config),
             'release':release,
             'config_source':file_record(args.config),'experiments':experiments,'jobs':jobs,'skipped':SKIPPED,
-            'derived':DERIVED,'run_purpose':'smoke' if args.limit or args.max_events else 'full-cohort','status':'planned'}
+            'derived':DERIVED,'run_purpose':'quick-check' if args.limit or args.max_events else 'full-cohort','status':'planned'}
     if args.command=='plan':print(json.dumps(record,indent=2));return 0
     prerequisites=doctor(config,experiments)
     if not prerequisites['ok']:

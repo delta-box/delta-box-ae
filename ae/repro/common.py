@@ -121,7 +121,9 @@ def configured_value(config: dict, name: str):
 
 def run_purpose(default: str) -> str:
     value = os.environ.get('AE_RUN_PURPOSE', default)
-    if value not in ('smoke', 'full-trace', 'full-cohort'):
+    if value == 'smoke':
+        value = 'quick-check'
+    if value not in ('quick-check', 'full-trace', 'full-cohort'):
         raise ValueError('Invalid AE_RUN_PURPOSE')
     return value
 

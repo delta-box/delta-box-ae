@@ -84,4 +84,4 @@ bash ae/build_images.sh \
 
 两次均在真实 worker 内保留 6461 个源码文件的索引，`worker_exec_bad_n=0`、`error_n=0`。本地入口测试 12 项、配方检查 9 项、shell 语法与 diff 检查通过。结构化汇总及证据哈希见 [validation.json](evidence/20260921/validation.json)。
 
-**验证范围：**本轮只构建 Django 一组并运行短轨迹，不覆盖其余三组磁盘、完整 cohort 或从零重建 80 套环境；没有重新编译内核，没有做性能复现。母盘携带 CRIU `v4.2-22-g2cf8f13ca`，与部分已记录现役 base 的 `v4.2-36-g30acbabcd` 不同，因此新盘通过 smoke 也不能证明与历史盘逐字节或依赖版本等价。
+**验证范围：**本轮只构建 Django 一组并运行短轨迹，不覆盖其余三组磁盘、完整 cohort 或从零重建 80 套环境；没有重新编译内核，没有做性能复现。母盘携带 CRIU `v4.2-22-g2cf8f13ca`，与部分已记录现役 base 的 `v4.2-36-g30acbabcd` 不同，因此新盘通过 快速检查 也不能证明与历史盘逐字节或依赖版本等价。

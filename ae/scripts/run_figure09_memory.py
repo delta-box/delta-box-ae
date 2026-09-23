@@ -64,7 +64,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=ROOT/'ae/configs/spr4numa-review.json')
     parser.add_argument('--output',type=Path,required=True,help='New output directory')
-    parser.add_argument('--limit',type=int,help='First N inputs only; explicitly marked smoke')
+    parser.add_argument('--limit',type=int,help='First N inputs only; explicitly marked quick-check')
     parser.add_argument('--lock',type=Path,default=Path(os.environ.get('DELTABOX_RELEASE_LOCK',ROOT/'release/candidate-lock.json')))
     parser.add_argument('--inside',action='store_true',help=argparse.SUPPRESS)
     args = parser.parse_args()

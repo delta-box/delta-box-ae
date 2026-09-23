@@ -20,7 +20,7 @@ Tasks:
    a second runtime copy. Feed trace/schedule inputs from ae/paper/. Preserve
    per-run source, environment, input and image hashes; own all VM resources;
    validate expected events and worker restoration; support fast/slow and
-   accurate API vs critical-path timing. Run host tests and real VM smoke.
+   accurate API vs critical-path timing. Run host tests and real VM quick check.
 3. Recover and parameterize original baseline, motivation, memory-depth,
    adaptive checkpoint, CPU fan-out and write-amplification experiment drivers.
    Use pinned sources where a historical baseline is required. Provide actual
@@ -32,7 +32,7 @@ Tasks:
    distinctions, validate sample completeness and numeric fields. Mark GPU-dependent panels skipped and execute E2B 4x16 batches
    rather than calling an estimate a measurement.
 5. Verify CLI and input bundles from a clean checkout, test failure propagation
-   and path/resource safety, run local analyses and available remote smoke.
+   and path/resource safety, run local analyses and available remote quick check.
    Perform independent specification review followed by code-quality review;
    fix findings. Commit scripts/traces/docs to the new branch and report exact
    commands, executed checks, and remaining hardware-dependent verification.
@@ -47,7 +47,7 @@ Progress:
 
 - [x] Verify default branch; create isolated branch/worktree.
 - [x] Task 1: packaged data, recipes and unified CLI.
-- [x] Task 2: current-runtime VM replay adapter and real smoke.
+- [x] Task 2: current-runtime VM replay adapter and real quick check.
 - [x] Task 3: full experiment driver coverage.
 - [x] Task 4: analyses and plotting.
 - [x] Task 5: clean verification, reviews and branch commit.

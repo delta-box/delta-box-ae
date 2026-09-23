@@ -21,16 +21,16 @@ DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint
 
 ```bash
 ssh atc-ae@HOST
-cd ~/deltabox-runtime
-bash ae/run_all.sh --smoke
+cd ~/delta-box-ae
+bash ae/run_test.sh
 ```
 
-托管机器提供 Linux x86-64、KVM、实验镜像、录制输入和 baseline 服务。以下命令均在该机器的 **deltabox-runtime 仓库根目录**执行；无需先构建镜像。自建部署见[环境指南](ae/docs/self-hosting-zh.md)。
+托管机器提供 Linux x86-64、KVM、实验镜像、录制输入和 baseline 服务。以下命令均在该机器的 **delta-box-ae 仓库根目录**执行；无需先构建镜像。自建部署见[环境指南](ae/docs/self-hosting-zh.md)。
 
 快速检查会启动 DeltaBox，执行最小 checkpoint / restore 序列，并检查恢复状态、分析数据和生成图表。**成功标志**是退出码为 0，终端打印：
 
 ```text
-ok: /mnt/disk2/dyp/deltabox-runtime/ae/results/<源码版本>/checks/smoke/SUMMARY.md
+ok: <结果目录>/SUMMARY.md
 ```
 
 打开这个 `SUMMARY.md`，各步骤应为 `ok`。快速检查确认运行链路可用；论文结论由下面的完整实验评估。

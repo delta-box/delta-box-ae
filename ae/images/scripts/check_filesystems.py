@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mount NEW Figure 9 smoke images and verify reflink behavior and CoW isolation.
+"""Mount NEW Figure 9 quick-check images and verify reflink behavior and CoW isolation.
 
 Writes only into the freshly built ext4.img/xfs.img/xfs_reflink.img. Run in a
 private mount namespace: sudo unshare --mount --propagation private python3 ...
@@ -25,7 +25,7 @@ def main():
         image = a.directory / (name + '.img')
         if not image.is_file():
             p.error(f'missing {image}')
-        with tempfile.TemporaryDirectory(prefix='.smoke-', dir=a.directory) as tmp:
+        with tempfile.TemporaryDirectory(prefix='.quick-check-', dir=a.directory) as tmp:
             mp = Path(tmp)
             opts = 'loop' if name == 'ext4' else 'loop,nouuid'
             subprocess.run(['mount', '-o', opts, str(image), tmp], check=True)
@@ -51,10 +51,10 @@ def main():
                 clone.unlink(missing_ok=True)
             finally:
                 subprocess.run(['umount', tmp], check=True)
-    # Smoke writes change image hashes; retain a separate post-test manifest.
+    # Quick check writes change image hashes; retain a separate post-test manifest.
     report = {'tests': results, 'post_test_images': [
         {'file': p.name, 'sha256': sha256(p)} for p in sorted(a.directory.glob('*.img'))]}
-    output = a.directory / 'smoke-results.json'
+    output = a.directory / 'quick-check-results.json'
     output.write_text(json.dumps(report, indent=2) + '\n')
     print(output)
 

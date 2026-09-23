@@ -1,4 +1,4 @@
-"""Disjoint, clipped wall-time attribution of the opt-in E2B OTel probe.
+"""Disjoint, clipped elapsed time attribution of the opt-in E2B OTel probe.
 
 Spans in different categories may overlap. Such time is reported once as
 ``overlapping_phases``; uninstrumented time (including upload) stays unclassified.
@@ -67,7 +67,7 @@ def measured_phases(row):
 
 
 def model_components(data):
-    """Controller RTT + action wall includes execution LLM wait exactly once.
+    """Controller RTT + action elapsed time includes execution LLM wait exactly once.
 
     Only the warm worker component model is comparable with the archived Figure
     7 protocol. Setup, command transport and controller overhead are excluded.

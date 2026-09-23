@@ -77,7 +77,7 @@ all-standard policy; recorded RTTs, event order, IDs and worker actions are
 preserved. For the 12 supplied Table 2 traces this produces 317 checkpoints and
 334 restores per mode, matching the supplied original schedules.
 
-`--max-events N` selects a prefix for smoke testing and marks `run_purpose=smoke`.
+`--max-events N` selects a prefix for quick check and marks `run_purpose=quick-check`.
 It retains the original RTTs and does not produce a full-cohort measurement.
 `--dry-run` prepares schedules, hashes, archives and manifests without requiring
 root or starting a VM. Real image files are required and fully hashed even for a
@@ -154,7 +154,7 @@ sudo numactl --membind=2 --physcpubind=52-55 \
 
 上例的 CPU 编号适用于本实验服务器；其他机器须选择 NUMA 2 内实际存在的 CPU。
 该命令不设置 CPU 频率，性能复测仍需完成 release 的频率前置检查。
-首次调试可加 `--max-events N`，但结果会标为 smoke；只有完整事件与状态校验成功的
+首次调试可加 `--max-events N`，但结果会标为 快速检查；只有完整事件与状态校验成功的
 运行才能参与完整 trace 分析。当前只支持 standard checkpoint，不允许同时使用
 `--adaptive` 或 `--memory-policy`。`--mode slow` 强制 cold restore，当前此 profile
 关闭 lazy restore；不能把只通过 fast 的结果当作 cold 路径验证。

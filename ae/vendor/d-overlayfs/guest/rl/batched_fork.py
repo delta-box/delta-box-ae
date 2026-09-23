@@ -18,8 +18,8 @@ forks in a single SIGCONT/SIGSTOP cycle:
 
 For RL fan-out (Tree-GRPO style), batching saves (N-1) × SIGCONT/SIGSTOP
 context-switch round-trips per "RL step". Empirically each SIGCONT/SIGSTOP
-round-trip is ~1-2 ms of wall time across the harness↔donor boundary; on
-N=64 fan-out this can compress the fan-out wall by ~60-120 ms.
+round-trip is ~1-2 ms of elapsed time across the harness↔donor boundary; on
+N=64 fan-out this can compress the fan-out time by ~60-120 ms.
 
 DESIGN PRINCIPLE: this module **does not modify** guest/template_fork.py.
 It only IMPORTS helpers from it (`install_template_endpoint`,

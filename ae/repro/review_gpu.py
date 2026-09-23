@@ -71,7 +71,7 @@ def run_gpu(review):
     if setting.get("enabled") is False:
         raise ValueError("The host GPU configuration is disabled. " + RESOURCE_HELP)
     path = configured_path(review.config, "gpu.config", required=False) or gpu_protocol.DEFAULT_CONFIG
-    config = gpu_protocol.load_config(path, smoke=bool(review.limits))
+    config = gpu_protocol.load_config(path, quick_check=bool(review.limits))
     if config["allow_busy"]:
         raise ValueError("One-click performance evaluation requires idle GPUs")
     expected_batches = [1] if review.limits else list(gpu_protocol.BATCHES)
@@ -157,7 +157,7 @@ def finish_gpu(review, analysis_dir, analyzed):
     selected = set(review.record["experiments"])
     # Figure 8(c) is derived for the full fan-out+GPU selection, not a GPU-only run.
     if (set(FANOUT).issubset(selected) and not review.limits
-            and review.record.get("measurement_run_purpose") != "smoke"):
+            and review.record.get("measurement_run_purpose") not in ("quick-check", "smoke")):
         theory = dict(experiment=THEORY, status="failed", planned_jobs=1, successful_jobs=0, reasons=[])
         review.record["coverage"] = [item for item in review.record["coverage"] if item["experiment"] != THEORY]
         review.record["coverage"].append(theory)

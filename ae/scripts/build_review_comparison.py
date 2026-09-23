@@ -209,6 +209,7 @@ def timing_text(value):
     """Use readable timing labels while retaining original evidence identities."""
     text = str(value)
     replacements = (
+        (r"\bsmoke\b", "quick check"),
         (r"\bzero-latency-wall\b", "zero LLM delay"),
         (r"\brecorded-wall\b", "recorded intervals"),
         (r"\bAPI wall[- ]clock interval\b", "API request timestamps"),

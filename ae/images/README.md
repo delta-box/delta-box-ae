@@ -28,7 +28,7 @@ bash ae/build_images.sh \
 默认构建四组 data 盘。`--groups django` 可先构建 base + Django 用于最小验证，不能用该子集运行完整 cohort。`--plan` 只校验输入并输出命令，`--help` 查看参数。成功后生成 `bundle.json`、分阶段日志和 `config.json`：
 
 ```bash
-bash ae/run_all.sh --config /scratch/deltabox-images/config.json --smoke
+bash ae/run_test.sh --config /scratch/deltabox-images/config.json
 ```
 
 新配置默认关闭 host 绑核，需要性能测量时按 [AE 指南](../README.md#测量环境)设置本机 NUMA/CPU。完整构建示例与 baseline 配置见 [详细命令行指南](../README.md#环境准备)。`--miniconda` / `--source-image` 仍保留为实验性多环境 OCI 入口，未验证为历史盘的等价重建；不能把官方 `swebench/sweb.eval.*` 当成这里的 master。构建器不部署 Cube/E2B 服务。
@@ -183,7 +183,7 @@ python3 ae/images/scripts/pull_figure09.py --instance astropy__astropy-14309 \
 sudo python3 ae/images/scripts/build_xfs.py filesystems --out /scratch/ae-war-fs
 ```
 
-三个空文件系统默认各 4 GiB，与找到的 `swesearch_replay.sh` 的 `LOOP_MB=4096` 一致，可用 `--size-mib` 调整。此前 512 MiB 的 smoke 只检查 mkfs/mount/reflink，不验证论文中的物理 I/O 数值。实际实验应让原 runner 现场生成并测量 loopback FS，不分发三张空盘。实验仍需从 OCI 复制 `/testbed`，并使用 `paper/figure-09` 内各自 trace 的 base_commit/编辑序列。
+三个空文件系统默认各 4 GiB，与找到的 `swesearch_replay.sh` 的 `LOOP_MB=4096` 一致，可用 `--size-mib` 调整。此前 512 MiB 的 快速检查 只检查 mkfs/mount/reflink，不验证论文中的物理 I/O 数值。实际实验应让原 runner 现场生成并测量 loopback FS，不分发三张空盘。实验仍需从 OCI 复制 `/testbed`，并使用 `paper/figure-09` 内各自 trace 的 base_commit/编辑序列。
 
 GPU 部分未找到能证明历史版本的镜像或完整依赖 lock。若决定发布一个经过重新验证的替代容器，可使用：
 

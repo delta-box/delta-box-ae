@@ -55,7 +55,7 @@ class CatalogBudgetTests(unittest.TestCase):
             jobs = catalog.build_jobs(['figure-06-adaptive'], config, self.root / 'config.json', self.root / 'out', max_events=1)
         self.assertEqual(jobs[0]['recorded_wait_s'], 0)
         self.assertEqual(jobs[0]['timeout_s'], 400)
-        self.assertEqual(jobs[0]['run_purpose'], 'smoke')
+        self.assertEqual(jobs[0]['run_purpose'], 'quick-check')
 
     def test_paper_zero_is_explicit_default_without_erasing_recorded_intervals(self):
         config = {'timeout': 100, 'images_dir': '/images', 'kernel': '/kernel', 'base_xfs': '/base'}
@@ -83,13 +83,13 @@ class CatalogBudgetTests(unittest.TestCase):
         config = self.root / 'config.json'
         config.write_text('{"timeout": 1}')
         job = dict(key='fixture', command=['true'], run_purpose='full-cohort', timeout_s=98765)
-        with patch.object(sys, 'argv', ['reproduce', 'run', '--config', str(config), '--output', str(self.root / 'out')]), \
-             patch.object(module, 'doctor', return_value={'ok': True}), \
-             patch.object(module, 'build_jobs', return_value=[job]), \
-             patch.object(module, 'repository_state', return_value={}), \
-             patch.object(module, 'host_state', return_value={}), \
-             patch.object(module, 'from_environment', return_value=None), \
-             patch.object(module, 'execute', return_value={'status': 'ok'}) as execute, \
+        with patch.object(sys, 'argv', ['reproduce', 'run', '--config', str(config), '--output', str(self.root / 'out')]),\
+             patch.object(module, 'doctor', return_value={'ok': True}),\
+             patch.object(module, 'build_jobs', return_value=[job]),\
+             patch.object(module, 'repository_state', return_value={}),\
+             patch.object(module, 'host_state', return_value={}),\
+             patch.object(module, 'from_environment', return_value=None),\
+             patch.object(module, 'execute', return_value={'status': 'ok'}) as execute,\
              contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(module.main(), 0)
         self.assertEqual(execute.call_args.kwargs['timeout'], 98765)

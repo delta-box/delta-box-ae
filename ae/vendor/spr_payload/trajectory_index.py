@@ -2,7 +2,7 @@
 
 Each trajectory.json is the root of a MCTS tree. Every node may carry multiple
 LLM `completions` keyed by purpose (`build_action`, `value`, `discriminator`,
-...). For replay we flatten the tree to a wall-clock-ordered sequence:
+...). For replay we flatten the tree to a timestamp-ordered sequence:
 
     [(timestamp, completion_dict), ...]   sorted by response.created ascending
 
@@ -29,7 +29,7 @@ from protocol import canonical_messages_hash
 @dataclass(frozen=True)
 class Completion:
     """One LLM call from the recording."""
-    seq: int                # position in the wall-clock ordered sequence
+    seq: int                # position in the timestamp order sequence
     node_id: int            # MCTS node where this call originated
     purpose: str            # completion key: build_action / value / exec.<Action> / ...
     created: int            # response.created (unix ts) — sort key
@@ -40,7 +40,7 @@ class Completion:
     response: dict          # raw response (chat.completion object)
     model: str
     usage: dict             # token usage from response
-    dur_s: float            # recorded wall RTT from ms_trace.jsonl (0.0 if not found)
+    dur_s: float            # recorded RTT from ms_trace.jsonl (0.0 if not found)
 
 
 def _walk_nodes(node: dict):
@@ -202,7 +202,7 @@ def load_trajectory(path: str | Path) -> list[Completion]:
         raw.append((int(created), nid, purpose, c))
     raw.sort(key=lambda x: (x[0], x[1], x[2]))  # ts -> node_id -> purpose for ties
 
-    # Optional: load co-located ms_trace.jsonl for wall-clock dur_s per call.
+    # Optional: load co-located ms_trace.jsonl for recorded dur_s per call.
     # Match by H2 hypothesis (response.created ≈ t_wall_start_s + dur_s)
     # with a 3-second tolerance window.
     ms_path = path.parent / "ms_trace.jsonl"

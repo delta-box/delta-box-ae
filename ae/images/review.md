@@ -9,7 +9,7 @@
 3. **E2B local build 不能直接等同于 Figure 8 的 API 模板。** Figure 8 用官方 SDK 访问本地服务，指定 `base` 模板；`build_e2b.sh` 调 local `create-build`，不完成服务部署和模板注册。两条入口现分开标注。
 4. **FC+dm 不按 repo 分配五组 XFS 数据盘。** 原 `fc_dm_pilot.py` 固定使用 `data-django.xfs` 满足 `/dev/vdb` / systemd 的依赖，replay repo、index、venv、trace 已注入 rootfs。上一版“所需数据盘”的描述容易误导，已改明确。
 5. **默认分发范围偏大。** 已绑定的 DeltaBox Table 2/3、Figure 6/7、Figure 8 fork primitive 等输入使用 Django/SymPy/Sci/Tools。Sphinx 数据盘不因此成为默认必需；其它后端的输入里出现 Sphinx 也不能推出 DeltaBox 需要该盘。默认构建缩至四组；五组原始配方仍保留。
-6. **Figure 9 的容量默认值缺乏来源。** 上一版生成器默认 2 GiB，找到的 SWE-Search replay 脚本为 4096 MiB；已改默认值。512 MiB smoke 只能证明基本文件系统功能，不能验证 WAR 的具体数值、metadata/journal 几何或 benchmark 的物理 I/O 统计。
+6. **Figure 9 的容量默认值缺乏来源。** 上一版生成器默认 2 GiB，找到的 SWE-Search replay 脚本为 4096 MiB；已改默认值。512 MiB 快速检查 只能证明基本文件系统功能，不能验证 WAR 的具体数值、metadata/journal 几何或 benchmark 的物理 I/O 统计。
 
 ## 建议分发与省略
 
@@ -24,14 +24,14 @@
 | Cube Table 2 模板 | 单独基线包，复现该结果时必需 | 不能替换为 DeltaBox rootfs；Figure 8 的实际模板另找配方 |
 | E2B local build | Table 2/7 对应基线的候选构建入口 | 缺完整部署与历史 digest；不是即用的 Figure 8 `base` API 模板 |
 | E2B L1 qcow2 + seed | 特定历史 nested 配置的部署辅助项 | 复现选定 nested run 时要保留该层级；不应让所有 E2B 实验都额外增加 L1，改为非嵌套也不能宣称原配置 |
-| Figure 9 三张空盘 | 只保留生成脚本，现场创建 | 空盘分发没有必要；原 runner 自带格式化/挂载逻辑，独立生成器主要用于 smoke |
+| Figure 9 三张空盘 | 只保留生成脚本，现场创建 | 空盘分发没有必要；原 runner 自带格式化/挂载逻辑，独立生成器主要用于 快速检查 |
 | Figure 9 的 136 个 OCI 名称 | 清单/按需获取；不把全套 container layers 作为默认数据包 | 实验使用 `/testbed`；可以以后验证导出必要 source trees，但不能未验证就替换原输入 |
 | 新补的 GPU Dockerfile | 可选重建草稿，不列入已恢复的历史镜像 | 没找到历史 CUDA/PyTorch/vLLM/transformers/peft 完整锁；Qwen3 inference endpoint 不必随离线 replay 默认分发 |
 | `bzImage` | 其它启动方式的辅助产物 | 当前 Firecracker runner 使用 `vmlinux`，不必两者都作为默认下载 |
 
 ## 仍未证明正确的部分
 
-`Dockerfile.master` 新选择 Ubuntu/conda channel、共享 Python 3.11 shell；包解算和用户态依赖可能与旧盘不同。新 base 配置还剔除历史 `/root`、`/home`、重置 SSH。它们有明确用途，但**不能凭语法检查或 XFS smoke 宣称可等价替代实验盘**。同理，保存当前 Linux config 不等于找回论文的 module build；采集值是 `CONFIG_OVERLAY_FS=y`。
+`Dockerfile.master` 新选择 Ubuntu/conda channel、共享 Python 3.11 shell；包解算和用户态依赖可能与旧盘不同。新 base 配置还剔除历史 `/root`、`/home`、重置 SSH。它们有明确用途，但**不能凭语法检查或 XFS 快速检查 宣称可等价替代实验盘**。同理，保存当前 Linux config 不等于找回论文的 module build；采集值是 `CONFIG_OVERLAY_FS=y`。
 
 本次只读检查证实，disk2 的五个核心 `.xfs` 路径都解析到 disk1 的对应文件，是同一份盘；不要对两个目录各打一次包。run config 中的旧 `/dev/shm/.../shared` 副本现在不存在。这里只记录路径/文件身份与前缀 hash，尚未以完整 hash 将当前镜像绑定到投稿 run。
 

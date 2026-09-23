@@ -892,7 +892,7 @@ def run_pilot(args: argparse.Namespace) -> dict:
                 "same recorded Moatless trajectory; controller/SearchTree and the shared mock cursor stay outside E2B; "
                 "the L1 mock and index sidecars are external, while actions execute inside E2B and each node is persisted as an E2B build"
             ),
-            "measurement_scope": "Table2 ck/rs use inner E2B Go API timings from resume-build finalbench-json, not CLI wall time",
+            "measurement_scope": "Table2 ck/rs use inner E2B Go API timings from resume-build finalbench-json, not CLI elapsed time",
             "checkpoint_metric": "checkpoint_persist_ms = Pause() + local snapshot upload",
             "restore_metric": "resume_ms = Factory.ResumeSandbox() return latency",
             "sidecar_note": (

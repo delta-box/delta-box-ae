@@ -34,7 +34,7 @@ validate_rows = validate_war_rows
 def release_staged_base(base, rootfs, work, receipt, evidence):
     """Release only this launcher's verified disposable copy after VM boot.
 
-    The initial smoke VM must retain it for the full VM that follows. The final
+    The initial quick-check VM must retain it for the full VM that follows. The final
     VM already owns an independent rootfs; retaining this extra image wastes
     scarce memory on the strictly bound NUMA node.
     """
@@ -60,7 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--limit', type=int, help='First N inputs for infrastructure check, labeled smoke')
+    parser.add_argument('--limit', type=int, help='First N inputs for infrastructure check, labeled quick-check')
     parser.add_argument('--release-staged-base',action='store_true',
                         help='Release the wrapper-owned base copy after the final VM boots')
     args = parser.parse_args()
@@ -79,7 +79,7 @@ def main():
     require_memory_workdir(data.parent)
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    purpose = 'smoke' if args.limit else 'full-cohort'
+    purpose = 'quick-check' if args.limit else 'full-cohort'
     jobs = build_jobs(['figure-09'], config, args.config.resolve(), out/'runs', args.limit)
     suite = dict(schema_version=1, analysis_mode='fresh-measurement', experiment='figure-09',
                  run_purpose=purpose, status='running', release=release,

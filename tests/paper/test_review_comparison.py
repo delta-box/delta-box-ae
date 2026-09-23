@@ -237,7 +237,7 @@ class ReviewComparisonTests(unittest.TestCase):
         self.assertEqual(missing_details(dict(panels={"filesystem": {"status": "analyzed"}, "memory": {"status": "analyzed"}})), {})
         self.assertEqual(missing_details(dict(panels={"a": {"status": "unavailable"}, "b": {"status": "analyzed"}})),
                          {"panels": {"a": {"status": "unavailable"}}})
-        label = brief_population('experiment="figure-02-filesystem";mode=null;run_purpose="smoke"')
+        label = brief_population('experiment="figure-02-filesystem";mode=null;run_purpose="quick-check"')
         self.assertIn("figure-02-filesystem", label)
         self.assertNotIn("mode=null", label)
 

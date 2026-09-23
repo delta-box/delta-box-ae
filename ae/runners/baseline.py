@@ -361,7 +361,7 @@ def run(args):
     trace = args.trace.absolute()  # Keep the logical bundle directory beside ms_trace.jsonl.
     record = {'schema_version': 1, 'experiment': 'figure-01-cube' if args.collect_phases else 'table-02-' + args.backend,
               'backend': args.backend, 'instance': args.instance, 'status': 'preparing',
-              'run_purpose': run_purpose('smoke' if args.limit else 'full-trace'),
+              'run_purpose': run_purpose('quick-check' if args.limit else 'full-trace'),
               'input': file_record(trace), 'config': public_config(config),
               'runtime': repository_state(), 'release': from_environment(),
               'host': host_state(), 'analysis_mode': 'fresh-measurement'}

@@ -312,7 +312,7 @@ def add_run_options(parser: argparse.ArgumentParser, modes=("fast", "slow")) -> 
                         default="runtime-default")
     parser.add_argument("--criu-dump-binary", type=Path,
                         help="Pinned guest-compatible CRIU; async-incremental uses it for dump and restore")
-    parser.add_argument("--max-events", type=int, help="Explicit prefix smoke only; omitted runs the full trace")
+    parser.add_argument("--max-events", type=int, help="Explicit prefix quick-check only; omitted runs the full trace")
     parser.add_argument("--dry-run", action="store_true")
 
 
@@ -388,7 +388,7 @@ def prepare_single_run(args, *, existing_output: bool = False) -> InstanceRun:
     metadata.update(n_ckpt=sum(e["type"] == "ckpt" for e in events),
                     n_restore=sum(e["type"] == "restore" for e in events),
                     original_events=original_n, max_events=args.max_events,
-                    run_purpose="smoke" if args.max_events is not None else "full-trace")
+                    run_purpose="quick-check" if args.max_events is not None else "full-trace")
     write_json(schedule.with_suffix(".meta.json"), metadata)
     run_dir = output / args.mode / args.instance
     run_dir.mkdir(parents=True)

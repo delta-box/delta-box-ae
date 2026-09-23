@@ -75,7 +75,7 @@ sudo -v
 sudo -E "$AE_PYTHON" ae/reproduce.py doctor --config "$AE_CONFIG" --all
 "$AE_PYTHON" ae/reproduce.py plan --config "$AE_CONFIG" --all \
   > ae/work/local-cpu-plan.json
-bash ae/run_all.sh --config "$AE_CONFIG" --smoke
+bash ae/run_test.sh --config "$AE_CONFIG"
 ```
 
 `doctor` checks prerequisites; `plan` lists workloads and commands without running experiments. After preflight, use the individual commands in the root README. The exported `AE_CONFIG` supplies their default configuration.
@@ -99,7 +99,7 @@ The full one-click run also needs four available GPUs on one node, local Qwen2.5
 
 Add `"gpu": {"config": "/absolute/path/to/ae/work/gpu-local.json"}` to the main `AE_CONFIG`. Relative `gpu.config` paths resolve against the main configuration's directory. On hosted machines, the authors configure these paths and devices; reviewers do not pass model or device arguments. Remove any old `gpu.enabled=false` setting.
 
-`bash ae/run_all.sh` runs CPU and GPU experiments by default. `--group cpu` selects CPU only, `--group gpu` selects generation/training, and `--group figure-08` includes CPU fan-out, GPU, and theoretical calculations. `--smoke` remains the minimum CPU check. Failed GPU preflight does not start training or stop independent CPU experiments; the full run still fails and keeps its logs. Resume verifies and reuses a successful GPU matrix; a failed matrix retries in a new attempt while preserving its prior evidence.
+`bash ae/run_all.sh` runs CPU and GPU experiments by default. `--group cpu` selects CPU only, `--group gpu` selects generation/training, and `--group figure-08` includes CPU fan-out, GPU, and theoretical calculations. `bash ae/run_test.sh` remains the minimum CPU check. Failed GPU preflight does not start training or stop independent CPU experiments; the full run still fails and keeps its logs. Resume verifies and reuses a successful GPU matrix; a failed matrix retries in a new attempt while preserving its prior evidence.
 
 ## 4. Specialized configurations and RAM-backed entry points
 

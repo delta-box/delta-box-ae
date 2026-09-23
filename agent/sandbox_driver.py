@@ -175,7 +175,7 @@ class SandboxDriver:
 
     async def shutdown(self) -> None:
         # Let the controller finish any in-flight async CRIU dump before we
-        # terminate the namespace init. Otherwise a root-only smoke can look
+        # terminate the namespace init. Otherwise a root-only quick-check can look
         # successful while the durable checkpoint image is being corrupted by
         # teardown.
         drain_error = None

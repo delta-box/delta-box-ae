@@ -102,7 +102,7 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
     def add(experiment,key,command,inputs=(),timing=None):
         if not all(c not in key for c in ('/', '\\')) or key in ('.','..'):raise ValueError('unsafe job key')
         jobs.append({'experiment':experiment,'key':key,'command':list(map(str,command)),
-                     'inputs':list(inputs),'run_purpose':'smoke' if limit or max_events else 'full-cohort',
+                     'inputs':list(inputs),'run_purpose':'quick-check' if limit or max_events else 'full-cohort',
                      'timeout_s':math.ceil(action_budget)+(300 if timing else 0),
                      **(timing or {})})
     for experiment in experiments:
