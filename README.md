@@ -6,7 +6,7 @@
 
 DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
 
-Start with the **approximately 5-minute quick check**, then allow **approximately 10 hours** for the complete evaluation. Alternatively, select an experiment from the [index](#experiments). GPU tests in the one-click script may fail if all GPU resources are busy. If this happens, contact the authors to allocate GPU resources for the AE machine.
+Start with the **approximately 5-minute quick check**, then allow **approximately 10 hours** for the complete CPU evaluation. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
 
@@ -45,9 +45,9 @@ Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the e
 bash ae/run_all.sh
 ```
 
-This command runs the CPU and GPU experiments in the [index](#experiments), analyzes and plots the results, and creates English and Chinese paper-comparison pages. Budget approximately 10 hours; actual duration depends on host load and baseline execution time. Figure 7 is derived from complete trajectories; Figure 8(c) uses this run's CPU fan-out and GPU generation/training timings. A GPU failure preserves completed CPU results and makes the full run exit nonzero.
+This command runs all CPU experiments in the [index](#experiments), then analyzes the results, plots them, and creates paper-comparison pages. Budget approximately 10 hours; actual duration depends on host load and baseline execution time. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
 
-When the command finishes, open the printed `SUMMARY.md`, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
+When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
 Existing outputs are never overwritten. See [troubleshooting](#troubleshooting) for resuming a run or selecting an individual check.
 
@@ -80,7 +80,7 @@ Table 1 and Figures 1, 3–5 present the design and problem motivation, with no 
 Individual commands below share an output prefix. **Define it once in your current Bash terminal**, replacing `reviewer-A` with your identifier. Use a different identifier for each new evaluation:
 
 ```bash
-AE_VERSION=$(python3 -c 'import json; print(json.load(open("release/candidate-lock.json"))["source_commit"][:12])')
+AE_VERSION=$(git rev-parse --short=12 HEAD)
 export AE_RUN="$(pwd -P)/ae/results/$AE_VERSION/reviewer-A"
 ```
 
@@ -276,7 +276,8 @@ DeltaBox, CubeSandbox, and E2B each evaluate N=1/4/16/64. Every child must read 
 
 **Goal.** Measure generation and training time, then combine them with sandbox time to calculate the paper's synchronous GPU occupation and policy staleness.
 
-**Run.** The complete one-click command includes both panels. To run only GPU generation and training:
+The one-click workflow and `--group figure-08` automatically run panel (b) over SSH using [remote configuration](ae/configs/figure08-remote.json). See the [automatic workflow and dependencies](ae/paper/figure-08/README.md) for setup, admission criteria and partial-result behavior. Quick-check and analysis-only runs do not start GPU work. To select only the remote GPU stage, use the command below.
+
 
 ```bash
 bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
@@ -288,9 +289,9 @@ To rerun every panel of Figure 8:
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-The authors configure the model, Python environments, and devices for hosted runs. Generation at B=1/4/16/64 uses one GPU; training at B=1/4 uses one GPU and B=16/64 uses four GPUs on the same node. The script checks devices before execution and reports unavailable or busy resources as a failure. Contact the authors for GPU allocation; formal parameters are never automatically reduced. For self-hosted configuration, see the [environment guide](ae/docs/self-hosting.md#gpu-setup).
+The authors configure the remote model and Python environments. Admission probes GPUs 0–7 and records busy or unavailable resources as skipped; smaller available card sets produce explicitly partial results without reducing per-case parameters. See the [environment guide](ae/docs/self-hosting.md#gpu-setup).
 
-**Output and interpretation.** Panel (b) produces per-repeat generation/training timings and `gpu/attempt-NNN/plots/figure-08b.png`; compare corresponding stages at the same batch size. After CPU fan-out and GPU measurements both succeed, panel (c) produces `gpu/attempt-NNN/theory/occupation.json` and plots. Check whether reducing sandbox time increases modeled useful occupation and reduces staleness; (c) is a theoretical calculation. Both panels are included in this run's English and Chinese comparison pages.
+**Output and interpretation.** Panel (b) produces per-repeat generation/training timings and `gpu/attempt-NNN/plots/figure-08b.png`; compare corresponding stages at the same batch size. After CPU fan-out and GPU measurements both succeed, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and plots. Check whether reducing sandbox time increases modeled useful occupation and reduces staleness; (c) is a theoretical calculation. Both panels are included in this run's English and Chinese comparison pages.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -355,7 +356,7 @@ Individual experiments and the full suite use the same output structure. Paths b
 
 | Path | Purpose |
 | --- | --- |
-| `SUMMARY.md`, `review.json` | Check status and locate outputs or failed steps |
+| `result.md`, `SUMMARY.md`, `review.json` | Check status and locate outputs or failed steps |
 | `comparison/attempt-NNN/README.md`, `README-zh.md` | English and Chinese pages comparing the paper with your measurements |
 | `analysis/attempt-NNN/metrics.csv`, `series.csv` | Inspect numerical summaries and plotted series |
 | `gpu/attempt-NNN/` | GPU measurements, resource checks, plots, and Figure 8(c) calculations |

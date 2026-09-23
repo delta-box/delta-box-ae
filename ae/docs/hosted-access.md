@@ -30,6 +30,6 @@ bash ae/run_all.sh --list
 
 作者更新部署时，同步安装仓库中的 `ae/scripts/hosted_launcher.py`，使托管入口接受 `--group gpu`、`--group cpu` 和 `--group figure-08-cpu`。默认完整运行输出到 `ae/results/<源码版本>/full/`；`bash ae/run_test.sh` 仍为最小 CPU 检查。
 
-在 root 管理的 `/etc/deltabox-ae/review.json` 中，通过 `gpu.config` 指向作者配置的 GPU JSON，填写本机模型、Python 环境和分配的设备，删除旧的 `gpu.enabled=false` 设置。具体字段见[自建环境指南](self-hosting-zh.md#gpu-setup)。完整运行要求同节点四张空闲 GPU；评审者不通过命令行覆盖这些固定配置。
+在 root 管理的 `/etc/deltabox-ae/review.json` 中设置 `gpu_remote_config`，指向作者维护的远端配置（默认 `ae/configs/figure08-remote.json`），删除旧的 `gpu.config` / `gpu.enabled`。本机无需 GPU，入口通过原调用用户的非交互 SSH 身份访问 allinai2plus；管理员应为该用户配置可用的主机别名和访问权限，不向评审者复制其他用户私钥。具体字段见[自建环境指南](self-hosting-zh.md#gpu-setup)。
 
-资源尚未分配或全部繁忙时，GPU 项返回失败，提示联系作者，并保留 CPU 结果及相关日志；不能将该轮标记为完整成功。
+仅 auto：GPU 全忙或 SSH/环境不可用则跳过，有 1–3 张空闲卡运行六案例，四张运行完整八案例。GPU 状态独立记录在 `result.md`，不使已完成的 CPU 实验失败；CPU 成功不表示 GPU 完整。

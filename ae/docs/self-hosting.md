@@ -86,20 +86,11 @@ For a functional check, explicitly use `--no-pin`. Self-hosted setups can use `-
 
 <a id="gpu-setup"></a>
 
-The full one-click run also needs four available GPUs on one node, local Qwen2.5-7B-Instruct weights, and generation/training dependencies. See the [GPU guide](../paper/figure-08/README.md#gpu-机器需要提供什么) for hardware and package requirements. Write these fields to `ae/work/gpu-local.json`, substituting local paths and allocated devices; other experiment parameters come from `ae/configs/figure08-gpu.json`:
+The one-click workflow uses only auto mode: SSH to `allinai2plus` and probe physical GPUs 0–7. The initiating host needs no GPU. Copy and adjust `ae/configs/figure08-remote.json`, then set `"gpu_remote_config": "/absolute/path/to/remote.json"` in the main `AE_CONFIG`; relative paths resolve against that configuration's directory. Configure the SSH host, remote directory, model/Python paths, idle thresholds and top-level version constraints. `gpu.config` and `gpu.enabled` no longer control one-click execution.
 
-```json
-{
-  "model_path": "/models/Qwen2.5-7B-Instruct",
-  "devices": ["0", "1", "2", "3"],
-  "generation_python": "/envs/vllm/bin/python",
-  "training_python": "/envs/lora/bin/python"
-}
-```
+Prepare noninteractive SSH, rsync on both hosts, local plotting dependencies and the remote GPU environment. The default reuses deployed py312 without installing software; preflight records version drift. See the [Figure 8 guide](../paper/figure-08/README.md) for setup and exact parameters.
 
-Add `"gpu": {"config": "/absolute/path/to/ae/work/gpu-local.json"}` to the main `AE_CONFIG`. Relative `gpu.config` paths resolve against the main configuration's directory. On hosted machines, the authors configure these paths and devices; reviewers do not pass model or device arguments. Remove any old `gpu.enabled=false` setting.
-
-`bash ae/run_all.sh` runs CPU and GPU experiments by default. `--group cpu` selects CPU only, `--group gpu` selects generation/training, and `--group figure-08` includes CPU fan-out, GPU, and theoretical calculations. `bash ae/run_test.sh` remains the minimum CPU check. Failed GPU preflight does not start training or stop independent CPU experiments; the full run still fails and keeps its logs. Resume verifies and reuses a successful GPU matrix; a failed matrix retries in a new attempt while preserving its prior evidence.
+`--group cpu` selects CPU only; `--group gpu` automatically runs remote generation/training; `--group figure-08` also measures CPU fan-out and derives (c) when all eight GPU cases and CPU inputs are complete. Busy GPUs cause a skip, 1–3 idle GPUs allow six cases, and four allow eight. GPU failure does not change the CPU exit code; `result.md` preserves status and gaps. Resume creates a new GPU attempt; analysis-only never starts SSH measurements.
 
 ## 4. Specialized configurations and RAM-backed entry points
 

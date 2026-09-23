@@ -290,7 +290,7 @@ def figure08_supplement(path, *, expected_release=None):
         stem = "figure-08b" if key == "figure-08-gpu" else "figure-08c"
         artifacts = panel.get("artifacts", [])
         expected = {stem + suffix for suffix in (".png", ".pdf")}
-        if panel["status"] == "ok" and {Path(item["path"]).name for item in artifacts} != expected:
+        if (panel["status"] == "ok" or artifacts) and {Path(item["path"]).name for item in artifacts} != expected:
             raise ValueError("Successful Figure 8 panel must include PNG and PDF")
         for record in [*artifacts, *([panel["input"]] if panel.get("input") else [])]:
             source = Path(record["path"])
@@ -308,7 +308,7 @@ def supplemental_markdown(panels, *, language):
     for panel in panels:
         title = panel["title"]
         lines += [f"### {title}", ""]
-        if panel["status"] == "ok":
+        if panel["status"] in ("ok", "partial") and panel.get("artifacts"):
             artifacts = panel["artifacts"]
             png = next(item["path"] for item in artifacts if item["path"].endswith(".png"))
             pdf = next(item["path"] for item in artifacts if item["path"].endswith(".pdf"))

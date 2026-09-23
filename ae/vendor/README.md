@@ -8,8 +8,10 @@ The lock files retain the **source** SHA-256, original repository/path and Git
 revision where recoverable. `remote-source-lock.json` explicitly records exported
 working-tree files; those must not be represented as pristine Git blobs. The
 Cube canonical driver came from the June 10 deployed working tree, not merely the
-similarly named Git HEAD script. `adapted-sha256.json` records this branch's final
-file bytes after the portability and validation changes below. Verify it with:
+similarly named Git HEAD script. `adapted-sha256.json` records the archived
+file bytes after the portability and validation changes below. It is not a
+prerequisite for normal AE preparation: edited drivers record their actual source
+identity at runtime. To explicitly audit the archived snapshot, use:
 
 ```sh
 python3 ae/scripts/verify_runtime_sources.py

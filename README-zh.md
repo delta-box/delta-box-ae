@@ -6,7 +6,7 @@
 
 DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
-建议先完成约 **5 分钟的快速检查**，再运行完整实验，预留约 **10 小时**。也可按[实验索引](#experiments)选择单项。一键运行脚本中的 GPU 相关测试有可能因为 GPU 资源全部繁忙而失败，如有相关报错请联系作者为 AE 机器分配 GPU 资源。
+建议先完成约 **5 分钟的快速检查**，再运行完整 CPU 实验，预留约 **10 小时**。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [自建环境](#self-hosting) · [运行问题](#troubleshooting)
 
@@ -43,9 +43,9 @@ ok: <结果目录>/SUMMARY.md
 bash ae/run_all.sh
 ```
 
-该命令运行[索引](#experiments)中的 CPU 和 GPU 实验，并自动分析、绘图和生成中英文论文对比页。预计约 10 小时，实际时间受主机负载和 baseline 执行时间影响。Figure 7 从完整轨迹派生；Figure 8(c) 使用本次 CPU fan-out 与 GPU 生成、训练时延计算。GPU 失败时保留已完成的 CPU 结果，整轮返回非零退出码。
+该命令运行[索引](#experiments)中的全部 CPU 实验，并自动分析、绘图和生成论文对比页。预计约 10 小时，实际时间受主机负载和 baseline 执行时间影响。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
 
-运行结束后，打开终端打印的 `SUMMARY.md`，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。默认完整运行的状态应为 `ok`，失败步骤会保留日志并返回非零退出码。
+运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。默认完整运行的状态应为 `ok`，失败步骤会保留日志并返回非零退出码。
 
 已有输出不会被覆盖。续跑或选择单项时，使用[运行问题](#troubleshooting)中的方法。
 
@@ -76,7 +76,7 @@ Table 1、Figure 1,3–5 是设计说明和问题引入，无独立测量任务�
 下面的单项命令共用一个输出前缀。**在当前 Bash 终端定义一次**，把 `reviewer-A` 换成你的标识；每轮新实验使用不同的标识：
 
 ```bash
-AE_VERSION=$(python3 -c 'import json; print(json.load(open("release/candidate-lock.json"))["source_commit"][:12])')
+AE_VERSION=$(git rev-parse --short=12 HEAD)
 export AE_RUN="$(pwd -P)/ae/results/$AE_VERSION/reviewer-A"
 ```
 
@@ -260,7 +260,8 @@ DeltaBox、CubeSandbox 与 E2B 分别测试 N=1/4/16/64。每个子实例必须�
 
 **验证目标。** 测量生成、训练阶段的时间，并结合 sandbox 时间计算论文中的同步 GPU 占用率与 policy staleness。
 
-**运行。** 完整一键命令已包含这两项。只运行 GPU 生成与训练时使用：
+一键流程及 `--group figure-08` 使用[远端配置](ae/configs/figure08-remote.json)通过 SSH 自动运行 (b)。环境准备、空闲判定和部分运行规则见[自动运行说明](ae/paper/figure-08/README.md)。快速检查和只分析已有数据不启动 GPU；下列命令可只选择远端 GPU 阶段。
+
 
 ```bash
 bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
@@ -272,9 +273,9 @@ bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-模型、Python 环境和设备由作者在托管环境配置。生成 B=1/4/16/64 使用单卡，训练 B=1/4 使用单卡、B=16/64 使用同节点四卡。脚本在运行前检查设备，资源不可用或繁忙时报告失败；请联系作者分配 GPU，不会自动缩小正式参数。自建机器的配置方法见[环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
+作者配置远端模型和 Python 环境，入口自动探测 GPU 0–7。资源繁忙或不可用则记录跳过；空闲卡不足四张时明确输出部分结果，不缩小单案例参数。配置方法见[环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
 
-**输出与判断。** (b) 输出逐次生成/训练时延及 `gpu/attempt-NNN/plots/figure-08b.png`；在同一 batch 下比较对应阶段。(c) 在 CPU fan-out 和 GPU 测量均成功后，输出 `gpu/attempt-NNN/theory/occupation.json` 及图表。检查降低 sandbox 时间是否提高模型中的有效占用率、减少 staleness；(c) 是理论计算结果。两项结果自动进入本次中英文对比页。
+**输出与判断。** (b) 输出逐次生成/训练时延及 `gpu/attempt-NNN/plots/figure-08b.png`；在同一 batch 下比较对应阶段。(c) 在 CPU fan-out 和 GPU 测量均成功后，输出 `gpu/attempt-NNN/comparison/theory/occupation.json` 及图表。检查降低 sandbox 时间是否提高模型中的有效占用率、减少 staleness；(c) 是理论计算结果。两项结果自动进入本次中英文对比页。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>
@@ -336,7 +337,7 @@ bash ae/run_all.sh --experiment correctness --output "$AE_RUN/correctness"
 
 | 路径 | 用途 |
 | --- | --- |
-| `SUMMARY.md`、`review.json` | 确认运行状态，定位实际输出与失败步骤 |
+| `result.md`、`SUMMARY.md`、`review.json` | 确认运行状态，定位实际输出与失败步骤 |
 | `comparison/attempt-NNN/README-zh.md`、`README.md` | 中文、英文对比页：查看论文原图与本次测量的并排图 |
 | `analysis/attempt-NNN/metrics.csv`、`series.csv` | 查看汇总数值与曲线数据 |
 | `gpu/attempt-NNN/` | GPU 测量、资源预检、图表及 Figure 8(c) 理论计算 |

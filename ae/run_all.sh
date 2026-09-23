@@ -36,6 +36,13 @@ if [[ ! -f "$repo/replay/run_instance.py" || ! -f "$repo/release/lock.py" || ! -
 fi
 python=${AE_PYTHON:-$repo/.venv/bin/python}
 if [[ ! -x "$python" ]] && [[ -z ${AE_PYTHON:-} ]]; then
-    python=python3
+    # Linked worktrees share the prepared analysis environment of the main checkout.
+    common_dir=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+    shared_python="$(dirname "$common_dir")/.venv/bin/python"
+    if [[ -x "$shared_python" ]]; then
+        python=$shared_python
+    else
+        python=python3
+    fi
 fi
 exec "$python" "$repo/ae/scripts/run_review.py" "${args[@]}"

@@ -1,6 +1,6 @@
 # 源码冻结与验收范围
 
-当前发布仓库是 [GitHub delta-box/deltabox-runtime](https://github.com/delta-box/deltabox-runtime)，评审入口在 `main` 和 `feat/ae-oneclick-validation`。被测实现由 [`candidate-lock.json`](candidate-lock.json) 中的源码提交与逐文件哈希确定；后续文档提交不改变测量的源码身份。当前 CPU 环境已配齐依赖，**完整 1,404 作业性能评测尚未执行**，源码锁保留 `candidate-not-final` 状态。
+当前发布仓库是 [GitHub delta-box/deltabox-runtime](https://github.com/delta-box/deltabox-runtime)，评审入口在 `main` 和 `feat/ae-oneclick-validation`。日常 AE 运行记录当前 checkout 的提交及实际源码哈希，不再要求匹配 `candidate-lock.json`；旧锁仅保留为历史归档审计材料。当前 CPU 环境已配齐依赖，**完整 1,404 作业性能评测尚未执行**，源码锁保留 `candidate-not-final` 状态。
 
 spr4numa 的开发和验收统一使用 `/mnt/disk2/dyp/deltabox-runtime`。托管配置是 `/etc/deltabox-ae/review.json`，可公开的路径说明见 [`spr4numa-review.json`](../ae/configs/spr4numa-review.json)。API 凭据留在机器的私有环境文件中，不进入仓库。评审账号登录后直接执行：
 
@@ -42,7 +42,7 @@ Table 2、Table 3、Figure 1 的默认 fresh 输出按论文布局生成，覆�
 镜像、kernel、trace/schedule 和实际配置的哈希由各 runner 记录；源码锁不能替代它们。
 
 ```bash
-# 实验人员：必须验证现有锁，不在不知情情况下重新生成。
+# 可选：审计历史锁；不是日常运行的前置条件。
 python3 release/lock.py verify
 ```
 
@@ -87,5 +87,5 @@ python3 ae/reproduce.py plot --input ae/results/release-table2/analysis/summary.
 | 真实 LLM agent | 仅代码整理和无 AK 单元测试；按用户要求不做服务端到端验证 |
 | GPU | Figure 8(b) 的脚本已提供，实际 GPU 测量待资源；Figure 8(c) CPU 理论计算和历史输入校验不计作新 GPU 数据 |
 
-每次新的性能修复必须创建新源码锁并重跑受影响实验，不能沿用旧锁或把旧结果重标成新结果。
+性能修复后应重跑受影响实验；新结果自动记录实际源码身份，不必重建源码锁，不能把旧结果重标成新结果。
 测试通过、目录完成和短测通过都不足以声称“所有论文数据已复现”。

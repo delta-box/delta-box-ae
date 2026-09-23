@@ -121,10 +121,10 @@ class ReviewTests(unittest.TestCase):
                 return {'status': 'failed' if name in failures else 'ok', 'returncode': (2 if name.endswith('-doctor') else 1) if name in failures else 0}
 
             def fake_gpu(runner):
-                runner.record['coverage'].append(dict(experiment='figure-08-gpu', status='failed' if gpu_failure else 'ok',
+                runner.record['coverage'].append(dict(experiment='figure-08-gpu', optional=True, status='failed' if gpu_failure else 'ok',
                                                        planned_jobs=8, available_jobs=8, successful_jobs=0 if gpu_failure else 8))
-            with patch.object(review, 'execute', side_effect=fake_execute),\
-                    patch.object(review, 'run_gpu', side_effect=fake_gpu),\
+            with patch.object(review, 'execute', side_effect=fake_execute), \
+                    patch.object(review.Review, 'run_gpu', autospec=True, side_effect=fake_gpu), \
                     patch.object(review, 'finish_gpu', return_value=None), contextlib.redirect_stdout(io.StringIO()):
                 if interrupt:
                     with self.assertRaises(KeyboardInterrupt):
@@ -169,9 +169,9 @@ class ReviewTests(unittest.TestCase):
         self.assertTrue(all(row['status'] == 'ok' and row['successful_jobs'] == row['planned_jobs']
                             for row in record['coverage']))
 
-    def test_gpu_failure_makes_full_run_fail_and_keeps_successful_cpu_results(self):
+    def test_optional_gpu_failure_keeps_successful_cpu_results(self):
         code, record, commands, _ = self.exercise([], gpu_failure=True)
-        self.assertEqual((code, record["status"]), (1, "failed"))
+        self.assertEqual((code, record["status"]), (0, "ok"))
         cpu = [row for row in record["coverage"] if row["experiment"] != "figure-08-gpu"]
         self.assertTrue(all(row["status"] == "ok" for row in cpu))
         self.assertIn("paper-comparison", commands)
@@ -521,46 +521,35 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(record['coverage'], coverage)
         self.assertEqual(set(commands), {'plot-dependencies', 'analyze', 'plot', 'paper-comparison'})
 
-    def test_bare_measurement_selects_shipped_lock_and_never_falls_back(self):
+    def test_measurement_records_actual_source_without_selecting_a_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             config = base / 'config.json'
             config.write_text('{}')
-            observed = []
-            def verified():
-                observed.append(review.os.environ.get('DELTABOX_RELEASE_LOCK'))
-                return SOURCE
-            with patch.dict(review.os.environ, {}, clear=True),\
-                 patch.object(review.sys, 'platform', 'linux'),\
-                 patch.object(review, 'from_environment', side_effect=verified),\
-                 patch.object(review, 'working_source', side_effect=AssertionError('must be locked')),\
+            with patch.dict(review.os.environ, {}, clear=True), \
+                 patch.object(review.sys, 'platform', 'linux'), \
+                 patch.object(review, 'from_environment', return_value=SOURCE), \
                  patch.object(review.Review, 'run', return_value=0), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.main(['--config', str(config), '--output', str(base / 'new')]), 0)
-                self.assertEqual(review.os.environ['DELTABOX_RELEASE_LOCK'], str(ROOT / 'release/candidate-lock.json'))
-            self.assertEqual(observed, [str(ROOT / 'release/candidate-lock.json')])
+                self.assertNotIn('DELTABOX_RELEASE_LOCK', review.os.environ)
 
-    def test_explicit_measurement_lock_precedes_default_and_invalid_lock_stops(self):
+    def test_stale_explicit_lock_does_not_block_measurement_startup(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             config = base / 'config.json'
             config.write_text('{}')
-            explicit = 'selected-release-lock.json'
-            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': explicit}),\
-                 patch.object(review.sys, 'platform', 'linux'),\
-                 patch.object(review, 'from_environment', side_effect=ValueError('release source mismatch')),\
-                 patch.object(review, 'working_source', side_effect=AssertionError('no unlocked fallback')):
-                with self.assertRaisesRegex(ValueError, 'release source mismatch'):
-                    review.main(['--config', str(config), '--output', str(base / 'new')])
-                self.assertEqual(review.os.environ['DELTABOX_RELEASE_LOCK'], str(Path(explicit).resolve()))
-                self.assertFalse((base / 'new').exists())
+            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/stale-lock.json'}), \
+                 patch.object(review.sys, 'platform', 'linux'), \
+                 patch.object(review.Review, 'run', return_value=0), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(review.main(['--config', str(config), '--output', str(base / 'new')]), 0)
+                self.assertTrue((base / 'new').is_dir())
 
     def test_list_and_analysis_do_not_select_or_verify_current_release_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
-            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/stale-lock.json'}),\
-                 patch.object(review, 'select_measurement_lock', side_effect=AssertionError('measurement only')),\
-                 patch.object(review, 'from_environment', side_effect=AssertionError('measurement only')),\
-                 patch.object(review, 'working_source', return_value=SOURCE),\
+            with patch.dict(review.os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/stale-lock.json'}), \
+                 patch.object(review, 'from_environment', side_effect=AssertionError('measurement only')), \
+                 patch.object(review, 'working_source', return_value=SOURCE), \
                  patch.object(review.Review, 'run', return_value=0), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.main(['--list']), 0)
                 self.assertEqual(review.main(['--analyze-existing', str(base), '--output', str(base / 'new')]), 0)

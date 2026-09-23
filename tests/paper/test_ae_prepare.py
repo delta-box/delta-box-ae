@@ -43,17 +43,16 @@ class PrepareTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return reproduce.prepare_inputs()
 
-    def test_verified_readonly_objects_skip_import_but_verify_sources(self):
+    def test_verified_readonly_objects_do_not_require_a_vendor_source_lock(self):
         self.object.chmod(0o444)
         self.object.parent.chmod(0o555)
         try:
             calls = []
             def call(argv):
                 calls.append(argv)
-                self.assertTrue(argv[-1].endswith('verify_runtime_sources.py'))
-                return 0
+                raise AssertionError('Verified data must not invoke import or vendor source verification')
             self.assertEqual(self.run_prepare(call), 0)
-            self.assertEqual(len(calls), 1)
+            self.assertEqual(len(calls), 0)
             self.assertEqual(list(self.object.parent.iterdir()), [self.object])
             self.assertEqual(self.object.read_bytes(), self.payload)
         finally:
@@ -69,8 +68,15 @@ class PrepareTests(unittest.TestCase):
         self.assertEqual(self.run_prepare(call), 7)
         self.assertEqual(len(calls), 1)
 
-    def test_source_verification_failure_is_not_masked_by_existing_data(self):
-        self.assertEqual(self.run_prepare(lambda argv: 3), 3)
+    def test_successful_import_does_not_invoke_vendor_source_verification(self):
+        self.object.write_bytes(b'corrupt')
+        calls = []
+        def call(argv):
+            calls.append(argv)
+            self.assertEqual(argv[-1], 'import')
+            return 0
+        self.assertEqual(self.run_prepare(call), 0)
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == '__main__':

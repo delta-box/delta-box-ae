@@ -1,0 +1,8 @@
+# Top-level versions verified in allinai2plus py312 on 2026-09-23.
+# Used for admission checks, not a complete transitive/hash/CUDA environment lock.
+# Automatic runs reuse the existing environment and never install packages.
+torch==2.11.0
+vllm==0.21.0
+transformers==5.8.1
+peft==0.19.1
+accelerate==1.13.0

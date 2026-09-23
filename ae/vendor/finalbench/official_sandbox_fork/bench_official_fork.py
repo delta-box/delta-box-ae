@@ -239,6 +239,20 @@ def e2b_write_state(sb: Any, *, mem_mib: int, token: str, timeout: float) -> str
     return e2b_run_shell(sb, start_mem_server_shell(mem_mib=mem_mib, token=token), timeout)
 
 
+def cube_create_after_cleanup(create, *, timeout_s=60, interval_s=1):
+    """Wait for Cube's asynchronous resource release before the next timed fan-out."""
+    deadline = time.monotonic() + timeout_s
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            return create(), attempts
+        except Exception as error:
+            if '130597' not in str(error) or time.monotonic() >= deadline:
+                raise
+            time.sleep(min(interval_s, max(0, deadline - time.monotonic())))
+
+
 def bench_cube(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any]]:
     from cubesandbox import Config, Sandbox
 
@@ -269,14 +283,18 @@ def bench_cube(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any
         }
         t_total0 = now_ms()
         try:
-            source, create_source = run_timed(
-                lambda: Sandbox.create(
+            admitted, create_source = run_timed(
+                lambda: cube_create_after_cleanup(lambda: Sandbox.create(
                     template=template,
                     timeout=args.timeout,
                     metadata={"official_fork_run": run_id, "role": "source"},
                     config=cfg,
-                )
+                ))
             )
+            if create_source.ok:
+                source, attempts = admitted
+                row['source_admission_attempts'] = attempts
+                row['source_admission_note'] = 'Capacity wait before measured clone; includes asynchronous cleanup from previous case'
             row["source_create"] = asdict(create_source)
             if not create_source.ok:
                 raise RuntimeError(create_source.error)

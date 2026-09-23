@@ -1,5 +1,5 @@
 {
-  "kernel": "/mnt/disk2/dyp/overlay-stale-fd-20260921/vmlinux-fixed",
+  "kernel": "/mnt/disk2/dyp/d-overlayfs/linux-6.8/vmlinux",
   "base_xfs": "/mnt/disk2/dyp/d-overlayfs/base.xfs",
   "images_dir": "/mnt/disk2/dyp/d-overlayfs",
   "instance_data_images": {
@@ -16,9 +16,7 @@
   "vcpus": 4,
   "mem_mib": 8192,
   "timeout": 14400,
-  "gpu": {
-    "config": "figure08-gpu.json"
-  },
+  "gpu_remote_config": "figure08-remote.json",
   "cube": {
     "sdk": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/cube-sdk",
     "api_url": "http://127.0.0.1:3000",
@@ -91,5 +89,6 @@
   },
   "repository_fallback": "same-project-commit",
   "vm_storage": "tmpfs",
-  "vm_work_dir": "../work/vm"
+  "vm_work_dir": "../work/vm",
+  "environment_file": "/etc/deltabox-ae/environment.json"
 }
