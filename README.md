@@ -279,6 +279,8 @@ DeltaBox, CubeSandbox, and E2B each evaluate N=1/4/16/64. Every child must read 
 The one-click workflow and `--group figure-08` automatically run panel (b) over SSH using [remote configuration](ae/configs/figure08-remote.json). See the [automatic workflow and dependencies](ae/paper/figure-08/README.md) for setup, admission criteria and partial-result behavior. Quick-check and analysis-only runs do not start GPU work. To select only the remote GPU stage, use the command below.
 
 
+[Figure 8 validation and measurement boundaries](ae/report/README.md)
+
 ```bash
 bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
 ```

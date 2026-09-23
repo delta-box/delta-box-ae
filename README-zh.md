@@ -263,6 +263,8 @@ DeltaBox、CubeSandbox 与 E2B 分别测试 N=1/4/16/64。每个子实例必须�
 一键流程及 `--group figure-08` 使用[远端配置](ae/configs/figure08-remote.json)通过 SSH 自动运行 (b)。环境准备、空闲判定和部分运行规则见[自动运行说明](ae/paper/figure-08/README.md)。快速检查和只分析已有数据不启动 GPU；下列命令可只选择远端 GPU 阶段。
 
 
+[Figure 8 验证记录与测量边界](ae/report/README.md)
+
 ```bash
 bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
 ```
