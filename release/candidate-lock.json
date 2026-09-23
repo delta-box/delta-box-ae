@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "status": "candidate-not-final",
-  "source_commit": "d58e77341d062486d2a2f0c25f04810794f8f392",
-  "source_tree": "e2a4ce5b6e766c601b9d2f68298062d4d45c1b7b",
-  "source_sha256": "005a0b14bceab52c3d12ff6caebf6cf6f3e540302f5a6e6d378e25f2ad3b30ec",
+  "source_commit": "2bb7a0e521546095333d61a7dfc87d1fa24d15c2",
+  "source_tree": "e150f8baaac458440c23251fecbfaafbbeda915b",
+  "source_sha256": "8679b2ba347ddd1df30fec5dbeb0a67d764ce1becd09991b43f465f1a19679b3",
   "files": {
     "ae/configs/diagnostics/api-profile.json": {
       "sha256": "5f457b99f6b7e60e31fee3421d119426ca8a00dfd944910920a61122ac6f416c"
@@ -605,8 +605,14 @@
     "common/runtime_profile.py": {
       "sha256": "757796f92ba365fb015221b5f66fc35c0f00c046e08ea79d42bd6baddd40b018"
     },
-    "npd": {
-      "symlink": "agent/npd"
+    "npd/__init__.py": {
+      "sha256": "e80a091276935a7ddb2c7bc4bfbe1d1d166f2f9ef6e61bf711ee349ae477589e"
+    },
+    "npd/npd.py": {
+      "sha256": "3a33130a8d505241a9b00b270f72513d8f944bb751963ed37a5457da05d7ddd0"
+    },
+    "npd/npd_client.py": {
+      "sha256": "bf33b176819198ba77336364c3e8a2c9118b8bb7405c83336f3e4cdfbe68830c"
     },
     "pycriu/__init__.py": {
       "sha256": "f1c390ed488ce6a27f481c233026c7ab3cb4eb87b2edcf1053053210aa1863bc"
@@ -1229,8 +1235,11 @@
     "upper/host/worker_client.py": {
       "symlink": "../../agent/host/worker_client.py"
     },
-    "worker": {
-      "symlink": "agent/worker"
+    "worker/agent_worker.py": {
+      "sha256": "4f86a5774ed5be17a024fd41764446e10abe5687910d65c1c62ec2878063c716"
+    },
+    "worker/worker_actions.py": {
+      "sha256": "68987611a67229df4ee54370da4b25f63a568fee4ea2949e4faf595a3282cdd4"
     }
   },
   "default_profile": "runtime-default",
