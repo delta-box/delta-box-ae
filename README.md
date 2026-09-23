@@ -49,7 +49,7 @@ This command runs the CPU and GPU experiments in the [index](#experiments), anal
 
 When the command finishes, open the printed `SUMMARY.md`, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
-Existing outputs are never overwritten. See [troubleshooting](#troubleshooting) for resuming a run.
+Existing outputs are never overwritten. See [troubleshooting](#troubleshooting) for resuming a run or selecting an individual check.
 
 ## 2. Experiment index and individual runs
 
@@ -108,7 +108,7 @@ bash ae/run_all.sh --group table-02 --output "$AE_RUN/table-02"
 
 To select one backend, use an option such as `--experiment table-02-e2b` and choose a new output directory for it.
 
-**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within workload groups and then in the event-weighted `All` row. Values are milliseconds; lower is better. The paper's claim concerns DeltaBox's overhead advantage over the baselines. Check the configuration and timing definitions when comparing systems. `All` is not the unweighted mean of the four group averages.
+**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within workload groups and then in the event-weighted `All` aggregate (labeled `Event Avg` in the figure). Values are milliseconds; lower is better. The paper's claim concerns DeltaBox's overhead advantage over the baselines. Check the configuration and timing definitions when comparing systems. `All` is not the unweighted mean of the four group averages.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -194,7 +194,7 @@ bash ae/run_all.sh --group figure-06 --output "$AE_RUN/figure-06"
 
 Panel (a) runs `none / skip / gc / warm` on the same SymPy workload. Panel (b) compares standard-only and adaptive policies on the same input set. Select `figure-06-memory` or `figure-06-adaptive` to run one panel separately.
 
-**Output and interpretation.** In panel (a) of `figure-06-comparison.png`, compare growth rates and peaks to assess whether LW-skip limits memory retained during search. In panel (b), compare standard and lightweight checkpoint distributions, including the low-latency events and the standard checkpoints still required by the adaptive policy. Latency is on a logarithmic horizontal axis; the vertical axis counts events. The two panels are separate experiments.
+**Output and interpretation.** In panel (a) of `figure-06-comparison.png`, compare growth rates and peaks to assess whether LW-skip limits memory retained during search. In panel (b), compare standard and lightweight checkpoint distributions, including the low-latency events and the standard checkpoints still required by the adaptive policy. Latency is on a logarithmic horizontal axis; the vertical axis counts events. The two panels are analyzed separately; do not pool their policies or samples.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -274,7 +274,7 @@ DeltaBox, CubeSandbox, and E2B each evaluate N=1/4/16/64. Every child must read 
 <a id="figure-8b-gpu"></a>
 <a id="获得-gpu-后的命令"></a>
 
-**Goal.** Measure generation and training time, then combine them with sandbox time to calculate the paper's synchronous occupation and policy staleness.
+**Goal.** Measure generation and training time, then combine them with sandbox time to calculate the paper's synchronous GPU occupation and policy staleness.
 
 **Run.** The complete one-click command includes both panels. To run only GPU generation and training:
 
@@ -312,7 +312,7 @@ bash ae/run_all.sh --group figure-09 --output "$AE_RUN/figure-09"
 
 A dedicated RAM-backed entry point and configuration are described in the [self-hosting and targeted-run guide](ae/docs/self-hosting.md#specialized-runs).
 
-**Output and interpretation.** In both panels of `figure-09-comparison.png`, compare the three curves within each file-size bin. Examine whether reflink reduces private copy-up data and how that reduction affects device I/O. Filesystem logs and metadata also generate writes, so these quantities need not be equal. The vertical axis is bytes/edit; device I/O is measured at the loop device.
+**Output and interpretation.** In both panels of `figure-09-comparison.png`, compare the three curves within each file-size bin. Examine whether reflink reduces private copy-up data and how that reduction affects device I/O. Filesystem journals and metadata also generate writes, so these quantities need not be equal. The vertical axis is bytes/edit; device writes are measured using loop-device write counters.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -330,7 +330,7 @@ A dedicated RAM-backed entry point and configuration are described in the [self-
 <a id="步骤7"></a>
 <a id="step-7"></a>
 
-**Goal.** Check content across checkpoint/restore, deleted but still-open file descriptors, and isolation of writes across checkpoints.
+**Goal.** Check file contents before and after checkpoint/restore, the behavior of open file descriptors referring to deleted files, and isolation of writes across checkpoints.
 
 ```bash
 bash ae/run_all.sh --experiment correctness --output "$AE_RUN/correctness"

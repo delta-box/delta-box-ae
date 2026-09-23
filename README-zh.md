@@ -101,7 +101,7 @@ bash ae/run_all.sh --group table-02 --output "$AE_RUN/table-02"
 
 也可用 `--experiment table-02-e2b` 等单独选择一个 backend，并为它指定新的输出目录。
 
-**输出与判断。** 查看 `table-02-comparison.png`。分别比较 checkpoint 和 restore，先看各工作负载组，再看事件加权的 `All` 汇总；单位为 ms，越低越好。论文结论关注 DeltaBox 相对 baseline 的开销优势。判断时核对各系统的配置和计时定义；`All` 不是四个组均值的简单平均。
+**输出与判断。** 查看 `table-02-comparison.png`。分别比较 checkpoint 和 restore，先看各工作负载组，再看事件加权的 `All` 汇总（图中标为 `Event Avg`）；单位为 ms，越低越好。论文结论关注 DeltaBox 相对 baseline 的开销优势。判断时核对各系统的配置和计时定义；`All` 不是四个组均值的简单平均。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>
@@ -258,7 +258,7 @@ DeltaBox、CubeSandbox 与 E2B 分别测试 N=1/4/16/64。每个子实例必须�
 <a id="figure-8b-gpu"></a>
 <a id="获得-gpu-后的命令"></a>
 
-**验证目标。** 测量生成、训练阶段的时间，并结合 sandbox 时间计算论文中的同步占用率与 policy staleness。
+**验证目标。** 测量生成、训练阶段的时间，并结合 sandbox 时间计算论文中的同步 GPU 占用率与 policy staleness。
 
 **运行。** 完整一键命令已包含这两项。只运行 GPU 生成与训练时使用：
 
@@ -311,7 +311,7 @@ bash ae/run_all.sh --group figure-09 --output "$AE_RUN/figure-09"
 <a id="correctness"></a>
 <a id="步骤7"></a>
 
-**验证目标。** 检查 checkpoint / restore 前后的内容、删除后仍打开的文件描述符，以及跨 checkpoint 写入的隔离语义。
+**验证目标。** 检查 checkpoint / restore 前后的文件内容、指向已删除文件的打开文件描述符的行为，以及跨 checkpoint 写入的隔离语义。
 
 ```bash
 bash ae/run_all.sh --experiment correctness --output "$AE_RUN/correctness"
