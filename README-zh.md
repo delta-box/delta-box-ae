@@ -276,7 +276,15 @@ bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 
 **输出与判断。** (b) 输出逐次生成/训练时延及 `gpu/attempt-NNN/plots/figure-08b.png`；在同一 batch 下比较对应阶段。(c) 在 CPU fan-out 和 GPU 测量均成功后，输出 `gpu/attempt-NNN/theory/occupation.json` 及图表。检查降低 sandbox 时间是否提高模型中的有效占用率、减少 staleness；(c) 是理论计算结果。两项结果自动进入本次中英文对比页。
 
-[![Figure 8(b)：GPU 脚本输出示例](docs/images/figure-08b.png)](docs/images/figure-08b.png)
+<table>
+<tr><th>论文图表</th><th>脚本输出示例</th></tr>
+<tr>
+<td align="center" valign="top"><a href="ae/reference/figures/figure-08.png"><img src="ae/reference/figures/figure-08.png" alt="Figure 8: 论文图表" width="300"></a></td>
+<!-- AE-RESULT:figure-08-gpu:start -->
+<td align="center" valign="top"><a href="docs/images/figure-08b.png"><img src="docs/images/figure-08b.png" alt="Figure 8(b): 脚本输出示例" width="300"></a><br><small><a href="docs/images/figure-08b-comparison.png">查看并排大图</a></small></td>
+<!-- AE-RESULT:figure-08-gpu:end -->
+</tr>
+</table>
 
 ### 2.8 Figure 9：写放大
 

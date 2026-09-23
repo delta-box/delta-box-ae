@@ -292,7 +292,15 @@ The authors configure the model, Python environments, and devices for hosted run
 
 **Output and interpretation.** Panel (b) produces per-repeat generation/training timings and `gpu/attempt-NNN/plots/figure-08b.png`; compare corresponding stages at the same batch size. After CPU fan-out and GPU measurements both succeed, panel (c) produces `gpu/attempt-NNN/theory/occupation.json` and plots. Check whether reducing sandbox time increases modeled useful occupation and reduces staleness; (c) is a theoretical calculation. Both panels are included in this run's English and Chinese comparison pages.
 
-[![Figure 8(b): Example GPU script output](docs/images/figure-08b.png)](docs/images/figure-08b.png)
+<table>
+<tr><th>Paper figure/table</th><th>Example script output</th></tr>
+<tr>
+<td align="center" valign="top"><a href="ae/reference/figures/figure-08.png"><img src="ae/reference/figures/figure-08.png" alt="Figure 8: Paper figure/table" width="300"></a></td>
+<!-- AE-RESULT:figure-08-gpu:start -->
+<td align="center" valign="top"><a href="docs/images/figure-08b.png"><img src="docs/images/figure-08b.png" alt="Figure 8(b): Example script output" width="300"></a><br><small><a href="docs/images/figure-08b-comparison.png">Open full comparison</a></small></td>
+<!-- AE-RESULT:figure-08-gpu:end -->
+</tr>
+</table>
 
 ### 2.8 Figure 9: write amplification
 
