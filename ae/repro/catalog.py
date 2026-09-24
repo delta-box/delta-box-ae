@@ -44,6 +44,37 @@ def cohort(path):
     return rows
 
 
+BASELINE_44 = frozenset(('replay', 'criu', 'fc-diff'))
+
+
+def baseline_rows(backend, rows, config):
+    """Select the same fixed instances without truncating their trajectories."""
+    mode = str(config.get('baseline_inputs', 'all'))
+    if mode not in ('44', 'all'):
+        raise ValueError('baseline_inputs must be 44 or all')
+    if backend not in BASELINE_44 or mode == 'all':
+        return rows, None
+    path = AE_ROOT / 'paper/table-02/cohort-44.json'
+    manifest = json.loads(path.read_text())
+    selected = manifest.get('instances')
+    if (manifest.get('schema_version') != 1 or not isinstance(selected, list)
+            or len(selected) != 44 or any(not isinstance(i, str) for i in selected)
+            or len(set(selected)) != 44):
+        raise ValueError('The baseline-44 manifest must contain exactly 44 unique instances')
+    by_id = {row['instance']: row for row in rows}
+    if len(by_id) != len(rows):
+        raise ValueError('Duplicate baseline instance')
+    missing = set(selected) - set(by_id)
+    if missing:
+        raise ValueError('Baseline-44 inputs missing from ' + backend + ': ' + ', '.join(sorted(missing)))
+    expected = manifest.get('input_sha256', {}).get(backend, {})
+    if any(expected.get(i) != by_id[i]['sha256'] for i in selected):
+        raise ValueError('Baseline-44 input binding differs for ' + backend)
+    selection = dict(name='baseline-44', instances=44,
+                     path='paper/table-02/cohort-44.json', sha256=digest(path))
+    return [by_id[i] for i in selected], selection
+
+
 def data_image(config,instance):
     overrides=config.get('instance_data_images',{})
     if not isinstance(overrides,dict):raise ValueError('instance_data_images must be an object')
@@ -138,6 +169,7 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
             backend='cube' if experiment=='figure-01-cube' else experiment.removeprefix('table-02-')
             suffix='criu-attempts' if backend=='criu' else backend
             rows=cohort('paper/table-02/cohort-'+suffix+'.csv')
+            rows, selection = baseline_rows(backend, rows, config)
             if limit:rows=rows[:limit]
             for row in rows:
                 key=experiment+'__'+row['instance']
@@ -148,6 +180,10 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 if experiment=='figure-01-cube':cmd+=['--collect-phases']
                 if max_events:cmd+=['--limit',str(max_events)]
                 add(experiment,key,cmd,[row['local']])
+                if selection:
+                    jobs[-1]['input_selection'] = selection
+                    if not limit and not max_events:
+                        jobs[-1]['run_purpose'] = 'full-trace'
         elif experiment.startswith('figure-02-'):
             panel=experiment.removeprefix('figure-02-');rows=cohort('paper/figure-02/cohort-'+panel+'.csv')
             if limit:rows=rows[:limit]

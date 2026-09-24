@@ -6,7 +6,7 @@
 
 DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
 
-Start with the **approximately 5-minute quick check**, then allow **approximately 10 hours** for the complete CPU evaluation. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
+Start with the **approximately 5-minute quick check**, then run all experiments. Replay, CRIU, and Firecracker Diff use a fixed set of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
 
@@ -45,7 +45,15 @@ Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the e
 bash ae/run_all.sh
 ```
 
-This command runs all CPU experiments in the [index](#experiments), then analyzes the results, plots them, and creates paper-comparison pages. Budget approximately 10 hours; actual duration depends on host load and baseline execution time. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+This command runs all CPU experiments in the [index](#experiments), then analyzes the results, plots them, and creates paper-comparison pages. Replay, CRIU, and Firecracker Diff use the same 44 instance IDs and execute each trajectory to completion. Other experiments retain their respective input sets. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+
+To use the original complete baseline input sets (244 each for Replay/CRIU and 238 for Firecracker Diff), run:
+
+```bash
+bash ae/run_all.sh --baseline-inputs all
+```
+
+`--baseline-inputs` also applies to individual experiments; its default is `44`.
 
 When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
