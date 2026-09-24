@@ -32,7 +32,7 @@ from repro.common import (configured_path, configured_value, file_record, host_s
                           install_termination_handler, load_config, public_config,
                           repository_state, write_json)
 from repro.process import execute
-from repro.memory_budget import job_size_gib
+from vendor.finalbench.fc_diff_dm.fc_capacity import job_size_gib
 from release.lock import PATHS as SOURCE_PATHS, fingerprint, from_environment, source_records
 
 GROUPS = {

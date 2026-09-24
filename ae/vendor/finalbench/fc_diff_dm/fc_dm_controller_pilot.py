@@ -37,8 +37,7 @@ from fc_dm_pilot import (
 )
 sys.path.insert(0, str(PAYLOAD))
 from baseline_audit import flush_audit, message_policy  # noqa: E402
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
-from repro.memory_budget import check_capacity, GIB
+from fc_capacity import check_capacity
 
 
 def http_json(url: str, method: str = "GET", obj: dict | None = None, timeout: float = 30.0) -> dict:

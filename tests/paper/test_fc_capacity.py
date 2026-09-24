@@ -1,14 +1,31 @@
 """FC-diff admission must distinguish per-job quota from physical NUMA memory."""
 import json
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-from ae.repro import memory_budget as budget
+from ae.vendor.finalbench.fc_diff_dm import fc_capacity as budget
 
 
 class CapacityTests(unittest.TestCase):
+    def test_copied_driver_runs_outside_checkout(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)/'driver'
+            shutil.copytree(root/'ae/vendor/finalbench/fc_diff_dm', target)
+            env = dict(os.environ, SPR_PAYLOAD=str(root/'ae/vendor/spr_payload'),
+                       MOATLESS_VENV='/unused', MOCK_TRACES_ROOT='/unused', AE_BASE=str(target),
+                       AE_D_OVERLAY='/unused', AE_KERNEL='/unused', AE_BASE_XFS='/unused')
+            env.pop('PYTHONPATH', None)
+            result = subprocess.run([sys.executable, str(target/'fc_dm_controller_pilot.py'), '--help'],
+                                    cwd=tmp, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_old_quota_is_rejected_before_starting(self):
         with self.assertRaisesRegex(ValueError, 'at least 28'):
             budget.job_size_gib('table-02-fc-diff', {'mem_mib': 8192, 'memory_job_size_gib': 16})

@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'ae')]
 from repro.common import configured_path, load_config, write_json
 from repro.staging_cleanup import cleanup_reconstructable_staging
-from repro.memory_budget import GIB, check_capacity, job_size_gib
+from vendor.finalbench.fc_diff_dm.fc_capacity import GIB, check_capacity, job_size_gib
 
 
 def mount_info(path):
