@@ -67,3 +67,4 @@ backends/deltabox/test/workload
 !/ae/vendor/spr_payload/moatless-det-src/**
 !/ae/vendor/d-overlayfs/benchresults/
 !/ae/vendor/d-overlayfs/benchresults/**
+/ae/.launcher-audit.jsonl

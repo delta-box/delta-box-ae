@@ -24,7 +24,7 @@ import subprocess
 POLICY_PATH = Path('/etc/deltabox-ae/launcher.json')
 POLICY_FIELDS = {'runtime_root', 'python', 'config', 'environment_file',
                  'output_root', 'allowed_user', 'lock_file'}
-OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root'}
+OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root', 'results_backup_root'}
 EXPERIMENTS = ('table-02-deltabox', 'table-03-slow', 'table-02-replay',
                'table-02-criu', 'table-02-fc-diff', 'table-02-cube', 'table-02-e2b',
                'figure-02-filesystem', 'figure-02-memory',
@@ -203,7 +203,7 @@ def load_policy():
             or any(not isinstance(value, str) or not value for value in policy.values())):
         raise ValueError('Launcher policy requires: ' + ', '.join(sorted(POLICY_FIELDS)) +
                          '; optional: ' + ', '.join(sorted(OPTIONAL_POLICY_FIELDS)))
-    for key in (POLICY_FIELDS - {'allowed_user'}) | ({'temporary_root'} & set(policy)):
+    for key in (POLICY_FIELDS - {'allowed_user'}) | ({'temporary_root', 'results_backup_root'} & set(policy)):
         path = Path(policy[key])
         if not path.is_absolute() or '..' in path.parts:
             raise ValueError(f'Policy {key} must be an absolute path without parent traversal')
@@ -283,6 +283,8 @@ def fixed_environment(policy, caller):
     }
     if 'temporary_root' in policy:
         environment['TMPDIR'] = str(policy['temporary_root'])
+    if 'results_backup_root' in policy:
+        environment['AE_RESULTS_BACKUP_ROOT'] = str(policy['results_backup_root'])
     return environment
 
 
@@ -310,12 +312,12 @@ def acquire_lock(path):
         raise
 
 
-def result_path(policy, selected, caller, *, resume=False, trust=None):
+def result_path(policy, selected, caller, *, resume=False, trust=None, allow_root=False):
     root = trusted_path(policy['output_root'], directory=True, trust=trust, root_leaf=True)
     if selected is None:
-        raise ValueError('A result destination must be selected from the source version')
+        raise ValueError('A result destination must be selected')
     path = selected if selected.is_absolute() else root / selected
-    if '..' in path.parts or path == root or not path.is_relative_to(root):
+    if '..' in path.parts or (path == root and not (allow_root or resume)) or not path.is_relative_to(root):
         raise ValueError('Results must stay inside the configured output root')
     for parent in reversed(path.parents):
         if not parent.is_relative_to(root):
@@ -329,30 +331,19 @@ def result_path(policy, selected, caller, *, resume=False, trust=None):
         # retained in a result. No reviewer-writable plan is accepted on resume.
         for name in ('review.json', 'SUMMARY.md'):
             trusted_path(path / name, trust=trust, root_leaf=True)
-    elif path.exists() or path.is_symlink():
+    elif (path.exists() or path.is_symlink()) and not (allow_root and path == root):
         raise ValueError('Output already exists; choose a new path or use --resume')
     return path
 
 
-def runtime_commit(policy):
-    # The runtime tree is validated by main; do not inherit caller Git settings.
-    return subprocess.check_output(
-        ['/usr/bin/git', '-c', 'safe.directory=' + str(policy['runtime_root']),
-         '-C', str(policy['runtime_root']), 'rev-parse', 'HEAD'], text=True,
-        env={'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent',
-             'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}, timeout=15).strip()
-
-
 def default_result(policy, args, *, trust=None):
-    commit = runtime_commit(policy)
-    if not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit):
-        raise ValueError('The runtime checkout must identify the full source commit')
-    root = Path(commit[:12])
+    # Source identity belongs in the measurement record, not its directory name.
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
     if args.quick_check:
-        return root / 'checks/quick-check'
-    if args.max_events is not None:
-        return root / 'checks/selected'
-    return root / 'full'
+        return Path('checks') / ('quick-check-' + stamp)
+    if args.max_events is not None or args.limit is not None or args.experiment or args.group:
+        return Path('selected') / stamp
+    return Path('.')
 
 
 def command_line(policy, args, output):
@@ -375,7 +366,7 @@ def command_line(policy, args, output):
 
 
 def audit_launch(policy, caller, command, *, trust=None):
-    path = policy['output_root'] / '.launcher-audit.jsonl'
+    path = policy['output_root'].parent / '.launcher-audit.jsonl'
     if path.exists() or path.is_symlink():
         trusted_path(path, trust=trust, root_leaf=True)
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
@@ -426,7 +417,8 @@ def main(argv=None):
         if not args.list and selected is None:
             selected = default_result(policy, args, trust=trust)
         output = None if args.list else result_path(policy, selected, caller,
-                                                    resume=bool(args.resume), trust=trust)
+                                                    resume=bool(args.resume), trust=trust,
+                                                    allow_root=not (args.quick_check or args.limit is not None or args.max_events is not None or args.experiment or args.group))
         command = command_line(policy, args, output)
         audit_launch(policy, caller, command, trust=trust)
         print(f'Hosted AE runtime: {runtime}; caller: {caller.pw_name} (uid {caller.pw_uid})', flush=True)

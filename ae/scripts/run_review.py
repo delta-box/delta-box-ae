@@ -25,6 +25,7 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
+from repro.result_storage import DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -62,7 +63,7 @@ def parser():
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
-    p.add_argument('--output', type=Path, help='New output directory; never overwritten')
+    p.add_argument('--output', type=Path, help='Explicit new output directory; default full run rotates ae/results after verified backup')
     p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
     p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
                    help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
@@ -131,30 +132,21 @@ def current_source():
     return from_environment() or working_source()
 
 
-def result_version(identity):
-    commit = identity.get('source_commit', '')
-    if isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit):
-        return commit[:12]
-    digest = identity.get('source_sha256', '')
-    if isinstance(digest, str) and re.fullmatch('[0-9a-f]{64}', digest):
-        return 'source-' + digest[:12]
-    raise ValueError('A versioned result directory requires a source commit or SHA-256')
+def complete_selection(args):
+    return not (args.quick_check or args.experiment or args.group or args.limit is not None
+                or args.max_events is not None or args.available or args.analyze_existing)
 
 
 def default_output(args):
-    """Keep one version together; short checks never occupy the full run."""
+    """Latest complete run has a stable path; checks use independent subfolders."""
     if args.analyze_existing:
-        review = args.analyze_existing / 'review.json'
-        if not review.is_file():
-            raise ValueError('Analyzing loose runs requires an explicit --output directory')
-        measured = json.loads(review.read_text())['release']
-        return REPO / 'ae/results' / result_version(measured) / 'rendering' / result_version(working_source())
-    root = REPO / 'ae/results' / result_version(current_source())
+        return REPO / 'ae/work/analysis' / timestamp()
+    root = REPO / 'ae/results'
     if args.quick_check:
-        return root / 'checks/quick-check'
-    if args.max_events is not None:
-        return root / 'checks/selected'
-    return root / 'full'
+        return root / 'checks' / ('quick-check-' + timestamp())
+    if not complete_selection(args):
+        return root / 'selected' / timestamp()
+    return root
 
 
 def make_output_accessible(root):
@@ -899,13 +891,36 @@ def main(argv=None):
         p.error('Measurements require the Linux AE host; use --analyze-existing to plot copied evidence locally')
     if args.resume and (args.output or args.analyze_existing):
         p.error('--resume cannot be combined with --output/--analyze-existing')
+    try:
+        with run_lock(REPO / 'ae/work/.results.lock'):
+            return run_selected(args, p)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f'AE refused: {error}', file=sys.stderr)
+        return 2
+
+
+def run_selected(args, p):
     config = {} if args.analyze_existing else load_config(args.config.resolve())
     check_timeout(config)
-    output = (args.resume or args.output or default_output(args)).resolve()
+    selected_output = args.resume or args.output or default_output(args)
+    if selected_output.is_symlink():
+        p.error('Output must not be a symlink')
+    output = selected_output.resolve()
     if args.analyze_existing and not args.analyze_existing.is_dir():
         p.error('--analyze-existing must point to an existing directory')
     runner = Review(args, config, output)
-    output.mkdir(parents=True, exist_ok=bool(args.resume))
+    latest = output == (REPO / 'ae/results').resolve() and not args.resume
+    if latest and not complete_selection(args):
+        p.error('Only a complete unrestricted run may replace ae/results; select a child --output')
+    backup = None
+    if latest:
+        destination = Path(os.environ.get('AE_RESULTS_BACKUP_ROOT',
+                               config.get('review', {}).get('results_backup_root', str(DEFAULT_BACKUP_ROOT))))
+        backup = prepare_latest(output, destination)
+        if backup:
+            print('Previous results backed up and verified: ' + backup['path'], flush=True)
+            runner.record['previous_results_backup'] = backup
+    output.mkdir(parents=True, exist_ok=bool(args.resume) or latest)
     if args.resume:
         history = output / 'attempt-history' / runner.attempt
         history.mkdir(parents=True, exist_ok=False)

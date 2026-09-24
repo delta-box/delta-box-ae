@@ -62,7 +62,8 @@ class ReviewTests(unittest.TestCase):
         identity = {'source_commit': 'a' * 40, 'source_sha256': 'b' * 64}
         with patch.object(review, 'current_source', return_value=identity):
             path = review.default_output(review.parser().parse_args(['--test']))
-        self.assertEqual(path, ROOT / 'ae/results/aaaaaaaaaaaa/checks/quick-check')
+        self.assertEqual(path.parent, ROOT / 'ae/results/checks')
+        self.assertTrue(path.name.startswith('quick-check-'))
 
     def test_summary_links_existing_bilingual_pages_for_current_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,15 +87,15 @@ class ReviewTests(unittest.TestCase):
             self.assertIn("[简体中文](comparison/attempt-002/README-zh.md)", text)
             self.assertNotIn("comparison/attempt-001/", text)
 
-    def test_default_result_layout_separates_checks_within_one_source_version(self):
+    def test_default_result_layout_keeps_latest_and_separates_checks(self):
         identity = {'source_commit': 'a' * 40, 'source_sha256': 'b' * 64}
         with patch.object(review, 'current_source', return_value=identity):
             full = review.default_output(review.parser().parse_args([]))
             subset = review.default_output(review.parser().parse_args(['--limit', '1']))
             short = review.default_output(review.parser().parse_args(['--max-events', '3']))
-        self.assertEqual(full, ROOT / 'ae/results/aaaaaaaaaaaa/full')
-        self.assertEqual(subset, full)
-        self.assertEqual(short, ROOT / 'ae/results/aaaaaaaaaaaa/checks/selected')
+        self.assertEqual(full, ROOT / 'ae/results')
+        self.assertEqual(subset.parent, ROOT / 'ae/results/selected')
+        self.assertEqual(short.parent, ROOT / 'ae/results/selected')
 
     def exercise(self, flags, failures=(), missing=(), *, config_extra=None, interrupt=None, timing=None, gpu_failure=False):
         with tempfile.TemporaryDirectory() as tmp:
@@ -344,8 +345,7 @@ class ReviewTests(unittest.TestCase):
             config = Path(tmp) / 'config.json'
             config.write_text('{}')
             with patch.dict(review.os.environ, {}), patch.object(review.sys, 'platform', 'linux'), patch.object(review, 'current_source', return_value=SOURCE):
-                with self.assertRaises(FileExistsError):
-                    review.main(['--config', str(config), '--output', tmp])
+                self.assertEqual(review.main(['--config', str(config), '--output', tmp]), 2)
             self.assertFalse((Path(tmp) / 'review.json').exists())
 
     def test_resume_rejects_changed_source_before_any_write(self):
