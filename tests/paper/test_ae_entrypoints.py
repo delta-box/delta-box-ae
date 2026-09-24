@@ -175,7 +175,7 @@ class ReviewTests(unittest.TestCase):
                 self.assertEqual(record['run_purpose'], 'ae-cohorts')
                 self.assertEqual(record['experiments'], list(review.EXPERIMENTS))
                 self.assertNotIn('table-02-cube-run', commands)
-                self.assertIn('correctness-run', commands)
+                self.assertNotIn('correctness-run', commands)
                 cube = next(row for row in record['coverage'] if row['experiment'] == 'table-02-cube')
                 self.assertEqual(cube['status'], 'unavailable')
                 self.assertIn('missing fixture dependency', cube['reasons'][0])
@@ -202,15 +202,15 @@ class ReviewTests(unittest.TestCase):
         self.assertNotIn("plot", commands)
         self.assertIn("paper-comparison", commands)
 
-    def test_actual_failure_continues_and_never_becomes_pass(self):
+    def test_actual_failure_stops_remaining_experiments(self):
         for flags in ([], ['--all'], ['--available']):
             with self.subTest(flags=flags):
                 code, record, commands, _ = self.exercise(flags, failures={'table-02-criu-run'})
                 self.assertEqual((code, record['status']), (1, 'failed'))
-                self.assertIn('correctness-run', commands)
-                self.assertIn('analyze', commands)
-                self.assertIn('paper-comparison', commands)
-                self.assertNotIn('archived', commands['analyze'])
+                self.assertNotIn('correctness-run', commands)
+                self.assertNotIn('analyze', commands)
+                self.assertNotIn('paper-comparison', commands)
+                self.assertTrue(any(row['status'] == 'not-run' for row in record['coverage']))
 
     def test_partial_input_selection_is_reported_as_full_trace_not_full_cohort(self):
         code, record, _, files = self.exercise(['--available', '--experiment', 'table-02-replay'], missing={'table-02-replay__1'})
@@ -616,7 +616,7 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(config.stat().st_mode & 0o777, 0o600)
             self.assertEqual(outside.stat().st_mode & 0o777, 0o666)
 
-    def test_execute_plan_continues_after_job_failure_and_persists_manifest(self):
+    def test_execute_plan_stops_after_job_failure_and_persists_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan = root / 'plan.json'
@@ -633,19 +633,19 @@ class ReviewTests(unittest.TestCase):
                  patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
-            self.assertEqual(calls, [['false'], ['true']])
-            self.assertEqual(budgets, [1000, 1])
+            self.assertEqual(calls, [['false']])
+            self.assertEqual(budgets, [1000])
             result = json.loads((suite / 'suite.json').read_text())
             self.assertEqual(result['status'], 'failed')
-            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'ok'])
+            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'not-run'])
 
-    def test_staging_cleanup_runs_after_success_only_and_failure_continues(self):
+    def test_staging_cleanup_failure_stops_next_producer(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan = root / 'plan.json'
             suite = root / 'suite'
             review.write_json(plan, dict(review_output=str(suite), review_timeout=1, jobs=[
-                dict(key=key, command=[key], run_purpose='full-trace') for key in ('bad', 'cleanup-error', 'good')]))
+                dict(key=key, command=[key], run_purpose='full-trace') for key in ('good', 'cleanup-error', 'bad')]))
             order = []
             def execute(argv, output, **kwargs):
                 order.append('producer-exited:' + argv[0])
@@ -660,10 +660,10 @@ class ReviewTests(unittest.TestCase):
                  patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=cleanup),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
-            self.assertEqual(order, ['producer-exited:bad', 'producer-exited:cleanup-error', 'cleanup:cleanup-error',
-                                     'producer-exited:good', 'cleanup:good'])
+            self.assertEqual(order, ['producer-exited:good', 'cleanup:good',
+                                     'producer-exited:cleanup-error', 'cleanup:cleanup-error'])
             result = json.loads((suite / 'suite.json').read_text())
-            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'failed', 'ok'])
+            self.assertEqual([job['status'] for job in result['jobs']], ['ok', 'failed', 'not-run'])
             self.assertIn('artifact conflict', result['jobs'][1]['staging_cleanup']['error'])
 
     def test_interrupted_cleanup_does_not_record_an_ok_suite(self):

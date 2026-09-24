@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'ae')]
 from repro.common import configured_path, load_config, write_json
 from repro.staging_cleanup import cleanup_reconstructable_staging
+from repro.memory_budget import GIB, check_capacity, job_size_gib
 
 
 def mount_info(path):
@@ -116,6 +117,11 @@ def run(args):
             archive_status = archive / '.memory-jobs' / (args.key + '.json')
             write_json(archive_status, dict(meta, status='preparing'))
             meta['mount'] = mount_info(suite)
+            if args.experiment == 'table-02-fc-diff':
+                job_size_gib(args.experiment, dict(config, memory_job_size_gib=args.size_gib))
+                needed = (8 + 2 * int(config.get('mem_mib', 8192)) / 1024 + 2) * GIB
+                meta['admission'] = check_capacity(suite, 'before-staging', int(needed),
+                    archive / '.memory-jobs' / (args.key + '-capacity.jsonl'), node=args.node)
             if meta['mount']['fstype'] != 'tmpfs' or 'noswap' not in meta['mount']['options'].split(','):
                 raise RuntimeError('Memory measurement requires verified noswap tmpfs')
             with ExitStack() as inputs:
@@ -162,6 +168,8 @@ def run(args):
                             code = 1
                             raise
                         finally:
+                            usage = shutil.disk_usage(suite)
+                            meta['final_tmpfs_bytes'] = dict(total=usage.total, used=usage.used, free=usage.free)
                             write_json(output / 'memory-job.json', dict(meta, returncode=code))
                             write_json(archive_status, dict(meta, status='archiving', returncode=code))
                             # Archive even when post-measurement validation or cleanup fails.

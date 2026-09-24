@@ -32,6 +32,7 @@ from repro.common import (configured_path, configured_value, file_record, host_s
                           install_termination_handler, load_config, public_config,
                           repository_state, write_json)
 from repro.process import execute
+from repro.memory_budget import job_size_gib
 from release.lock import PATHS as SOURCE_PATHS, fingerprint, from_environment, source_records
 
 GROUPS = {
@@ -377,7 +378,7 @@ def execute_review_job(index, job, plan, output, stop_event=None):
             job['status'] = 'ok'
         except Exception as error:
             job.update(status='failed', staging_cleanup=dict(status='failed', error=f'{type(error).__name__}: {error}'))
-            print(f'[{job["key"]}] post-measurement staging cleanup failed: {error}; continuing', flush=True)
+            print(f'[{job["key"]}] post-measurement staging cleanup failed: {error}', flush=True)
     return job
 
 
@@ -401,6 +402,11 @@ def execute_plan(path):
             for index, job in pending:
                 job.update(execute_review_job(index, job, plan, output))
                 write_json(manifest, plan)
+                if job.get('status') != 'ok':
+                    for later_index, later in pending:
+                        if later_index > index:
+                            later.update(status='not-run', reason='Stopped after ' + job['key'])
+                    break
         else:
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = []
@@ -408,7 +414,10 @@ def execute_plan(path):
                     futures = {pool.submit(execute_review_job, i, job, plan, output, stop_event): job
                                for i, job in pending}
                     for future in as_completed(futures):
-                        futures[future].update(future.result())
+                        finished = future.result()
+                        futures[future].update(finished)
+                        if finished.get('status') != 'ok':
+                            stop_event.set()
                         write_json(manifest, plan)
                 except BaseException:
                     stop_event.set()
@@ -650,7 +659,7 @@ class Review:
         if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
             if not pinned:
                 raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
-            plan['memory_measurement'] = dict(node=identity['node'], size_gib=int(config.get('memory_job_size_gib', 16)))
+            plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
         pending = [job for job in jobs if not job.get('reused_verified')]
@@ -813,6 +822,16 @@ class Review:
                 self.analyze(source / 'runs' if (source / 'runs').is_dir() else source)
             else:
                 load_runtime_environment(self.config, self.experiments)
+                # Detect fixed configuration errors before spending hours on earlier suites.
+                for selected in self.experiments:
+                    chosen = load_config(self.overrides.get(selected, self.args.config.resolve()))
+                    if selected not in self.overrides:
+                        chosen = deep_merge(chosen, chosen.get('review', {}).get('experiment_overrides', {}).get(selected, {}))
+                    if selected == 'table-02-fc-diff' and chosen.get('baseline_storage') == 'tmpfs':
+                        job_size_gib(selected, chosen)
+                    if selected == 'table-02-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ:
+                        from repro.staging_cleanup import validate_e2b_storage
+                        validate_e2b_storage(chosen)
                 if not self.step('prepare', [*self.cli, 'prepare']):
                     return 1
                 if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
@@ -827,7 +846,14 @@ class Review:
                             self.record['coverage'].append(row)
                         row.update(status='failed', reasons=[f'{type(error).__name__}: {error}'])
                         self.save()
-                        print(f'[{name}] failed: {error}; continuing independent experiments', flush=True)
+                        print(f'[{name}] failed: {error}', flush=True)
+                    row = next((row for row in self.record['coverage'] if row['experiment'] == name), {})
+                    if not row.get('optional') and (row.get('status') == 'failed' or (not self.available and row.get('status') in ('partial', 'unavailable'))):
+                        for remaining in self.experiments[self.experiments.index(name) + 1:]:
+                            self.record['coverage'].append(dict(experiment=remaining, status='not-run',
+                                reasons=['Stopped after failed experiment ' + name]))
+                        self.save()
+                        return 1
                 self.analyze(self.output / 'runs')
         except BaseException as error:
             self.terminal_error(error)
