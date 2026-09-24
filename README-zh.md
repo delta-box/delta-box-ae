@@ -6,7 +6,7 @@
 
 DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
-建议先完成约 **5 分钟的快速检查**，再运行完整 CPU 实验，预留约 **10 小时**。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
+建议先完成约 **5 分钟的快速检查**，再运行全部实验。Replay、CRIU 和 Firecracker Diff 默认使用固定的 **44 条完整轨迹**；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [自建环境](#self-hosting) · [运行问题](#troubleshooting)
 
@@ -43,7 +43,15 @@ ok: <结果目录>/SUMMARY.md
 bash ae/run_all.sh
 ```
 
-该命令运行[索引](#experiments)中的全部 CPU 实验，并自动分析、绘图和生成论文对比页。预计约 10 小时，实际时间受主机负载和 baseline 执行时间影响。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
+该命令运行[索引](#experiments)中的全部 CPU 实验，并自动分析、绘图和生成论文对比页。Replay、CRIU 和 Firecracker Diff 使用同一份 44 条实例名单，每条轨迹执行到底，其余实验使用各自的输入集。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
+
+如需使用原始完整 baseline 输入集（Replay/CRIU 各 244 条，Firecracker Diff 238 条），运行：
+
+```bash
+bash ae/run_all.sh --baseline-inputs all
+```
+
+`--baseline-inputs` 同样适用于单项运行；默认值为 `44`。
 
 运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。默认完整运行的状态应为 `ok`，失败步骤会保留日志并返回非零退出码。
 

@@ -63,6 +63,8 @@ def parser():
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
     p.add_argument('--output', type=Path, help='New output directory; never overwritten')
     p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
+    p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
+                   help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
     p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
     p.add_argument('--max-events', type=int, help='Explicit event prefix; units depend on backend')
     p.add_argument('--no-pin', action='store_true', help='Explicitly opt out of NUMA and frequency controls')
@@ -449,7 +451,8 @@ class Review:
         self.attempt = 'attempt-001'
         self.record = dict(schema_version=2, status='running', experiments=self.experiments,
                            selection_mode='available' if self.available else 'required',
-                           run_purpose='quick-check' if self.limits else 'available-cohorts' if self.available else 'full-cohorts',
+                           run_purpose='quick-check' if self.limits else 'available-cohorts' if self.available else 'ae-cohorts' if args.baseline_inputs == '44' else 'full-cohorts',
+                           baseline_inputs=args.baseline_inputs,
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
@@ -461,6 +464,8 @@ class Review:
             self.previous_record = previous
             if previous.get('release', {}).get('source_sha256') != self.record['release']['source_sha256']:
                 raise ValueError('Resume source fingerprint differs; start a new output')
+            if previous.get('baseline_inputs', 'all') != self.record['baseline_inputs']:
+                raise ValueError('Resume baseline input set differs; use the original --baseline-inputs choice')
             if previous.get('measurement_request') != self.record['measurement_request']:
                 raise ValueError('Resume NUMA/frequency policy differs; start a new output')
             if previous.get('experiments') != self.experiments or previous.get('run_purpose') != self.record['run_purpose']:
@@ -546,6 +551,8 @@ class Review:
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         config.pop('review', None)
+        if name in ('table-02-replay', 'table-02-criu', 'table-02-fc-diff'):
+            config['baseline_inputs'] = self.args.baseline_inputs
         if config.get('e2b', {}).get('execution', 'ssh') == 'local':
             for key in ('storage', 'sandbox_dir', 'gocache', 'gomodcache', 'resume_binary', 'parent_manifest'):
                 if config['e2b'].get(key):

@@ -21,6 +21,25 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 
 
 class ReviewTests(unittest.TestCase):
+
+    def test_default_baseline_selection_reaches_each_effective_config(self):
+        for flags, selected in [([], '44'), (['--baseline-inputs', 'all'], 'all')]:
+            code, record, _, files = self.exercise(flags)
+            self.assertEqual(code, 0)
+            self.assertEqual(record['baseline_inputs'], selected)
+            for backend in ('replay', 'criu', 'fc-diff'):
+                config = json.loads(files[f'configs/attempt-001/table-02-{backend}.json'])
+                self.assertEqual(config['baseline_inputs'], selected)
+            self.assertNotIn('baseline_inputs', json.loads(files['configs/attempt-001/table-02-cube.json']))
+
+    def test_resume_rejects_changing_the_input_set(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(review, 'current_source', return_value=SOURCE):
+            root = Path(tmp)
+            old = review.Review(review.parser().parse_args(['--baseline-inputs', 'all']), {}, root)
+            old.save()
+            with self.assertRaisesRegex(ValueError, 'baseline input set differs'):
+                review.Review(review.parser().parse_args(['--resume', str(root)]), {}, root)
+
     def test_quick_check_entrypoint_forwards_paths_and_returns_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -153,7 +172,7 @@ class ReviewTests(unittest.TestCase):
                 code, record, commands, _ = self.exercise(flags, failures={'table-02-cube-doctor'})
                 self.assertEqual((code, record['status']), (1, 'failed'))
                 self.assertEqual(record['selection_mode'], 'required')
-                self.assertEqual(record['run_purpose'], 'full-cohorts')
+                self.assertEqual(record['run_purpose'], 'ae-cohorts')
                 self.assertEqual(record['experiments'], list(review.EXPERIMENTS))
                 self.assertNotIn('table-02-cube-run', commands)
                 self.assertIn('correctness-run', commands)

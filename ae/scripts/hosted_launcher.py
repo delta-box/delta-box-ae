@@ -248,6 +248,8 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
+                        help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
     parser.add_argument('--max-events', type=positive_integer, action=Once)
     output = parser.add_mutually_exclusive_group()
@@ -362,6 +364,8 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if args.baseline_inputs is not None:
+        command += ['--baseline-inputs', args.baseline_inputs]
     for key in ('limit', 'max_events'):
         if getattr(args, key) is not None:
             command += ['--' + key.replace('_', '-'), str(getattr(args, key))]
