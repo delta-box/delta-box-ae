@@ -119,7 +119,7 @@ def run(args):
             meta['mount'] = mount_info(suite)
             if args.experiment == 'table-02-fc-diff':
                 job_size_gib(args.experiment, dict(config, memory_job_size_gib=args.size_gib))
-                needed = (8 + 2 * int(config.get('mem_mib', 8192)) / 1024 + 2) * GIB
+                needed = (8 + 3 * int(config.get('mem_mib', 8192)) / 1024 + 2) * GIB
                 meta['admission'] = check_capacity(suite, 'before-staging', int(needed),
                     archive / '.memory-jobs' / (args.key + '-capacity.jsonl'), node=args.node)
             if meta['mount']['fstype'] != 'tmpfs' or 'noswap' not in meta['mount']['options'].split(','):

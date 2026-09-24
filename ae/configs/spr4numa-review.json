@@ -50,8 +50,8 @@
   "criu_dump_binary": "/mnt/disk2/dyp/criu-exact-parent-20260922/clean-build-root/source/criu/criu",
   "measurement": {
     "pin": true,
-    "numa_node": 2,
-    "cpus": "52-55"
+    "numa_node": 1,
+    "cpus": "28-31"
   },
   "review": {
     "experiment_overrides": {

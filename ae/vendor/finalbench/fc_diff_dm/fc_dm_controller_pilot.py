@@ -233,7 +233,8 @@ def run_controller_pilot(
 
         base_vmstate = snaps / "base.vmstate"
         base_mem = snaps / "base.mem"
-        capacity('before-base-snapshot', mem_mib * 1024 ** 2)
+        # Full snapshot also faults in untouched guest pages.
+        capacity('before-base-snapshot', 2 * mem_mib * 1024 ** 2)
         fc = vm.take_snapshot(snapshot_path=base_vmstate, mem_path=base_mem, snapshot_type="Full")
         capacity('after-base-snapshot')
         dmres = dm.snapshot("seq0")
