@@ -44,7 +44,7 @@ class ReviewTests(unittest.TestCase):
                 {'baseline_storage': 'tmpfs', 'cube': {'api_url': 'http://127.0.0.1:3000'}})
         self.assertIn('Cube memory service verification failed: service identity changed', reasons)
 
-    def test_cube_manifest_is_prepared_before_any_experiment_and_restored(self):
+    def test_cube_memory_starts_after_fc_diff_before_cube_and_is_restored(self):
         events = []
         @contextlib.contextmanager
         def context(output, **kwargs):
@@ -56,32 +56,64 @@ class ReviewTests(unittest.TestCase):
                 yield manifest
             finally:
                 events.append(('restored', None))
+        original_run = review.Review.run_experiment
+        def observed_run(runner, name):
+            events.append(('experiment', name))
+            return original_run(runner, name)
         config = {'cube': {'manage_memory_service': True, 'memory_size_gib': 16},
                   'measurement': {'pin': True, 'numa_node': 1, 'cpus': '28-31'}}
         with patch('ae.scripts.cube_memory_context.memory_service', side_effect=context), \
-             patch('runners.cube_memory.verify', return_value={}):
+             patch('runners.cube_memory.verify', return_value={}), \
+             patch.object(review.Review, 'run_experiment', autospec=True, side_effect=observed_run):
             code, record, commands, files = self.exercise([], config_extra=config)
         self.assertEqual(code, 0)
-        self.assertEqual(events[0], ('prepared', {'node': 1, 'cpus': '28-31', 'size_gib': 16}))
+        prepared = ('prepared', {'node': 1, 'cpus': '28-31', 'size_gib': 16})
+        self.assertEqual(events.count(prepared), 1)
+        self.assertLess(events.index(('experiment', 'table-02-fc-diff')), events.index(prepared))
+        self.assertLess(events.index(prepared), events.index(('experiment', 'table-02-cube')))
         self.assertEqual(events[-1][0], 'restored')
         for name in ('table-02-cube', 'figure-08-cube'):
             effective = json.loads(files[f'configs/attempt-001/{name}.json'])
             self.assertTrue(effective['cube']['memory_manifest'].endswith('/cube-memory/storage.json'))
 
-    def test_cube_setup_failure_prevents_earlier_cpu_measurements(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            config_path = root / 'config.json'
-            config_path.write_text(json.dumps({'cube': {'manage_memory_service': True}}))
-            args = review.parser().parse_args(['--config', str(config_path)])
-            with patch.object(review, 'current_source', return_value=SOURCE):
-                runner = review.Review(args, review.load_config(config_path), root / 'out')
-            with patch('ae.scripts.cube_memory_context.memory_service', side_effect=ValueError('busy Cube')), \
-                 patch.object(review, 'execute') as execute:
-                with self.assertRaisesRegex(ValueError, 'busy Cube'):
-                    runner.run()
-            execute.assert_not_called()
-            self.assertEqual(runner.record['status'], 'failed')
+    def test_cube_setup_failure_stops_before_cube_and_later_experiments(self):
+        with patch('ae.scripts.cube_memory_context.memory_service',
+                   side_effect=ValueError('busy Cube')):
+            code, record, commands, _ = self.exercise(
+                [], config_extra={'cube': {'manage_memory_service': True}})
+        self.assertEqual((code, record['status']), (1, 'failed'))
+        self.assertIn('table-02-fc-diff-run', commands)
+        self.assertNotIn('table-02-cube-run', commands)
+        self.assertNotIn('table-02-e2b-run', commands)
+        row = next(r for r in record['coverage'] if r['experiment'] == 'table-02-cube')
+        self.assertEqual(row['status'], 'failed')
+        self.assertIn('busy Cube', row['reasons'][0])
+
+    def test_earlier_failure_does_not_allocate_cube_ram(self):
+        with patch('ae.scripts.cube_memory_context.memory_service') as start:
+            code, record, _, _ = self.exercise(
+                [], failures={'table-02-fc-diff-run'},
+                config_extra={'cube': {'manage_memory_service': True}})
+        self.assertEqual((code, record['status']), (1, 'failed'))
+        start.assert_not_called()
+        self.assertNotIn('cube_memory_service', record)
+
+    def test_invalid_cube_settings_rejected_before_measurements(self):
+        for cube in [{'manage_memory_service': True, 'memory_size_gib': 2},
+                     {'manage_memory_service': 'yes'}]:
+            with self.subTest(cube=cube), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                config_path = root / 'config.json'
+                config_path.write_text(json.dumps({'cube': cube}))
+                args = review.parser().parse_args(['--config', str(config_path)])
+                with patch.object(review, 'current_source', return_value=SOURCE):
+                    runner = review.Review(args, review.load_config(config_path), root / 'out')
+                with patch.object(review, 'execute') as execute, \
+                     patch('ae.scripts.cube_memory_context.memory_service') as start:
+                    with self.assertRaises(ValueError):
+                        runner.run()
+                execute.assert_not_called()
+                start.assert_not_called()
 
     def test_cube_restoration_failure_is_not_a_successful_run(self):
         @contextlib.contextmanager

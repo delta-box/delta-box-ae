@@ -796,7 +796,7 @@ class Review:
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
-    def prepare_cube_service(self, contexts):
+    def prepare_cube_service(self, contexts, *, validate_only=False):
         selected = [name for name in self.experiments if name.endswith('-cube')]
         if not selected:
             return
@@ -815,8 +815,12 @@ class Review:
             sizes = {c.get('cube', {}).get('memory_size_gib', 16) for c in configs}
             if len(placements) != 1 or len(sizes) != 1 or any(not pin_requested(self.args, c) for c in configs):
                 raise ValueError('Managed Cube requires the same pinned NUMA/CPU placement for every experiment')
+            if any(type(size) is not int or size < 12 for size in sizes):
+                raise ValueError('Cube RAM workspace must be at least 12 GiB')
             node, cpus = placements.pop()
             self.cube_placement = {'numa_node': node, 'cpus': cpus, 'pin': True}
+            if validate_only:
+                return
             from ae.scripts.cube_memory_context import memory_service
             self.cube_memory_manifest = contexts.enter_context(memory_service(
                 self.output / 'environment' / self.attempt / 'cube-memory',
@@ -877,13 +881,19 @@ class Review:
                     if not gpu_config.is_absolute():
                         gpu_config = Path(self.config['_config_dir']) / gpu_config
                     load_settings(gpu_config)
-                self.prepare_cube_service(contexts)
+                # Validate fixed Cube settings early, but do not retain its RAM
+                # copy while unrelated memory-heavy experiments execute.
+                self.prepare_cube_service(contexts, validate_only=True)
                 if not self.step('prepare', [*self.cli, 'prepare']):
                     return 1
                 if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
                     return 1
+                cube_prepared = False
                 for name in self.experiments:
                     try:
+                        if name.endswith('-cube') and not cube_prepared:
+                            self.prepare_cube_service(contexts)
+                            cube_prepared = True
                         self.run_experiment(name)
                     except Exception as error:
                         row = next((row for row in self.record['coverage'] if row['experiment'] == name), None)
