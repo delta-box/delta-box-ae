@@ -115,7 +115,12 @@ def deep_merge(base, override):
 
 
 def config_identity(config):
-    return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    # A managed daemon receives a fresh PID/mount proof for each attempt.
+    # Its full file hash remains in the review; it is not a measurement setting.
+    identity = copy.deepcopy(config)
+    if identity.get('cube', {}).get('manage_memory_service') is True:
+        identity['cube'].pop('memory_manifest', None)
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def working_source():

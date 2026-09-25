@@ -23,6 +23,19 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 class ReviewTests(unittest.TestCase):
 
 
+    def test_resume_compares_cube_settings_not_generated_proof_path(self):
+        first = {'cube': {'manage_memory_service': True, 'memory_manifest': '/attempt-001/storage.json',
+                          'memory_size_gib': 16}, 'measurement': {'numa_node': 1, 'cpus': '28-31'}}
+        second = json.loads(json.dumps(first))
+        second['cube']['memory_manifest'] = '/attempt-002/storage.json'
+        self.assertEqual(review.config_identity(first), review.config_identity(second))
+        second['measurement']['numa_node'] = 2
+        self.assertNotEqual(review.config_identity(first), review.config_identity(second))
+        first['cube']['manage_memory_service'] = False
+        second = json.loads(json.dumps(first))
+        second['cube']['memory_manifest'] = '/different-manual-proof.json'
+        self.assertNotEqual(review.config_identity(first), review.config_identity(second))
+
     def test_cube_fanout_rechecks_daemon_identity_before_running(self):
         with patch('runners.cube_memory.verify', side_effect=ValueError('service identity changed')), \
              patch.object(review.socket, 'create_connection'):
