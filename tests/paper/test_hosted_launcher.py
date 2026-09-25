@@ -153,7 +153,7 @@ class HostedTests(unittest.TestCase):
                   'HOME': '/attacker', 'LD_PRELOAD': '/attacker.so', 'BASH_ENV': '/attacker',
                   'AE_CONFIG': '/attacker.json', 'DELTABOX_RELEASE_LOCK': '/attacker.json',
                   'TMPDIR': '/attacker', 'TMP': '/attacker', 'TEMP': '/attacker',
-                  'AE_HOSTED_CALLER_UID': '0', 'E2B_API_KEY': 'caller-secret'}
+                  'AE_HOSTED_CALLER_UID': '0', 'AE_HOSTED_GPU_SSH_USER': 'root', 'E2B_API_KEY': 'caller-secret'}
         with self.launcher(poison) as (execute, stdout, _):
             code = hosted.main(['--checkout', str(self.runtime), '--output', 'formal'])
         self.assertEqual(code, 0)
@@ -165,12 +165,20 @@ class HostedTests(unittest.TestCase):
         self.assertEqual(environment['AE_HOSTED_CALLER_UID'], str(REVIEWER.pw_uid))
         self.assertEqual(environment['E2B_API_KEY'], 'fixed-secret')
         self.assertFalse(any(key.startswith(('SUDO_', 'PYTHON', 'GIT_CONFIG')) for key in environment))
-        for key in ('LD_PRELOAD', 'BASH_ENV', 'AE_CONFIG', 'DELTABOX_RELEASE_LOCK', 'TMPDIR', 'TMP', 'TEMP'):
+        for key in ('LD_PRELOAD', 'BASH_ENV', 'AE_CONFIG', 'DELTABOX_RELEASE_LOCK', 'TMPDIR', 'TMP', 'TEMP', 'AE_HOSTED_GPU_SSH_USER'):
             self.assertNotIn(key, environment)
         self.assertNotIn('secret', stdout.getvalue())
         audit = json.loads((self.output.parent / '.launcher-audit.jsonl').read_text())
         self.assertEqual(audit['caller_uid'], REVIEWER.pw_uid)
         self.assertEqual(audit['command'], command)
+
+    def test_gpu_ssh_account_is_selected_by_root_policy_only(self):
+        policy = json.loads(self.policy_path.read_text())
+        policy['gpu_ssh_user'] = MAINTAINER.pw_name
+        self.policy_path.write_text(json.dumps(policy))
+        with self.launcher({'AE_HOSTED_GPU_SSH_USER': 'root'}) as (execute, _, _):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0)
+        self.assertEqual(execute.call_args.args[2]['AE_HOSTED_GPU_SSH_USER'], MAINTAINER.pw_name)
 
     def test_refuses_untrusted_user_and_missing_root_privilege(self):
         with self.launcher({'SUDO_UID': '7002'}) as (execute, _, stderr):

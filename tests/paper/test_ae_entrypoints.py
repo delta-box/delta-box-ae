@@ -22,6 +22,68 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 
 class ReviewTests(unittest.TestCase):
 
+
+    def test_cube_fanout_rechecks_daemon_identity_before_running(self):
+        with patch('runners.cube_memory.verify', side_effect=ValueError('service identity changed')), \
+             patch.object(review.socket, 'create_connection'):
+            reasons = review.job_unavailable(
+                dict(experiment='figure-08-cube', command=['python', 'fanout.py']),
+                {'baseline_storage': 'tmpfs', 'cube': {'api_url': 'http://127.0.0.1:3000'}})
+        self.assertIn('Cube memory service verification failed: service identity changed', reasons)
+
+    def test_cube_manifest_is_prepared_before_any_experiment_and_restored(self):
+        events = []
+        @contextlib.contextmanager
+        def context(output, **kwargs):
+            output.mkdir(parents=True)
+            manifest = output / 'storage.json'
+            manifest.write_text('{}')
+            events.append(('prepared', kwargs))
+            try:
+                yield manifest
+            finally:
+                events.append(('restored', None))
+        config = {'cube': {'manage_memory_service': True, 'memory_size_gib': 16},
+                  'measurement': {'pin': True, 'numa_node': 1, 'cpus': '28-31'}}
+        with patch('ae.scripts.cube_memory_context.memory_service', side_effect=context), \
+             patch('runners.cube_memory.verify', return_value={}):
+            code, record, commands, files = self.exercise([], config_extra=config)
+        self.assertEqual(code, 0)
+        self.assertEqual(events[0], ('prepared', {'node': 1, 'cpus': '28-31', 'size_gib': 16}))
+        self.assertEqual(events[-1][0], 'restored')
+        for name in ('table-02-cube', 'figure-08-cube'):
+            effective = json.loads(files[f'configs/attempt-001/{name}.json'])
+            self.assertTrue(effective['cube']['memory_manifest'].endswith('/cube-memory/storage.json'))
+
+    def test_cube_setup_failure_prevents_earlier_cpu_measurements(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / 'config.json'
+            config_path.write_text(json.dumps({'cube': {'manage_memory_service': True}}))
+            args = review.parser().parse_args(['--config', str(config_path)])
+            with patch.object(review, 'current_source', return_value=SOURCE):
+                runner = review.Review(args, review.load_config(config_path), root / 'out')
+            with patch('ae.scripts.cube_memory_context.memory_service', side_effect=ValueError('busy Cube')), \
+                 patch.object(review, 'execute') as execute:
+                with self.assertRaisesRegex(ValueError, 'busy Cube'):
+                    runner.run()
+            execute.assert_not_called()
+            self.assertEqual(runner.record['status'], 'failed')
+
+    def test_cube_restoration_failure_is_not_a_successful_run(self):
+        @contextlib.contextmanager
+        def context(output, **kwargs):
+            output.mkdir(parents=True)
+            path = output / 'storage.json'
+            path.write_text('{}')
+            yield path
+            raise RuntimeError('restoration failed')
+        with patch('ae.scripts.cube_memory_context.memory_service', side_effect=context), \
+             patch('runners.cube_memory.verify', return_value={}):
+            code, record, _, _ = self.exercise([], config_extra={'cube': {'manage_memory_service': True}})
+        self.assertEqual((code, record['status']), (1, 'failed'))
+        self.assertEqual(record['steps'][-1]['name'], 'cube-service-cleanup')
+
     def test_default_baseline_selection_reaches_each_effective_config(self):
         for flags, selected in [([], '44'), (['--baseline-inputs', 'all'], 'all')]:
             code, record, _, files = self.exercise(flags)
@@ -141,7 +203,7 @@ class ReviewTests(unittest.TestCase):
                 return {'status': 'failed' if name in failures else 'ok', 'returncode': (2 if name.endswith('-doctor') else 1) if name in failures else 0}
 
             def fake_gpu(runner):
-                runner.record['coverage'].append(dict(experiment='figure-08-gpu', optional=True, status='failed' if gpu_failure else 'ok',
+                runner.record['coverage'].append(dict(experiment='figure-08-gpu', optional=False, status='failed' if gpu_failure else 'ok',
                                                        planned_jobs=8, available_jobs=8, successful_jobs=0 if gpu_failure else 8))
             with patch.object(review, 'execute', side_effect=fake_execute), \
                     patch.object(review.Review, 'run_gpu', autospec=True, side_effect=fake_gpu), \
@@ -189,12 +251,12 @@ class ReviewTests(unittest.TestCase):
         self.assertTrue(all(row['status'] == 'ok' and row['successful_jobs'] == row['planned_jobs']
                             for row in record['coverage']))
 
-    def test_optional_gpu_failure_keeps_successful_cpu_results(self):
+    def test_required_gpu_failure_preserves_cpu_evidence_but_fails_run(self):
         code, record, commands, _ = self.exercise([], gpu_failure=True)
-        self.assertEqual((code, record["status"]), (0, "ok"))
+        self.assertEqual((code, record["status"]), (1, "failed"))
         cpu = [row for row in record["coverage"] if row["experiment"] != "figure-08-gpu"]
         self.assertTrue(all(row["status"] == "ok" for row in cpu))
-        self.assertIn("paper-comparison", commands)
+        self.assertNotIn("paper-comparison", commands)
 
     def test_gpu_only_does_not_attempt_to_analyze_nonexistent_cpu_runs(self):
         code, record, commands, _ = self.exercise(["--group", "gpu"])

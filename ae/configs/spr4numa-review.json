@@ -23,7 +23,9 @@
     "template": "cube-official-blog-sandbox-code-2c2g-20260609",
     "proxy_node_ip": "127.0.0.1",
     "phase_log": "/data/log/Cubelet/Cubelet-req.log",
-    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet"
+    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet",
+    "manage_memory_service": true,
+    "memory_size_gib": 16
   },
   "e2b": {
     "infra": "/home/dyp/infra",

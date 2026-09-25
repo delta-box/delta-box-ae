@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -56,7 +57,7 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     selection = p.add_mutually_exclusive_group()
     selection.add_argument('--available', action='store_true', help='Explicit partial run for self-built/debug environments; report missing prerequisites')
-    selection.add_argument('--all', action='store_true', help='Require the CPU catalog with optional automatic remote GPU measurement (default)')
+    selection.add_argument('--all', action='store_true', help='Require all CPU and GPU experiments (default)')
     selection.add_argument('--test', dest='quick_check', action='store_true', help='Quick check: one DeltaBox instance and three checkpoint/restore events')
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
@@ -264,7 +265,7 @@ def job_unavailable(job, config):
             return path
         except ValueError as error:
             reasons.append(str(error))
-    if name in ('table-02-cube', 'figure-01-cube') and config.get('baseline_storage') == 'tmpfs':
+    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs':
         try:
             from runners.cube_memory import verify as verify_cube_memory
             verify_cube_memory(config)
@@ -459,6 +460,8 @@ class Review:
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
         self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
                                   reason='GPU stage not reached or not selected')
+        self.cube_memory_manifest = None
+        self.cube_placement = None
         self.previous_record = {}
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
@@ -552,6 +555,9 @@ class Review:
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         config.pop('review', None)
+        if name.endswith('-cube') and self.cube_memory_manifest is not None:
+            config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
+            config['measurement'] = {**config.get('measurement', {}), **self.cube_placement}
         if name in ('table-02-replay', 'table-02-criu', 'table-02-fc-diff'):
             config['baseline_inputs'] = self.args.baseline_inputs
         if config.get('e2b', {}).get('execution', 'ssh') == 'local':
@@ -560,7 +566,7 @@ class Review:
                     config['e2b'][key] = str(configured_path(config, 'e2b.' + key).resolve())
         # Preserve the original base for relative paths when serializing overrides.
         for key in ('kernel', 'base_xfs', 'images_dir', 'payload', 'moatless_venv', 'nltk_data', 'criu_bin', 'criu_dump_binary', 'deltafs', 'work_dir', 'vm_work_dir',
-                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
+                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'cube.memory_manifest', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
             mapping = config
             parts = key.split('.')
             for part in parts[:-1]:
@@ -778,15 +784,51 @@ class Review:
             self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
                                       reason=f'{type(error).__name__}: {error}')
         gpu = self.record['gpu']
-        self.record['coverage'].append(dict(experiment=GPU, optional=True,
+        self.record['coverage'].append(dict(experiment=GPU, optional=False,
             status={'complete': 'ok', 'skipped': 'unavailable'}.get(gpu['status'], gpu['status']),
             planned_jobs=8, available_jobs=gpu.get('successful_cases', 0),
             successful_jobs=gpu.get('successful_cases', 0), reasons=[gpu.get('reason', '')]))
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
+    def prepare_cube_service(self, contexts):
+        selected = [name for name in self.experiments if name.endswith('-cube')]
+        if not selected:
+            return
+        configs = []
+        for name in selected:
+            config = load_config(self.overrides.get(name, self.args.config.resolve()))
+            if name not in self.overrides:
+                config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
+            configs.append(config)
+        managed = [c.get('cube', {}).get('manage_memory_service', False) for c in configs]
+        if any(type(value) is not bool for value in managed) or len(set(managed)) != 1:
+            raise ValueError('Cube experiments must share one explicit memory service policy')
+        if managed[0]:
+            placements = {(self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', c.get('measurement', {}).get('numa_node', 2))),
+                           self.args.cpus or os.environ.get('AE_CPUS', c.get('measurement', {}).get('cpus', '52-55'))) for c in configs}
+            sizes = {c.get('cube', {}).get('memory_size_gib', 16) for c in configs}
+            if len(placements) != 1 or len(sizes) != 1 or any(not pin_requested(self.args, c) for c in configs):
+                raise ValueError('Managed Cube requires the same pinned NUMA/CPU placement for every experiment')
+            node, cpus = placements.pop()
+            self.cube_placement = {'numa_node': node, 'cpus': cpus, 'pin': True}
+            from ae.scripts.cube_memory_context import memory_service
+            self.cube_memory_manifest = contexts.enter_context(memory_service(
+                self.output / 'environment' / self.attempt / 'cube-memory',
+                node=node, cpus=cpus, size_gib=sizes.pop()))
+            self.record['cube_memory_service'] = file_record(self.cube_memory_manifest)
+        from runners.cube_memory import verify
+        for config in configs:
+            if self.cube_memory_manifest is not None:
+                config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
+                config['measurement'] = {'numa_node': node, 'cpus': cpus}
+            if managed[0] or config.get('baseline_storage') == 'tmpfs':
+                verify(config)
+        self.save()
+
     def run(self):
         self.save()
+        contexts = ExitStack()
         try:
             if self.args.analyze_existing:
                 source = self.args.analyze_existing.resolve()
@@ -824,6 +866,13 @@ class Review:
                     if selected == 'table-02-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ:
                         from repro.staging_cleanup import validate_e2b_storage
                         validate_e2b_storage(chosen)
+                if GPU in self.experiments:
+                    from ae.scripts.figure08_remote import DEFAULT_CONFIG, load_settings
+                    gpu_config = Path(self.config.get('gpu_remote_config', DEFAULT_CONFIG))
+                    if not gpu_config.is_absolute():
+                        gpu_config = Path(self.config['_config_dir']) / gpu_config
+                    load_settings(gpu_config)
+                self.prepare_cube_service(contexts)
                 if not self.step('prepare', [*self.cli, 'prepare']):
                     return 1
                 if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
@@ -851,6 +900,12 @@ class Review:
             self.terminal_error(error)
             raise
         finally:
+            try:
+                contexts.close()
+            except Exception as error:
+                self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
+                    log='environment/' + self.attempt + '/cube-memory/cleanup-errors.json',
+                    error=f'{type(error).__name__}: {error}'))
             failures = any(step['status'] not in ('ok', 'unavailable') for step in self.record['steps'])
             coverage = [row for row in self.record['coverage'] if not row.get('optional')]
             failures |= any(row['status'] == 'failed' for row in coverage) if not self.args.analyze_existing else False
@@ -871,7 +926,7 @@ def main(argv=None):
     p = parser()
     args = p.parse_args(argv)
     if args.list:
-        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; optional, reported in result.md'}}, indent=2))
+        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; required when selected, reported in result.md'}}, indent=2))
         return 0
     if args.execute_plan:
         return execute_plan(args.execute_plan)

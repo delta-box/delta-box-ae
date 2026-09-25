@@ -235,6 +235,13 @@ def remote_run(root, *, probe_only=False):
 def ssh_transport(config):
     command = ['ssh', '-o', 'BatchMode=yes', '-o', f'ConnectTimeout={config["connect_timeout_s"]}',
                '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3']
+    hosted_user = os.environ.get('AE_HOSTED_GPU_SSH_USER')
+    if os.geteuid() == 0 and os.environ.get('AE_HOSTED_CALLER_UID') and hosted_user:
+        import pwd
+        account = pwd.getpwnam(hosted_user)
+        if account.pw_uid == 0:
+            raise ValueError('GPU SSH transport must use an unprivileged account')
+        return ['sudo', '-n', '-H', '-u', account.pw_name, '--', *command]
     caller = os.environ.get('AE_HOSTED_CALLER_UID') or os.environ.get('SUDO_UID')
     if os.geteuid() == 0 and caller and caller.isdigit() and int(caller) != 0:
         import pwd

@@ -1,4 +1,4 @@
-"""Remote admission, provenance and optional one-click GPU behavior without CUDA."""
+"""Remote admission, provenance and required one-click GPU behavior without CUDA."""
 import copy
 import json
 import os
@@ -18,6 +18,21 @@ class RemoteTests(unittest.TestCase):
         config = remote.load_settings(remote.DEFAULT_CONFIG)
         config['sample_interval_s'] = 0
         return config
+
+    def test_hosted_gpu_ssh_uses_policy_account_without_key_copy(self):
+        from types import SimpleNamespace
+        import pwd
+        with patch.dict(os.environ, {'AE_HOSTED_CALLER_UID': '1012', 'AE_HOSTED_GPU_SSH_USER': 'dyp'}, clear=True), \
+             patch.object(remote.os, 'geteuid', return_value=0), \
+             patch.object(pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=1010, pw_name='dyp')):
+            command = remote.ssh_transport(self.settings())
+        self.assertEqual(command[:7], ['sudo', '-n', '-H', '-u', 'dyp', '--', 'ssh'])
+
+    def test_nonroot_cannot_select_hosted_gpu_ssh_account(self):
+        with patch.dict(os.environ, {'AE_HOSTED_CALLER_UID': '1012', 'AE_HOSTED_GPU_SSH_USER': 'dyp'}, clear=True), \
+             patch.object(remote.os, 'geteuid', return_value=1012):
+            command = remote.ssh_transport(self.settings())
+        self.assertEqual(command[0], 'ssh')
 
     def observation(self, count=8):
         return dict(gpus=[dict(index=i, uuid=f'GPU-{i}', memory_mib=4, utilization_pct=0)
@@ -260,7 +275,7 @@ class ReviewIntegrationTests(unittest.TestCase):
         with patch.object(review, 'current_source', return_value={}):
             return review.Review(args, {}, root)
 
-    def test_all_busy_does_not_fail_cpu_and_result_md_explains_skip(self):
+    def test_all_busy_fails_required_run_and_preserves_cpu_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             runner = self.runner(root)
@@ -273,14 +288,15 @@ class ReviewIntegrationTests(unittest.TestCase):
                 runner.record['coverage'].append(dict(experiment=name, status='ok', successful_jobs=1))
             def analyze(source):
                 step('paper-comparison')
-            with patch.object(runner, 'step', side_effect=step), \
+            with patch.object(runner, 'prepare_cube_service'), \
+                    patch.object(runner, 'step', side_effect=step), \
                     patch.object(runner, 'run_experiment', side_effect=experiment), \
                     patch.object(runner, 'analyze', side_effect=analyze), \
                     patch.object(remote, 'run_auto', return_value=dict(status='skipped', reason='All GPUs busy', successful_cases=0)) as gpu:
-                self.assertEqual(runner.run(), 0)
+                self.assertEqual(runner.run(), 1)
             gpu.assert_called_once()
             self.assertIn('All GPUs busy', (root / 'result.md').read_text())
-            self.assertEqual(runner.record['status'], 'ok')
+            self.assertEqual(runner.record['status'], 'failed')
 
     def test_analysis_only_copies_gpu_evidence_without_ssh(self):
         with tempfile.TemporaryDirectory() as directory:

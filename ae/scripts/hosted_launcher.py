@@ -24,7 +24,7 @@ import subprocess
 POLICY_PATH = Path('/etc/deltabox-ae/launcher.json')
 POLICY_FIELDS = {'runtime_root', 'python', 'config', 'environment_file',
                  'output_root', 'allowed_user', 'lock_file'}
-OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root', 'results_backup_root'}
+OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root', 'results_backup_root', 'gpu_ssh_user'}
 EXPERIMENTS = ('table-02-deltabox', 'table-03-slow', 'table-02-replay',
                'table-02-criu', 'table-02-fc-diff', 'table-02-cube', 'table-02-e2b',
                'figure-02-filesystem', 'figure-02-memory',
@@ -208,6 +208,10 @@ def load_policy():
         if not path.is_absolute() or '..' in path.parts:
             raise ValueError(f'Policy {key} must be an absolute path without parent traversal')
         policy[key] = path
+    if 'gpu_ssh_user' in policy:
+        account = pwd.getpwnam(policy['gpu_ssh_user'])
+        if account.pw_uid == 0:
+            raise ValueError('GPU SSH transport must use an unprivileged account')
     return policy
 
 
@@ -285,6 +289,8 @@ def fixed_environment(policy, caller):
         environment['TMPDIR'] = str(policy['temporary_root'])
     if 'results_backup_root' in policy:
         environment['AE_RESULTS_BACKUP_ROOT'] = str(policy['results_backup_root'])
+    if 'gpu_ssh_user' in policy:
+        environment['AE_HOSTED_GPU_SSH_USER'] = policy['gpu_ssh_user']
     return environment
 
 

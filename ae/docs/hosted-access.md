@@ -41,3 +41,5 @@ bash ae/run_all.sh --list
 新的完整运行在持有运行锁时，先按时间戳复制全部旧结果，逐文件核验 SHA-256、元数据和链接，再替换工作目录。目标需要容纳现有结果并另外保留 10 GiB。复制失败、校验失败或活动引用均保留源结果，不启动实验。
 
 每份备份包含 `results/` 和 `backup.json`，后者记录文件清单、校验结果及原始路径到归档路径的映射。历史 JSON 的来源身份和链接文本保持原样；恢复旧数据时按记录的原始路径还原，不能把旧数据算作新一轮结果。快速检查、指定实验和显式 `--output` 不触发完整目录轮换。启动审计和互斥锁放在结果目录之外，避免随归档丢失运行保护。
+
+The hosted launcher may set `gpu_ssh_user` in its root-owned policy to an existing unprivileged account with access to the GPU host. It uses that account's SSH configuration without copying private keys to the reviewer account. Cube memory-service preparation and restoration are automatic when `cube.manage_memory_service` is enabled.
