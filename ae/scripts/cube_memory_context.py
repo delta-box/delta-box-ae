@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Run an idle Cube service against a private RAM copy, restoring it in finally."""
 import argparse, fcntl, json, os, signal, subprocess, time, urllib.request
+from contextlib import contextmanager
+from types import SimpleNamespace
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from vendor.finalbench.fc_diff_dm.fc_capacity import node_available, GIB
 
 SERVICE='cube-sandbox-cubelet.service'
 STORAGE=Path('/data/cubelet/storage')
@@ -22,15 +27,20 @@ def sandboxes():
     if not isinstance(value,list): raise ValueError('Unknown Cube inventory format')
     return value
 
-def main():
-    p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--node',type=int,default=0)
-    p.add_argument('--cpus',default='0-3')
-    p.add_argument('command',nargs=argparse.REMAINDER)
-    a=p.parse_args()
-    if os.geteuid()!=0: raise ValueError('Root required for private RAM mounts and service restoration')
-    if not a.command or a.command[0]!='--': raise ValueError('Require -- followed by the measured command')
+@contextmanager
+def memory_service(output_dir, *, node, cpus, size_gib=16):
+    """Hold a verified private service for the caller, restoring it on every exit."""
+    a=SimpleNamespace(output=Path(output_dir),node=node,cpus=cpus)
+    if os.geteuid()!=0:
+        raise ValueError('Root required for private RAM mounts and service restoration')
+    if type(size_gib) is not int or size_gib < 12:
+        raise ValueError('Cube RAM workspace must be at least 12 GiB')
+    from runners.cube_memory import cpuset
+    if not cpuset(cpus) or node < 0:
+        raise ValueError('Invalid Cube placement')
+    available=node_available(node)
+    if available < (size_gib+2)*GIB:
+        raise ValueError(f'Cube NUMA {node} has {available/GIB:.2f} GiB available; needs {size_gib+2} GiB')
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False)
     lock=open('/run/lock/deltabox-cube-memory.lock','w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     if DROP.exists() or sandboxes(): raise ValueError('Cube must be idle and no prior experiment override may exist')
@@ -46,10 +56,12 @@ def main():
             'allowed_nodes':output('systemctl','show',SERVICE,'-p','AllowedMemoryNodes','--value')}
     (out/'before.json').write_text(json.dumps(before,indent=2)+'\n')
     ram=out/'ram';ram.mkdir();mounted=stopped=override=placement=False;loop=None;volume=None
-    def interrupted(signum, frame): raise KeyboardInterrupt(f'signal {signum}')
-    signal.signal(signal.SIGTERM,interrupted)
+    def interrupted(signum, frame):
+        signal.signal(signal.SIGTERM,signal.SIG_IGN)
+        raise KeyboardInterrupt(f'signal {signum}')
+    previous_term=signal.signal(signal.SIGTERM,interrupted)
     try:
-        run('mount','-t','tmpfs','-o',f'size=12G,noswap,mpol=bind:{a.node},mode=0700','tmpfs',ram);mounted=True
+        run('mount','-t','tmpfs','-o',f'size={size_gib}G,noswap,mpol=bind:{a.node},mode=0700','tmpfs',ram);mounted=True
         run('systemctl','stop',SERVICE);stopped=True
         if sandboxes(): raise ValueError('Cube inventory changed during exclusive setup')
         image=ram/'storage.xfs'
@@ -93,7 +105,11 @@ def main():
             proof['paths'][path]=json.loads(output('nsenter','-t',pid,'-m','findmnt','-J','-T',path))
         if sandboxes():raise ValueError('Unexpected Cube activity before measurement')
         (out/'storage.json').write_text(json.dumps(proof,indent=2)+'\n')
-        return run(*a.command[1:]).returncode
+        from runners.cube_memory import verify
+        config={'cube':{'memory_manifest':str(out/'storage.json')},
+                'measurement':{'numa_node':node,'cpus':cpus}}
+        (out/'verified.json').write_text(json.dumps(verify(config),indent=2)+'\n')
+        yield out/'storage.json'
     finally:
         errors=[]
         def cleanup(label, fn):
@@ -115,8 +131,23 @@ def main():
         if volume and os.path.ismount(volume):cleanup('unmount RAM XFS',lambda:run('umount',volume))
         if loop:cleanup('detach RAM loop',lambda:run('losetup','-d',loop))
         if mounted:cleanup('unmount RAM',lambda:run('umount',ram))
+        signal.signal(signal.SIGTERM,previous_term)
+        lock.close()
         if errors:
             (out/'cleanup-errors.json').write_text(json.dumps(errors,indent=2)+'\n')
             raise RuntimeError('Cube service restoration or RAM cleanup failed: '+'; '.join(errors))
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--node',type=int,default=0)
+    p.add_argument('--cpus',default='0-3')
+    p.add_argument('--size-gib',type=int,default=16)
+    p.add_argument('command',nargs=argparse.REMAINDER)
+    a=p.parse_args()
+    if not a.command or a.command[0]!='--':
+        raise ValueError('Require -- followed by the measured command')
+    with memory_service(a.output,node=a.node,cpus=a.cpus,size_gib=a.size_gib):
+        return run(*a.command[1:]).returncode
 
 if __name__=='__main__':raise SystemExit(main())

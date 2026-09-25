@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -25,6 +26,7 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
+from repro.result_storage import DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -32,6 +34,7 @@ from repro.common import (configured_path, configured_value, file_record, host_s
                           install_termination_handler, load_config, public_config,
                           repository_state, write_json)
 from repro.process import execute
+from vendor.finalbench.fc_diff_dm.fc_capacity import job_size_gib
 from release.lock import PATHS as SOURCE_PATHS, fingerprint, from_environment, source_records
 
 GROUPS = {
@@ -54,14 +57,14 @@ def parser():
     p = argparse.ArgumentParser(description=__doc__)
     selection = p.add_mutually_exclusive_group()
     selection.add_argument('--available', action='store_true', help='Explicit partial run for self-built/debug environments; report missing prerequisites')
-    selection.add_argument('--all', action='store_true', help='Require the CPU catalog with optional automatic remote GPU measurement (default)')
+    selection.add_argument('--all', action='store_true', help='Require all CPU and GPU experiments (default)')
     selection.add_argument('--test', dest='quick_check', action='store_true', help='Quick check: one DeltaBox instance and three checkpoint/restore events')
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
-    p.add_argument('--output', type=Path, help='New output directory; never overwritten')
+    p.add_argument('--output', type=Path, help='Explicit new output directory; default full run rotates ae/results after verified backup')
     p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
     p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
                    help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
@@ -112,7 +115,12 @@ def deep_merge(base, override):
 
 
 def config_identity(config):
-    return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    # A managed daemon receives a fresh PID/mount proof for each attempt.
+    # Its full file hash remains in the review; it is not a measurement setting.
+    identity = copy.deepcopy(config)
+    if identity.get('cube', {}).get('manage_memory_service') is True:
+        identity['cube'].pop('memory_manifest', None)
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def working_source():
@@ -130,30 +138,21 @@ def current_source():
     return from_environment() or working_source()
 
 
-def result_version(identity):
-    commit = identity.get('source_commit', '')
-    if isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit):
-        return commit[:12]
-    digest = identity.get('source_sha256', '')
-    if isinstance(digest, str) and re.fullmatch('[0-9a-f]{64}', digest):
-        return 'source-' + digest[:12]
-    raise ValueError('A versioned result directory requires a source commit or SHA-256')
+def complete_selection(args):
+    return not (args.quick_check or args.experiment or args.group or args.limit is not None
+                or args.max_events is not None or args.available or args.analyze_existing)
 
 
 def default_output(args):
-    """Keep one version together; short checks never occupy the full run."""
+    """Latest complete run has a stable path; checks use independent subfolders."""
     if args.analyze_existing:
-        review = args.analyze_existing / 'review.json'
-        if not review.is_file():
-            raise ValueError('Analyzing loose runs requires an explicit --output directory')
-        measured = json.loads(review.read_text())['release']
-        return REPO / 'ae/results' / result_version(measured) / 'rendering' / result_version(working_source())
-    root = REPO / 'ae/results' / result_version(current_source())
+        return REPO / 'ae/work/analysis' / timestamp()
+    root = REPO / 'ae/results'
     if args.quick_check:
-        return root / 'checks/quick-check'
-    if args.max_events is not None:
-        return root / 'checks/selected'
-    return root / 'full'
+        return root / 'checks' / ('quick-check-' + timestamp())
+    if not complete_selection(args):
+        return root / 'selected' / timestamp()
+    return root
 
 
 def make_output_accessible(root):
@@ -271,7 +270,7 @@ def job_unavailable(job, config):
             return path
         except ValueError as error:
             reasons.append(str(error))
-    if name in ('table-02-cube', 'figure-01-cube') and config.get('baseline_storage') == 'tmpfs':
+    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs':
         try:
             from runners.cube_memory import verify as verify_cube_memory
             verify_cube_memory(config)
@@ -377,7 +376,7 @@ def execute_review_job(index, job, plan, output, stop_event=None):
             job['status'] = 'ok'
         except Exception as error:
             job.update(status='failed', staging_cleanup=dict(status='failed', error=f'{type(error).__name__}: {error}'))
-            print(f'[{job["key"]}] post-measurement staging cleanup failed: {error}; continuing', flush=True)
+            print(f'[{job["key"]}] post-measurement staging cleanup failed: {error}', flush=True)
     return job
 
 
@@ -401,6 +400,11 @@ def execute_plan(path):
             for index, job in pending:
                 job.update(execute_review_job(index, job, plan, output))
                 write_json(manifest, plan)
+                if job.get('status') != 'ok':
+                    for later_index, later in pending:
+                        if later_index > index:
+                            later.update(status='not-run', reason='Stopped after ' + job['key'])
+                    break
         else:
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = []
@@ -408,7 +412,10 @@ def execute_plan(path):
                     futures = {pool.submit(execute_review_job, i, job, plan, output, stop_event): job
                                for i, job in pending}
                     for future in as_completed(futures):
-                        futures[future].update(future.result())
+                        finished = future.result()
+                        futures[future].update(finished)
+                        if finished.get('status') != 'ok':
+                            stop_event.set()
                         write_json(manifest, plan)
                 except BaseException:
                     stop_event.set()
@@ -458,6 +465,8 @@ class Review:
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
         self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
                                   reason='GPU stage not reached or not selected')
+        self.cube_memory_manifest = None
+        self.cube_placement = None
         self.previous_record = {}
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
@@ -551,6 +560,9 @@ class Review:
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         config.pop('review', None)
+        if name.endswith('-cube') and self.cube_memory_manifest is not None:
+            config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
+            config['measurement'] = {**config.get('measurement', {}), **self.cube_placement}
         if name in ('table-02-replay', 'table-02-criu', 'table-02-fc-diff'):
             config['baseline_inputs'] = self.args.baseline_inputs
         if config.get('e2b', {}).get('execution', 'ssh') == 'local':
@@ -559,7 +571,7 @@ class Review:
                     config['e2b'][key] = str(configured_path(config, 'e2b.' + key).resolve())
         # Preserve the original base for relative paths when serializing overrides.
         for key in ('kernel', 'base_xfs', 'images_dir', 'payload', 'moatless_venv', 'nltk_data', 'criu_bin', 'criu_dump_binary', 'deltafs', 'work_dir', 'vm_work_dir',
-                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
+                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'cube.memory_manifest', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
             mapping = config
             parts = key.split('.')
             for part in parts[:-1]:
@@ -650,7 +662,7 @@ class Review:
         if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
             if not pinned:
                 raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
-            plan['memory_measurement'] = dict(node=identity['node'], size_gib=int(config.get('memory_job_size_gib', 16)))
+            plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
         pending = [job for job in jobs if not job.get('reused_verified')]
@@ -777,15 +789,51 @@ class Review:
             self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
                                       reason=f'{type(error).__name__}: {error}')
         gpu = self.record['gpu']
-        self.record['coverage'].append(dict(experiment=GPU, optional=True,
+        self.record['coverage'].append(dict(experiment=GPU, optional=False,
             status={'complete': 'ok', 'skipped': 'unavailable'}.get(gpu['status'], gpu['status']),
             planned_jobs=8, available_jobs=gpu.get('successful_cases', 0),
             successful_jobs=gpu.get('successful_cases', 0), reasons=[gpu.get('reason', '')]))
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
+    def prepare_cube_service(self, contexts):
+        selected = [name for name in self.experiments if name.endswith('-cube')]
+        if not selected:
+            return
+        configs = []
+        for name in selected:
+            config = load_config(self.overrides.get(name, self.args.config.resolve()))
+            if name not in self.overrides:
+                config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
+            configs.append(config)
+        managed = [c.get('cube', {}).get('manage_memory_service', False) for c in configs]
+        if any(type(value) is not bool for value in managed) or len(set(managed)) != 1:
+            raise ValueError('Cube experiments must share one explicit memory service policy')
+        if managed[0]:
+            placements = {(self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', c.get('measurement', {}).get('numa_node', 2))),
+                           self.args.cpus or os.environ.get('AE_CPUS', c.get('measurement', {}).get('cpus', '52-55'))) for c in configs}
+            sizes = {c.get('cube', {}).get('memory_size_gib', 16) for c in configs}
+            if len(placements) != 1 or len(sizes) != 1 or any(not pin_requested(self.args, c) for c in configs):
+                raise ValueError('Managed Cube requires the same pinned NUMA/CPU placement for every experiment')
+            node, cpus = placements.pop()
+            self.cube_placement = {'numa_node': node, 'cpus': cpus, 'pin': True}
+            from ae.scripts.cube_memory_context import memory_service
+            self.cube_memory_manifest = contexts.enter_context(memory_service(
+                self.output / 'environment' / self.attempt / 'cube-memory',
+                node=node, cpus=cpus, size_gib=sizes.pop()))
+            self.record['cube_memory_service'] = file_record(self.cube_memory_manifest)
+        from runners.cube_memory import verify
+        for config in configs:
+            if self.cube_memory_manifest is not None:
+                config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
+                config['measurement'] = {'numa_node': node, 'cpus': cpus}
+            if managed[0] or config.get('baseline_storage') == 'tmpfs':
+                verify(config)
+        self.save()
+
     def run(self):
         self.save()
+        contexts = ExitStack()
         try:
             if self.args.analyze_existing:
                 source = self.args.analyze_existing.resolve()
@@ -813,6 +861,23 @@ class Review:
                 self.analyze(source / 'runs' if (source / 'runs').is_dir() else source)
             else:
                 load_runtime_environment(self.config, self.experiments)
+                # Detect fixed configuration errors before spending hours on earlier suites.
+                for selected in self.experiments:
+                    chosen = load_config(self.overrides.get(selected, self.args.config.resolve()))
+                    if selected not in self.overrides:
+                        chosen = deep_merge(chosen, chosen.get('review', {}).get('experiment_overrides', {}).get(selected, {}))
+                    if selected == 'table-02-fc-diff' and chosen.get('baseline_storage') == 'tmpfs':
+                        job_size_gib(selected, chosen)
+                    if selected == 'table-02-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ:
+                        from repro.staging_cleanup import validate_e2b_storage
+                        validate_e2b_storage(chosen)
+                if GPU in self.experiments:
+                    from ae.scripts.figure08_remote import DEFAULT_CONFIG, load_settings
+                    gpu_config = Path(self.config.get('gpu_remote_config', DEFAULT_CONFIG))
+                    if not gpu_config.is_absolute():
+                        gpu_config = Path(self.config['_config_dir']) / gpu_config
+                    load_settings(gpu_config)
+                self.prepare_cube_service(contexts)
                 if not self.step('prepare', [*self.cli, 'prepare']):
                     return 1
                 if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
@@ -827,12 +892,25 @@ class Review:
                             self.record['coverage'].append(row)
                         row.update(status='failed', reasons=[f'{type(error).__name__}: {error}'])
                         self.save()
-                        print(f'[{name}] failed: {error}; continuing independent experiments', flush=True)
+                        print(f'[{name}] failed: {error}', flush=True)
+                    row = next((row for row in self.record['coverage'] if row['experiment'] == name), {})
+                    if not row.get('optional') and (row.get('status') == 'failed' or (not self.available and row.get('status') in ('partial', 'unavailable'))):
+                        for remaining in self.experiments[self.experiments.index(name) + 1:]:
+                            self.record['coverage'].append(dict(experiment=remaining, status='not-run',
+                                reasons=['Stopped after failed experiment ' + name]))
+                        self.save()
+                        return 1
                 self.analyze(self.output / 'runs')
         except BaseException as error:
             self.terminal_error(error)
             raise
         finally:
+            try:
+                contexts.close()
+            except Exception as error:
+                self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
+                    log='environment/' + self.attempt + '/cube-memory/cleanup-errors.json',
+                    error=f'{type(error).__name__}: {error}'))
             failures = any(step['status'] not in ('ok', 'unavailable') for step in self.record['steps'])
             coverage = [row for row in self.record['coverage'] if not row.get('optional')]
             failures |= any(row['status'] == 'failed' for row in coverage) if not self.args.analyze_existing else False
@@ -853,7 +931,7 @@ def main(argv=None):
     p = parser()
     args = p.parse_args(argv)
     if args.list:
-        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; optional, reported in result.md'}}, indent=2))
+        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; required when selected, reported in result.md'}}, indent=2))
         return 0
     if args.execute_plan:
         return execute_plan(args.execute_plan)
@@ -873,13 +951,36 @@ def main(argv=None):
         p.error('Measurements require the Linux AE host; use --analyze-existing to plot copied evidence locally')
     if args.resume and (args.output or args.analyze_existing):
         p.error('--resume cannot be combined with --output/--analyze-existing')
+    try:
+        with run_lock(REPO / 'ae/work/.results.lock'):
+            return run_selected(args, p)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f'AE refused: {error}', file=sys.stderr)
+        return 2
+
+
+def run_selected(args, p):
     config = {} if args.analyze_existing else load_config(args.config.resolve())
     check_timeout(config)
-    output = (args.resume or args.output or default_output(args)).resolve()
+    selected_output = args.resume or args.output or default_output(args)
+    if selected_output.is_symlink():
+        p.error('Output must not be a symlink')
+    output = selected_output.resolve()
     if args.analyze_existing and not args.analyze_existing.is_dir():
         p.error('--analyze-existing must point to an existing directory')
     runner = Review(args, config, output)
-    output.mkdir(parents=True, exist_ok=bool(args.resume))
+    latest = output == (REPO / 'ae/results').resolve() and not args.resume
+    if latest and not complete_selection(args):
+        p.error('Only a complete unrestricted run may replace ae/results; select a child --output')
+    backup = None
+    if latest:
+        destination = Path(os.environ.get('AE_RESULTS_BACKUP_ROOT',
+                               config.get('review', {}).get('results_backup_root', str(DEFAULT_BACKUP_ROOT))))
+        backup = prepare_latest(output, destination)
+        if backup:
+            print('Previous results backed up and verified: ' + backup['path'], flush=True)
+            runner.record['previous_results_backup'] = backup
+    output.mkdir(parents=True, exist_ok=bool(args.resume) or latest)
     if args.resume:
         history = output / 'attempt-history' / runner.attempt
         history.mkdir(parents=True, exist_ok=False)

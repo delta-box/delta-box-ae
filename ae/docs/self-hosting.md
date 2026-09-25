@@ -124,3 +124,5 @@ bash ae/run_all.sh --analyze-existing /path/to/existing-run \
 This analyzes and plots without executing experiments. The restricted hosted launcher does not expose this option. Normal reviewer runs already generate figures; for additional plotting, contact the authors or copy the complete result directory into an analysis environment.
 
 CPU VM experiments require Linux/KVM; existing results can also be analyzed and plotted on macOS. See the [publication guide](publish-results.md) and [plotting notes](paper-plotting-reference.md) for lower-level commands.
+
+For a self-hosted machine, set `review.results_backup_root` in your configuration to a separate backup filesystem. A new complete run copies and verifies the previous `ae/results` there before clearing it; the destination must retain at least 10 GiB free after the copy. Explicit `--output` and `--resume` do not rotate the complete results directory.

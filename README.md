@@ -57,7 +57,7 @@ bash ae/run_all.sh --baseline-inputs all
 
 When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
-Existing outputs are never overwritten. See [troubleshooting](#troubleshooting) for resuming a run or selecting an individual check.
+The latest complete run is written directly to `ae/results/`. Before a new complete run, the script copies the previous results to a timestamped directory under `/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae/`, verifies every file and its metadata, then clears the working directory. Insufficient backup space or active jobs stop the launch and leave the results in place. Quick checks and selected experiments use separate subdirectories; an explicit `--output` to a different directory is never overwritten. New runs record the actual source without requiring a release lock. See [troubleshooting](#troubleshooting) for resuming a run.
 
 ## 2. Experiment index and individual runs
 
@@ -88,8 +88,7 @@ Table 1 and Figures 1, 3–5 present the design and problem motivation, with no 
 Individual commands below share an output prefix. **Define it once in your current Bash terminal**, replacing `reviewer-A` with your identifier. Use a different identifier for each new evaluation:
 
 ```bash
-AE_VERSION=$(git rev-parse --short=12 HEAD)
-export AE_RUN="$(pwd -P)/ae/results/$AE_VERSION/reviewer-A"
+export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
 Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run experiments sequentially to avoid resource contention. The drivers select their inputs; use `--limit` only for a smaller check.

@@ -80,6 +80,25 @@ def _e2b_child(path, storage, trust):
     return dict(identity=identities, **footprint(path))
 
 
+def validate_e2b_storage(config):
+    from ae.scripts import hosted_launcher as hosted
+    policy = hosted.load_policy()
+    trust = hosted.runtime_trust(policy)
+    fixed = hosted.read_root_json(policy['config']).get('e2b', {})
+    chosen = config.get('e2b', {})
+    for key in ('execution', 'storage', 'from_build', 'parent_manifest'):
+        if not fixed.get(key) or chosen.get(key) != fixed[key]:
+            raise ValueError(f'E2B fixed configuration differs: {key}')
+    storage = hosted.trusted_path(fixed['storage'], directory=True, trust=trust)
+    work = policy['runtime_root'] / 'ae/work'
+    if storage == work or not storage.is_relative_to(work):
+        raise ValueError('E2B cleanup storage must stay inside the fixed runtime ae/work')
+    parent = hosted.trusted_path(fixed['parent_manifest'], trust=trust, root_leaf=True)
+    if not parent.is_relative_to(storage):
+        raise ValueError('E2B parent manifest must stay inside the fixed storage')
+    return storage, parent
+
+
 def _e2b_cleanup_plan(root, producer):
     """Bind deletion authority to root policy and this producer's hashed result."""
     from ae.runners.e2b_environment import _parent_dependencies, verify_snapshot_inputs

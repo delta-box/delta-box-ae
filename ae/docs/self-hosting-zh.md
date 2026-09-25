@@ -124,3 +124,5 @@ bash ae/run_all.sh --analyze-existing /path/to/existing-run \
 它只分析、绘图，不执行实验。托管的受限 launcher 不提供这个参数；评审者正常运行时已经自动出图，需要额外重绘可联系作者，或将完整结果目录带到分析环境中操作。
 
 CPU VM 实验需要 Linux/KVM；已有结果的分析与绘图也可在 macOS 上进行。底层命令、图片发布方式见[发布指南](publish-results.md)和[绘图说明](paper-plotting-reference.md)。
+
+自建机器请在配置中设置 `review.results_backup_root`，指定独立的备份文件系统。新的完整运行会先将旧 `ae/results` 复制并校验到该处，再清空工作目录；复制后目标至少须保留 10 GiB 可用空间。显式 `--output` 与 `--resume` 不触发整目录轮换。

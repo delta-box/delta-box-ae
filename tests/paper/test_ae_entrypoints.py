@@ -22,6 +22,81 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 
 class ReviewTests(unittest.TestCase):
 
+
+    def test_resume_compares_cube_settings_not_generated_proof_path(self):
+        first = {'cube': {'manage_memory_service': True, 'memory_manifest': '/attempt-001/storage.json',
+                          'memory_size_gib': 16}, 'measurement': {'numa_node': 1, 'cpus': '28-31'}}
+        second = json.loads(json.dumps(first))
+        second['cube']['memory_manifest'] = '/attempt-002/storage.json'
+        self.assertEqual(review.config_identity(first), review.config_identity(second))
+        second['measurement']['numa_node'] = 2
+        self.assertNotEqual(review.config_identity(first), review.config_identity(second))
+        first['cube']['manage_memory_service'] = False
+        second = json.loads(json.dumps(first))
+        second['cube']['memory_manifest'] = '/different-manual-proof.json'
+        self.assertNotEqual(review.config_identity(first), review.config_identity(second))
+
+    def test_cube_fanout_rechecks_daemon_identity_before_running(self):
+        with patch('runners.cube_memory.verify', side_effect=ValueError('service identity changed')), \
+             patch.object(review.socket, 'create_connection'):
+            reasons = review.job_unavailable(
+                dict(experiment='figure-08-cube', command=['python', 'fanout.py']),
+                {'baseline_storage': 'tmpfs', 'cube': {'api_url': 'http://127.0.0.1:3000'}})
+        self.assertIn('Cube memory service verification failed: service identity changed', reasons)
+
+    def test_cube_manifest_is_prepared_before_any_experiment_and_restored(self):
+        events = []
+        @contextlib.contextmanager
+        def context(output, **kwargs):
+            output.mkdir(parents=True)
+            manifest = output / 'storage.json'
+            manifest.write_text('{}')
+            events.append(('prepared', kwargs))
+            try:
+                yield manifest
+            finally:
+                events.append(('restored', None))
+        config = {'cube': {'manage_memory_service': True, 'memory_size_gib': 16},
+                  'measurement': {'pin': True, 'numa_node': 1, 'cpus': '28-31'}}
+        with patch('ae.scripts.cube_memory_context.memory_service', side_effect=context), \
+             patch('runners.cube_memory.verify', return_value={}):
+            code, record, commands, files = self.exercise([], config_extra=config)
+        self.assertEqual(code, 0)
+        self.assertEqual(events[0], ('prepared', {'node': 1, 'cpus': '28-31', 'size_gib': 16}))
+        self.assertEqual(events[-1][0], 'restored')
+        for name in ('table-02-cube', 'figure-08-cube'):
+            effective = json.loads(files[f'configs/attempt-001/{name}.json'])
+            self.assertTrue(effective['cube']['memory_manifest'].endswith('/cube-memory/storage.json'))
+
+    def test_cube_setup_failure_prevents_earlier_cpu_measurements(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / 'config.json'
+            config_path.write_text(json.dumps({'cube': {'manage_memory_service': True}}))
+            args = review.parser().parse_args(['--config', str(config_path)])
+            with patch.object(review, 'current_source', return_value=SOURCE):
+                runner = review.Review(args, review.load_config(config_path), root / 'out')
+            with patch('ae.scripts.cube_memory_context.memory_service', side_effect=ValueError('busy Cube')), \
+                 patch.object(review, 'execute') as execute:
+                with self.assertRaisesRegex(ValueError, 'busy Cube'):
+                    runner.run()
+            execute.assert_not_called()
+            self.assertEqual(runner.record['status'], 'failed')
+
+    def test_cube_restoration_failure_is_not_a_successful_run(self):
+        @contextlib.contextmanager
+        def context(output, **kwargs):
+            output.mkdir(parents=True)
+            path = output / 'storage.json'
+            path.write_text('{}')
+            yield path
+            raise RuntimeError('restoration failed')
+        with patch('ae.scripts.cube_memory_context.memory_service', side_effect=context), \
+             patch('runners.cube_memory.verify', return_value={}):
+            code, record, _, _ = self.exercise([], config_extra={'cube': {'manage_memory_service': True}})
+        self.assertEqual((code, record['status']), (1, 'failed'))
+        self.assertEqual(record['steps'][-1]['name'], 'cube-service-cleanup')
+
     def test_default_baseline_selection_reaches_each_effective_config(self):
         for flags, selected in [([], '44'), (['--baseline-inputs', 'all'], 'all')]:
             code, record, _, files = self.exercise(flags)
@@ -62,7 +137,8 @@ class ReviewTests(unittest.TestCase):
         identity = {'source_commit': 'a' * 40, 'source_sha256': 'b' * 64}
         with patch.object(review, 'current_source', return_value=identity):
             path = review.default_output(review.parser().parse_args(['--test']))
-        self.assertEqual(path, ROOT / 'ae/results/aaaaaaaaaaaa/checks/quick-check')
+        self.assertEqual(path.parent, ROOT / 'ae/results/checks')
+        self.assertTrue(path.name.startswith('quick-check-'))
 
     def test_summary_links_existing_bilingual_pages_for_current_attempt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,15 +162,15 @@ class ReviewTests(unittest.TestCase):
             self.assertIn("[简体中文](comparison/attempt-002/README-zh.md)", text)
             self.assertNotIn("comparison/attempt-001/", text)
 
-    def test_default_result_layout_separates_checks_within_one_source_version(self):
+    def test_default_result_layout_keeps_latest_and_separates_checks(self):
         identity = {'source_commit': 'a' * 40, 'source_sha256': 'b' * 64}
         with patch.object(review, 'current_source', return_value=identity):
             full = review.default_output(review.parser().parse_args([]))
             subset = review.default_output(review.parser().parse_args(['--limit', '1']))
             short = review.default_output(review.parser().parse_args(['--max-events', '3']))
-        self.assertEqual(full, ROOT / 'ae/results/aaaaaaaaaaaa/full')
-        self.assertEqual(subset, full)
-        self.assertEqual(short, ROOT / 'ae/results/aaaaaaaaaaaa/checks/selected')
+        self.assertEqual(full, ROOT / 'ae/results')
+        self.assertEqual(subset.parent, ROOT / 'ae/results/selected')
+        self.assertEqual(short.parent, ROOT / 'ae/results/selected')
 
     def exercise(self, flags, failures=(), missing=(), *, config_extra=None, interrupt=None, timing=None, gpu_failure=False):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,7 +216,7 @@ class ReviewTests(unittest.TestCase):
                 return {'status': 'failed' if name in failures else 'ok', 'returncode': (2 if name.endswith('-doctor') else 1) if name in failures else 0}
 
             def fake_gpu(runner):
-                runner.record['coverage'].append(dict(experiment='figure-08-gpu', optional=True, status='failed' if gpu_failure else 'ok',
+                runner.record['coverage'].append(dict(experiment='figure-08-gpu', optional=False, status='failed' if gpu_failure else 'ok',
                                                        planned_jobs=8, available_jobs=8, successful_jobs=0 if gpu_failure else 8))
             with patch.object(review, 'execute', side_effect=fake_execute), \
                     patch.object(review.Review, 'run_gpu', autospec=True, side_effect=fake_gpu), \
@@ -175,7 +251,7 @@ class ReviewTests(unittest.TestCase):
                 self.assertEqual(record['run_purpose'], 'ae-cohorts')
                 self.assertEqual(record['experiments'], list(review.EXPERIMENTS))
                 self.assertNotIn('table-02-cube-run', commands)
-                self.assertIn('correctness-run', commands)
+                self.assertNotIn('correctness-run', commands)
                 cube = next(row for row in record['coverage'] if row['experiment'] == 'table-02-cube')
                 self.assertEqual(cube['status'], 'unavailable')
                 self.assertIn('missing fixture dependency', cube['reasons'][0])
@@ -188,12 +264,12 @@ class ReviewTests(unittest.TestCase):
         self.assertTrue(all(row['status'] == 'ok' and row['successful_jobs'] == row['planned_jobs']
                             for row in record['coverage']))
 
-    def test_optional_gpu_failure_keeps_successful_cpu_results(self):
+    def test_required_gpu_failure_preserves_cpu_evidence_but_fails_run(self):
         code, record, commands, _ = self.exercise([], gpu_failure=True)
-        self.assertEqual((code, record["status"]), (0, "ok"))
+        self.assertEqual((code, record["status"]), (1, "failed"))
         cpu = [row for row in record["coverage"] if row["experiment"] != "figure-08-gpu"]
         self.assertTrue(all(row["status"] == "ok" for row in cpu))
-        self.assertIn("paper-comparison", commands)
+        self.assertNotIn("paper-comparison", commands)
 
     def test_gpu_only_does_not_attempt_to_analyze_nonexistent_cpu_runs(self):
         code, record, commands, _ = self.exercise(["--group", "gpu"])
@@ -202,15 +278,15 @@ class ReviewTests(unittest.TestCase):
         self.assertNotIn("plot", commands)
         self.assertIn("paper-comparison", commands)
 
-    def test_actual_failure_continues_and_never_becomes_pass(self):
+    def test_actual_failure_stops_remaining_experiments(self):
         for flags in ([], ['--all'], ['--available']):
             with self.subTest(flags=flags):
                 code, record, commands, _ = self.exercise(flags, failures={'table-02-criu-run'})
                 self.assertEqual((code, record['status']), (1, 'failed'))
-                self.assertIn('correctness-run', commands)
-                self.assertIn('analyze', commands)
-                self.assertIn('paper-comparison', commands)
-                self.assertNotIn('archived', commands['analyze'])
+                self.assertNotIn('correctness-run', commands)
+                self.assertNotIn('analyze', commands)
+                self.assertNotIn('paper-comparison', commands)
+                self.assertTrue(any(row['status'] == 'not-run' for row in record['coverage']))
 
     def test_partial_input_selection_is_reported_as_full_trace_not_full_cohort(self):
         code, record, _, files = self.exercise(['--available', '--experiment', 'table-02-replay'], missing={'table-02-replay__1'})
@@ -344,8 +420,7 @@ class ReviewTests(unittest.TestCase):
             config = Path(tmp) / 'config.json'
             config.write_text('{}')
             with patch.dict(review.os.environ, {}), patch.object(review.sys, 'platform', 'linux'), patch.object(review, 'current_source', return_value=SOURCE):
-                with self.assertRaises(FileExistsError):
-                    review.main(['--config', str(config), '--output', tmp])
+                self.assertEqual(review.main(['--config', str(config), '--output', tmp]), 2)
             self.assertFalse((Path(tmp) / 'review.json').exists())
 
     def test_resume_rejects_changed_source_before_any_write(self):
@@ -616,7 +691,7 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(config.stat().st_mode & 0o777, 0o600)
             self.assertEqual(outside.stat().st_mode & 0o777, 0o666)
 
-    def test_execute_plan_continues_after_job_failure_and_persists_manifest(self):
+    def test_execute_plan_stops_after_job_failure_and_persists_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan = root / 'plan.json'
@@ -633,19 +708,19 @@ class ReviewTests(unittest.TestCase):
                  patch.object(review, 'host_state', return_value={}), patch.object(review, 'from_environment', return_value=SOURCE),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
-            self.assertEqual(calls, [['false'], ['true']])
-            self.assertEqual(budgets, [1000, 1])
+            self.assertEqual(calls, [['false']])
+            self.assertEqual(budgets, [1000])
             result = json.loads((suite / 'suite.json').read_text())
             self.assertEqual(result['status'], 'failed')
-            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'ok'])
+            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'not-run'])
 
-    def test_staging_cleanup_runs_after_success_only_and_failure_continues(self):
+    def test_staging_cleanup_failure_stops_next_producer(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan = root / 'plan.json'
             suite = root / 'suite'
             review.write_json(plan, dict(review_output=str(suite), review_timeout=1, jobs=[
-                dict(key=key, command=[key], run_purpose='full-trace') for key in ('bad', 'cleanup-error', 'good')]))
+                dict(key=key, command=[key], run_purpose='full-trace') for key in ('good', 'cleanup-error', 'bad')]))
             order = []
             def execute(argv, output, **kwargs):
                 order.append('producer-exited:' + argv[0])
@@ -660,10 +735,10 @@ class ReviewTests(unittest.TestCase):
                  patch('repro.staging_cleanup.cleanup_reconstructable_staging', side_effect=cleanup),\
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.execute_plan(plan), 1)
-            self.assertEqual(order, ['producer-exited:bad', 'producer-exited:cleanup-error', 'cleanup:cleanup-error',
-                                     'producer-exited:good', 'cleanup:good'])
+            self.assertEqual(order, ['producer-exited:good', 'cleanup:good',
+                                     'producer-exited:cleanup-error', 'cleanup:cleanup-error'])
             result = json.loads((suite / 'suite.json').read_text())
-            self.assertEqual([job['status'] for job in result['jobs']], ['failed', 'failed', 'ok'])
+            self.assertEqual([job['status'] for job in result['jobs']], ['ok', 'failed', 'not-run'])
             self.assertIn('artifact conflict', result['jobs'][1]['staging_cleanup']['error'])
 
     def test_interrupted_cleanup_does_not_record_an_ok_suite(self):

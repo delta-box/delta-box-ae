@@ -23,12 +23,14 @@
     "template": "cube-official-blog-sandbox-code-2c2g-20260609",
     "proxy_node_ip": "127.0.0.1",
     "phase_log": "/data/log/Cubelet/Cubelet-req.log",
-    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet"
+    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet",
+    "manage_memory_service": true,
+    "memory_size_gib": 16
   },
   "e2b": {
     "infra": "/home/dyp/infra",
     "remote_path": "/home/dyp/.local/go1.26.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "storage": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/e2b-table2-storage",
+    "storage": "/home/atc-ae/delta-box-ae/ae/work/hosted/e2b-table2-storage",
     "from_build": "62e2b12b-0000-4000-8000-000000000062",
     "api_url": "http://127.0.0.1:3100",
     "sandbox_url": "http://127.0.0.1:3102",
@@ -40,7 +42,7 @@
     "gocache": "/home/dyp/infra/.cache-go-build",
     "gomodcache": "/home/dyp/infra/.cache-go/pkg/mod",
     "nbd_pool_size": 8,
-    "parent_manifest": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/e2b-table2-storage/parent-isolation.json",
+    "parent_manifest": "/home/atc-ae/delta-box-ae/ae/work/hosted/e2b-table2-storage/parent-isolation.json",
     "fanout_python": "/mnt/disk2/dyp/ae-hosted-20260922/e2b/sdk-venv/bin/python"
   },
   "prewarm_policy": "off",
@@ -50,8 +52,8 @@
   "criu_dump_binary": "/mnt/disk2/dyp/criu-exact-parent-20260922/clean-build-root/source/criu/criu",
   "measurement": {
     "pin": true,
-    "numa_node": 2,
-    "cpus": "52-55"
+    "numa_node": 1,
+    "cpus": "28-31"
   },
   "review": {
     "experiment_overrides": {
@@ -83,9 +85,13 @@
           "numa_node": 3,
           "cpus": "72-95"
         }
+      },
+      "table-02-fc-diff": {
+        "memory_job_size_gib": 64
       }
     },
-    "declared_unavailable": []
+    "declared_unavailable": [],
+    "results_backup_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae"
   },
   "repository_fallback": "same-project-commit",
   "vm_storage": "tmpfs",

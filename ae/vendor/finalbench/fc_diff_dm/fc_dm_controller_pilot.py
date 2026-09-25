@@ -37,6 +37,7 @@ from fc_dm_pilot import (
 )
 sys.path.insert(0, str(PAYLOAD))
 from baseline_audit import flush_audit, message_policy  # noqa: E402
+from fc_capacity import check_capacity
 
 
 def http_json(url: str, method: str = "GET", obj: dict | None = None, timeout: float = 30.0) -> dict:
@@ -169,6 +170,13 @@ def run_controller_pilot(
             shutil.rmtree(p)
         p.mkdir(parents=True, exist_ok=True)
 
+    memory_job = json.loads(os.environ.get('AE_MEMORY_JOB', '{}'))
+    capacity_log = results / 'capacity.jsonl'
+    def capacity(phase, allocation=0):
+        if memory_job:
+            return check_capacity(WORK_BASE, phase, allocation, capacity_log,
+                                  node=memory_job['node'])
+
     print(f"[ctrl] prepare rootfs instance={instance}", flush=True)
     prepare_rootfs(instance, image, guest_driver="guest_controller_driver.py")
     print("[ctrl] setup tap", flush=True)
@@ -179,6 +187,10 @@ def run_controller_pilot(
     mock_proc = None
     try:
         root_dev = dm.setup()
+        if cleanup_large_artifacts:
+            # dd has finished; the thin device owns its independent root copy.
+            image.unlink()
+        capacity('before-vm-boot', mem_mib * 1024 ** 2)
         mock_proc = start_host_mock(instance, mock_port, logs / "host_mock.log",
                                     results / 'mock_audit.json')
         vm = FirecrackerVM(
@@ -221,7 +233,10 @@ def run_controller_pilot(
 
         base_vmstate = snaps / "base.vmstate"
         base_mem = snaps / "base.mem"
+        # Full snapshot also faults in untouched guest pages.
+        capacity('before-base-snapshot', 2 * mem_mib * 1024 ** 2)
         fc = vm.take_snapshot(snapshot_path=base_vmstate, mem_path=base_mem, snapshot_type="Full")
+        capacity('after-base-snapshot')
         dmres = dm.snapshot("seq0")
         ckpts.append({
             "seq": 0,
@@ -253,7 +268,11 @@ def run_controller_pilot(
                 if target_seq is None:
                     raise RuntimeError(f"selected node {selected_node_id} has no checkpoint")
                 target = next(c for c in ckpts if c["seq"] == target_seq)
+                # load_snapshot also kills the old VM outside its timer.
+                # Doing it here releases its previous mapped merge before making another.
+                vm.kill()
                 if snapshot_mode == "diff":
+                    capacity('before-merge-' + str(seq), mem_mib * 1024 ** 2)
                     merged_mem = snaps / f"merged_pre_seq{seq}_target{target_seq}.mem"
                     merge = merge_mem(base_mem, [Path(p) for p in target["diff_chain"]], merged_mem)
                     restore_mem = merged_mem if target["diff_chain"] else Path(target["mem"])
@@ -279,6 +298,11 @@ def run_controller_pilot(
                     enable_diff=(snapshot_mode == "diff"),
                 )
                 restored = wait_state(timeout_s=120.0)
+                if cleanup_large_artifacts and snapshot_mode == "diff":
+                    # Firecracker retains its open mapping until the next kill.
+                    # No future restore uses this temporary reconstruction.
+                    merged_mem.unlink()
+                capacity('after-restore-' + str(seq))
                 restore_events.append({
                     "before_seq": seq,
                     "selected_node_id": selected_node_id,
@@ -313,6 +337,7 @@ def run_controller_pilot(
             mem = snaps / f"{snap_prefix}_{seq}.mem"
             fc = vm.take_snapshot(snapshot_path=vmstate, mem_path=mem, snapshot_type=snapshot_type)
             dmres = dm.snapshot(f"seq{seq}")
+            capacity('after-checkpoint-' + str(seq))
             active_ckpt = next(c for c in ckpts if c["seq"] == active_seq)
             if snapshot_mode == "diff":
                 diff_chain = active_ckpt["diff_chain"] + [str(mem)]
@@ -362,6 +387,13 @@ def run_controller_pilot(
         return out
     finally:
         primary = sys.exc_info()[1]
+        if memory_job:
+            # Record allocation before teardown even if a snapshot write failed.
+            try:
+                check_capacity(WORK_BASE, 'before-cleanup', 0, capacity_log,
+                               node=memory_job['node'], reserve=0)
+            except Exception as diagnostic_error:
+                print(f'Capacity evidence: {diagnostic_error}', file=sys.stderr)
         try:
             if vm is not None:
                 vm.kill()

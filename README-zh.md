@@ -55,7 +55,7 @@ bash ae/run_all.sh --baseline-inputs all
 
 运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。默认完整运行的状态应为 `ok`，失败步骤会保留日志并返回非零退出码。
 
-已有输出不会被覆盖。续跑或选择单项时，使用[运行问题](#troubleshooting)中的方法。
+最新完整运行直接写入 `ae/results/`。再次启动完整运行前，脚本将旧结果复制到 `/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae/` 下带时间戳的目录，逐文件校验内容和元数据后再清空工作结果。备份空间不足或仍有活动任务时，启动会停止并保留原结果。快速检查与单项实验使用独立子目录；通过 `--output` 指定的其他目录不会被覆盖。新运行记录实际源码，无需更新源码锁。续跑方法见[故障排查](#troubleshooting)。
 
 ## 2. 实验索引与单项运行
 
@@ -84,8 +84,7 @@ Table 1、Figure 1,3–5 是设计说明和问题引入，无独立测量任务�
 下面的单项命令共用一个输出前缀。**在当前 Bash 终端定义一次**，把 `reviewer-A` 换成你的标识；每轮新实验使用不同的标识：
 
 ```bash
-AE_VERSION=$(git rev-parse --short=12 HEAD)
-export AE_RUN="$(pwd -P)/ae/results/$AE_VERSION/reviewer-A"
+export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
 无需预先创建各实验输出目录。托管入口使用作者提供的配置，管理 CPU/NUMA 绑定与频率采样；请顺序运行，避免同时争用实验资源。实验驱动负责选择输入，命令中的 `--limit` 只用于缩小检查范围。

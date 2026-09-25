@@ -27,11 +27,9 @@ OTHER_USER = SimpleNamespace(pw_name='other', pw_uid=7002, pw_gid=7002)
 
 class HostedTests(unittest.TestCase):
     def setUp(self):
+        self.addCleanup(os.umask, os.umask(0o022))
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        commit_patch = patch.object(hosted, 'runtime_commit', return_value='a' * 40)
-        self.runtime_commit = commit_patch.start()
-        self.addCleanup(commit_patch.stop)
         self.root = Path(self.temporary.name).resolve()
         self.runtime = self.root / 'runtime'
         (self.runtime / 'ae/scripts').mkdir(parents=True)
@@ -58,24 +56,40 @@ class HostedTests(unittest.TestCase):
         self.users = [ROOT_USER, MAINTAINER, REVIEWER, OTHER_USER]
         self.groups = {0: [], MAINTAINER.pw_gid: [], REVIEWER.pw_gid: [], OTHER_USER.pw_gid: []}
 
-    def test_default_results_group_full_run_and_checks_under_the_same_version(self):
+    def test_default_results_use_stable_root_and_separate_checks(self):
         with self.owned_fixture():
             full = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
-            quick_check = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime), '--test']))
-        self.assertEqual(full, Path('aaaaaaaaaaaa/full'))
-        self.assertEqual(quick_check, Path('aaaaaaaaaaaa/checks/quick-check'))
-        self.assertEqual(full.parts[0], quick_check.parts[0])
+            quick = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime), '--test']))
+        self.assertEqual(full, Path('.'))
+        self.assertEqual(quick.parent, Path('checks'))
+        self.assertTrue(quick.name.startswith('quick-check-'))
 
-    def test_default_result_does_not_require_a_release_lock(self):
+    def test_default_result_does_not_read_source_identity(self):
         (self.runtime / 'release/candidate-lock.json').unlink()
-        with self.owned_fixture():
+        with self.owned_fixture(), patch.object(hosted.subprocess, 'check_output', side_effect=AssertionError('no Git admission')):
             result = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
-        self.assertEqual(result.parts[0], 'aaaaaaaaaaaa')
+        self.assertEqual(result, Path('.'))
 
-    def test_default_result_rejects_path_content_in_source_identity(self):
-        self.runtime_commit.return_value = '../outside'
-        with self.owned_fixture(), self.assertRaisesRegex(ValueError, 'full source commit'):
-            hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
+    def test_latest_root_is_forwarded_without_touching_previous_results(self):
+        previous = self.output / 'review.json'
+        previous.write_text('{"status":"failed"}')
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime)]), 0, stderr.getvalue())
+        self.assertEqual(execute.call_args.args[1][-2:], ['--output', str(self.output)])
+        self.assertEqual(previous.read_text(), '{"status":"failed"}')
+
+    def test_selected_experiment_cannot_replace_root(self):
+        with self.launcher() as (execute, _, _):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--group', 'cpu',
+                                         '--output', str(self.output)]), 2)
+        execute.assert_not_called()
+
+    def test_backup_path_is_supplied_by_policy_not_caller_environment(self):
+        self.policy['results_backup_root'] = self.root / 'backups'
+        self.policy_path.write_text(json.dumps({key: str(value) for key, value in self.policy.items()}))
+        with self.launcher({'AE_RESULTS_BACKUP_ROOT':'/attacker'}) as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0, stderr.getvalue())
+        self.assertEqual(execute.call_args.args[2]['AE_RESULTS_BACKUP_ROOT'], str(self.root / 'backups'))
 
     def maintainer_runtime(self):
         author = self.root / 'dyp'
@@ -139,7 +153,7 @@ class HostedTests(unittest.TestCase):
                   'HOME': '/attacker', 'LD_PRELOAD': '/attacker.so', 'BASH_ENV': '/attacker',
                   'AE_CONFIG': '/attacker.json', 'DELTABOX_RELEASE_LOCK': '/attacker.json',
                   'TMPDIR': '/attacker', 'TMP': '/attacker', 'TEMP': '/attacker',
-                  'AE_HOSTED_CALLER_UID': '0', 'E2B_API_KEY': 'caller-secret'}
+                  'AE_HOSTED_CALLER_UID': '0', 'AE_HOSTED_GPU_SSH_USER': 'root', 'E2B_API_KEY': 'caller-secret'}
         with self.launcher(poison) as (execute, stdout, _):
             code = hosted.main(['--checkout', str(self.runtime), '--output', 'formal'])
         self.assertEqual(code, 0)
@@ -151,12 +165,20 @@ class HostedTests(unittest.TestCase):
         self.assertEqual(environment['AE_HOSTED_CALLER_UID'], str(REVIEWER.pw_uid))
         self.assertEqual(environment['E2B_API_KEY'], 'fixed-secret')
         self.assertFalse(any(key.startswith(('SUDO_', 'PYTHON', 'GIT_CONFIG')) for key in environment))
-        for key in ('LD_PRELOAD', 'BASH_ENV', 'AE_CONFIG', 'DELTABOX_RELEASE_LOCK', 'TMPDIR', 'TMP', 'TEMP'):
+        for key in ('LD_PRELOAD', 'BASH_ENV', 'AE_CONFIG', 'DELTABOX_RELEASE_LOCK', 'TMPDIR', 'TMP', 'TEMP', 'AE_HOSTED_GPU_SSH_USER'):
             self.assertNotIn(key, environment)
         self.assertNotIn('secret', stdout.getvalue())
-        audit = json.loads((self.output / '.launcher-audit.jsonl').read_text())
+        audit = json.loads((self.output.parent / '.launcher-audit.jsonl').read_text())
         self.assertEqual(audit['caller_uid'], REVIEWER.pw_uid)
         self.assertEqual(audit['command'], command)
+
+    def test_gpu_ssh_account_is_selected_by_root_policy_only(self):
+        policy = json.loads(self.policy_path.read_text())
+        policy['gpu_ssh_user'] = MAINTAINER.pw_name
+        self.policy_path.write_text(json.dumps(policy))
+        with self.launcher({'AE_HOSTED_GPU_SSH_USER': 'root'}) as (execute, _, _):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0)
+        self.assertEqual(execute.call_args.args[2]['AE_HOSTED_GPU_SSH_USER'], MAINTAINER.pw_name)
 
     def test_refuses_untrusted_user_and_missing_root_privilege(self):
         with self.launcher({'SUDO_UID': '7002'}) as (execute, _, stderr):
@@ -546,7 +568,7 @@ class HostedTests(unittest.TestCase):
     def test_output_rejects_escape_symlinks_and_reuse(self):
         (self.output / 'alias').symlink_to(self.root, target_is_directory=True)
         (self.output / 'existing').mkdir()
-        for value in ('../outside', str(self.root / 'outside'), str(self.output), 'alias/new', 'existing'):
+        for value in ('../outside', str(self.root / 'outside'), 'alias/new', 'existing'):
             with self.subTest(value=value), self.launcher() as (execute, _, _):
                 self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--output', value]), 2)
                 execute.assert_not_called()
@@ -594,7 +616,7 @@ class HostedTests(unittest.TestCase):
         with self.launcher() as (execute, _, stderr):
             self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--resume', 'prior']), 0, stderr.getvalue())
         for path in (result / 'review.json', result / 'plan.json', result / 'suite.json',
-                     result / 'run.json', plans / 'correctness.json', self.output / '.launcher-audit.jsonl'):
+                     result / 'run.json', plans / 'correctness.json', self.output.parent / '.launcher-audit.jsonl'):
             self.owners[path] = (MAINTAINER.pw_uid, MAINTAINER.pw_gid)
             with self.subTest(path=path), self.launcher() as (execute, _, _):
                 self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--resume', 'prior']), 2)
