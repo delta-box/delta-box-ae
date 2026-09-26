@@ -36,6 +36,14 @@ ok: <result-directory>/SUMMARY.md
 
 Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the execution pipeline. The full experiments below evaluate the paper's claims.
 
+On the hosted machine, the quick check uses **NUMA 3, CPUs 88–91** and a separate `ae/results/checks/quick-check-<timestamp>/` directory. It can run alongside one complete evaluation on another NUMA node. If the requested node is occupied by another AE measurement (for example, the full run's Replay stage on NUMA 3), it waits before measuring. Results backup/rotation remains exclusive. To explicitly select the quick-check placement, use:
+
+```bash
+bash ae/run_test.sh --numa-node 3 --cpus 88-91
+```
+
+Both arguments must be supplied together; the CPUs must belong to that node. Memory admission checks and CPU-frequency restoration still apply. Concurrent runs share the host, so their recorded placement and overlap must be considered when interpreting performance.
+
 ### Run the complete evaluation
 
 <a id="一键运行"></a>
@@ -91,7 +99,7 @@ Individual commands below share an output prefix. **Define it once in your curre
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run experiments sequentially to avoid resource contention. The drivers select their inputs; use `--limit` only for a smaller check.
+Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full and selected experiments sequentially; the isolated quick check above is the supported concurrent exception. The drivers select their inputs; use `--limit` only for a smaller check.
 
 Each section keeps the evaluation goal, command, output, and interpretation together. The side-by-side images are **examples of the one-click script's output**, illustrating the generated figures. Use the comparison pages from your own run for evaluation.
 

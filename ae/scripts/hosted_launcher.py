@@ -165,7 +165,12 @@ def trusted_tree(root, *, code=False, external_code=False, seen=None, trust=None
     for directory, dirs, files in os.walk(root, followlinks=False):
         for name in dirs + files:
             path = Path(directory) / name
-            info = path.lstat()
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                if code or resume_controls:
+                    raise
+                continue
             require_trusted_owned(path, info, trust=trust)
             if code and path in (*data_roots, *environment_roots):
                 if name in dirs:
@@ -260,6 +265,8 @@ def parse_arguments(argv):
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
     parser.add_argument('--list', action='store_true')
+    parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
+    parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
     args = parser.parse_args(argv)
     if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
         parser.error('--test already selects one DeltaBox instance and three events')
@@ -267,6 +274,11 @@ def parse_arguments(argv):
         parser.error('--all cannot be combined with a selected experiment/group')
     if args.list and (args.output or args.resume):
         parser.error('--list does not create or resume results')
+    if args.numa_node is not None or args.cpus is not None:
+        if not args.quick_check or args.numa_node is None or args.cpus is None:
+            parser.error('--numa-node and --cpus must be supplied together with --test')
+        if args.numa_node < 0 or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', args.cpus):
+            parser.error('Invalid quick-check NUMA/CPU placement')
     return args
 
 
@@ -294,7 +306,7 @@ def fixed_environment(policy, caller):
     return environment
 
 
-def acquire_lock(path):
+def acquire_lock(path, *, shared=False):
     # /run/lock may be root-owned and sticky. Its root-owned lock file cannot
     # be unlinked by the reviewer; non-sticky writable ancestors are rejected.
     trusted_path(path.parent, directory=True, sticky_parents=True)
@@ -309,7 +321,7 @@ def acquire_lock(path):
         if not stat.S_ISREG(os.fstat(fd).st_mode) or os.fstat(fd).st_nlink != 1:
             raise ValueError('Lock must be a root-owned regular file with one link')
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise ValueError('Another hosted AE run is active; retry after it finishes') from error
         return fd
@@ -329,7 +341,9 @@ def result_path(policy, selected, caller, *, resume=False, trust=None, allow_roo
         if not parent.is_relative_to(root):
             continue
         if not parent.exists() and not parent.is_symlink() and not resume:
-            parent.mkdir(mode=0o755)
+            # The runner creates output parents only after acquiring its
+            # rotation/read lease. Admission itself must not race a backup.
+            continue
         trusted_path(parent, directory=True, trust=trust)
     if resume:
         trusted_tree(path, trust=trust, resume_controls=True)
@@ -363,7 +377,7 @@ def command_line(policy, args, output):
             command += ['--' + key, value]
     if args.baseline_inputs is not None:
         command += ['--baseline-inputs', args.baseline_inputs]
-    for key in ('limit', 'max_events'):
+    for key in ('limit', 'max_events', 'numa_node', 'cpus'):
         if getattr(args, key) is not None:
             command += ['--' + key.replace('_', '-'), str(getattr(args, key))]
     if output is not None:
@@ -405,7 +419,9 @@ def main(argv=None):
                 raise ValueError('Temporary files must stay inside runtime ae/work')
             trusted_path(temporary, directory=True, trust=trust, root_leaf=True)
         environment = fixed_environment(policy, caller)
-        lock_fd = acquire_lock(policy['lock_file'])
+        # Keep the maintenance gate held through cleanup. The trusted runner
+        # separately admits one main lane and one isolated quick-check lane.
+        lock_fd = acquire_lock(policy['lock_file'], shared=True)
         venv = policy['python'].parent.parent
         environments = (venv,) if (venv / 'pyvenv.cfg').is_file() else ()
         # paper_data.materialize links paper/*/data through traces/objects;

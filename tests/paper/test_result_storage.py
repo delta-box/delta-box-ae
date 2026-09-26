@@ -1,5 +1,7 @@
 """Exercise real result backup, failure preservation, and run exclusion."""
 import contextlib
+import errno
+import time
 import io
 import json
 import os
@@ -130,6 +132,58 @@ class ResultStorageTests(unittest.TestCase):
         finally:
             memory.close()
         self.assertTrue(self.old.exists())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'requires Linux procfs')
+    def test_exited_unreaped_process_does_not_block_backup(self):
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        try:
+            proc = Path('/proc') / str(pid)
+            deadline = time.monotonic() + 3
+            while 'Z (zombie)' not in (proc / 'status').read_text():
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(0.01)
+            # The child remains unreaped during both checks.
+            storage.require_idle(self.results)
+            with self.old.open('rb'):
+                with self.assertRaisesRegex(ValueError, 'active references'):
+                    storage.require_idle(self.results)
+        finally:
+            os.waitpid(pid, 0)
+
+    def test_mountinfo_error_is_ignored_only_for_confirmed_exit(self):
+        proc = Path('/proc') / str(os.getpid())
+        original_open, original_read = Path.open, Path.read_text
+        original_iter = Path.iterdir
+        def iter_proc(path):
+            return iter([proc]) if path == Path('/proc') else original_iter(path)
+        for failure, state, accepted in (
+            (errno.EINVAL, 'State:\tZ (zombie)\n', True),
+            (errno.EINVAL, FileNotFoundError(), True),
+            (errno.EINVAL, 'State:\tS (sleeping)\n', False),
+            (errno.EINVAL, PermissionError(), False),
+            (errno.EIO, 'State:\tZ (zombie)\n', False),
+        ):
+            with self.subTest(errno=failure, state=repr(state)):
+                def open_proc(path, *args, **kwargs):
+                    if path == proc / 'mountinfo':
+                        raise OSError(failure, 'injected mountinfo error', str(path))
+                    return original_open(path, *args, **kwargs)
+                def read_proc(path, *args, **kwargs):
+                    if path == proc / 'status':
+                        if isinstance(state, BaseException):
+                            raise state
+                        return state
+                    return original_read(path, *args, **kwargs)
+                with patch.object(Path, 'open', open_proc), \
+                     patch.object(Path, 'read_text', read_proc), \
+                     patch.object(Path, 'iterdir', iter_proc):
+                    if accepted:
+                        storage.require_idle(self.results)
+                    else:
+                        with self.assertRaises(OSError):
+                            storage.require_idle(self.results)
 
     def test_lock_is_shared_across_invocations(self):
         with storage.run_lock(self.lock):

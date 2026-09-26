@@ -88,10 +88,19 @@
       },
       "table-02-fc-diff": {
         "memory_job_size_gib": 64
+      },
+      "table-02-e2b": {
+        "recorded_search_order": true
       }
     },
     "declared_unavailable": [],
-    "results_backup_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae"
+    "results_backup_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae",
+    "parallel_quick_check": true,
+    "quick_check_measurement": {
+      "numa_node": 3,
+      "cpus": "88-91"
+    },
+    "control_cpus": "0-3"
   },
   "repository_fallback": "same-project-commit",
   "vm_storage": "tmpfs",
