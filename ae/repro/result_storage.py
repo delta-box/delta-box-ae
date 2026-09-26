@@ -1,6 +1,7 @@
 """Keep the latest AE run at a stable path and verify backups before replacing it."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import errno
 import fcntl
 import hashlib
 import json
@@ -107,6 +108,20 @@ def active_references(root):
                     raise ValueError('Cannot verify process references: ' + str(proc))
             except FileNotFoundError:
                 pass
+        except OSError as error:
+            # Linux mountinfo can return EINVAL after a process loses its
+            # mount namespace on exit. Ignore only a confirmed dead process;
+            # unreadable live producers must still block result replacement.
+            if error.errno != errno.EINVAL:
+                raise
+            try:
+                state = (proc / 'status').read_text()
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            else:
+                if not any(line.startswith('State:') and 'Z (zombie)' in line
+                           for line in state.splitlines()):
+                    raise
         if references:
             return references
     return references
