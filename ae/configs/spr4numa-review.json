@@ -88,6 +88,9 @@
       },
       "table-02-fc-diff": {
         "memory_job_size_gib": 64
+      },
+      "table-02-e2b": {
+        "recorded_search_order": true
       }
     },
     "declared_unavailable": [],
