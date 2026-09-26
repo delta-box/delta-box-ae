@@ -406,6 +406,36 @@ def cube_run_retry(sb: Sandbox, cmd: str, *, timeout: float = 300.0, cwd: str | 
     return sb, res
 
 
+def encode_action_request(request: dict[str, Any]) -> str:
+    """Frame one FIFO request as JSONL without relying on the writer closing."""
+    return json.dumps(request, separators=(",", ":")) + "\n"
+
+
+def capture_action_failure(sb: Sandbox, result_dir: Path, ev_i: int,
+                           request: str, action: dict[str, Any],
+                           response: dict[str, Any] | None) -> dict[str, Any]:
+    """Collect bounded, read-only diagnostics before teardown; never retry an action."""
+    directory = result_dir / "action-failures" / f"event-{ev_i:04d}"
+    record: dict[str, Any] = {"event": ev_i, "directory": str(directory)}
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "request.json").write_text(request, encoding="utf-8")
+        write_json(directory / "failure.json", {"action": action, "response": response})
+        env = dict(os.environ, CUBE_SDK_PATH=str(CUBE_SDK))
+        completed = subprocess.run(
+            [sys.executable, str(BASE / "scripts" / "cube_action_failure_probe.py"),
+             "--sandbox-id", sb.sandbox_id, "--output", str(directory / "probe.json")],
+            env=env, text=True, capture_output=True, timeout=20, check=False,
+        )
+        record.update(probe_exit_code=completed.returncode,
+                      probe_stderr=completed.stderr[-4000:])
+    except subprocess.TimeoutExpired:
+        record["probe_error"] = "diagnostic subprocess exceeded 20 seconds; partial evidence retained"
+    except Exception as error:  # diagnostics must not replace the action failure
+        record["probe_error"] = f"{type(error).__name__}: {error}"
+    return record
+
+
 def write_action_request(sb: Sandbox, content: str) -> tuple[Sandbox, dict[str, Any]]:
     """Recover a stale file connection without ever re-executing an action.
 
@@ -434,68 +464,44 @@ def write_action_request(sb: Sandbox, content: str) -> tuple[Sandbox, dict[str, 
 def snapshot_create(sb: Sandbox, name: str) -> tuple[Sandbox, dict[str, Any]]:
     api_start = time.time_ns()
     t0 = time.perf_counter()
-    last_error = ""
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            # Let CubeMaster allocate a fresh snapshot/template id. Reusing a
-            # deterministic name across retries can collide with a previous
-            # active template attempt and abort otherwise valid runs.
-            snap = sb.create_snapshot()
-            wall_ms = (time.perf_counter() - t0) * 1000.0
-            api_end = time.time_ns()
-            post_api_settle()
-            return sb, {
-                "snapshot_id": snap.snapshot_id,
-                "template_id": getattr(snap, "template_id", ""),
-                "name": name,
-                "sandbox_id": sb.sandbox_id,
-                "api_start_unix_ns": api_start,
-                "api_end_unix_ns": api_end,
-                "checkpoint_wall_ms": wall_ms,
-                "api_retries": attempt,
-                "last_retry_error": last_error,
-            }
-        except Exception as e:  # noqa: BLE001
-            if attempt >= max_attempts - 1 or not is_retryable_connection_error(e):
-                raise
-            last_error = f"{type(e).__name__}: {e}"
-            if not ("already in progress" in str(e).lower() or "active snapshot operation" in str(e).lower() or "duplicate entry" in str(e).lower()):
-                sb = reconnect_sandbox(sb)
-            time.sleep(retry_delay(e, attempt))
-    raise RuntimeError("unreachable snapshot retry state")
+    # This SDK cannot reuse a request id. A failed response can follow a
+    # committed snapshot, so dispatch once and preserve the original error.
+    snap = sb.create_snapshot()
+    wall_ms = (time.perf_counter() - t0) * 1000.0
+    api_end = time.time_ns()
+    post_api_settle()
+    return sb, {
+        "snapshot_id": snap.snapshot_id,
+        "template_id": getattr(snap, "template_id", ""),
+        "name": name,
+        "sandbox_id": sb.sandbox_id,
+        "api_start_unix_ns": api_start,
+        "api_end_unix_ns": api_end,
+        "checkpoint_wall_ms": wall_ms,
+        "api_retries": 0,
+        "last_retry_error": "",
+    }
 
 
 def snapshot_rollback(sb: Sandbox, snapshot_id: str) -> tuple[Sandbox, dict[str, Any]]:
     api_start = time.time_ns()
     t0 = time.perf_counter()
-    last_error = ""
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            resp = sb.rollback(snapshot_id)
-            wall_ms = (time.perf_counter() - t0) * 1000.0
-            api_end = time.time_ns()
-            post_api_settle()
-            return sb, {
-                "ok": True,
-                "snapshot_id": snapshot_id,
-                "rollback_response": resp,
-                "sandbox_id": sb.sandbox_id,
-                "api_start_unix_ns": api_start,
-                "api_end_unix_ns": api_end,
-                "restore_wall_ms": wall_ms,
-                "api_retries": attempt,
-                "last_retry_error": last_error,
-            }
-        except Exception as e:  # noqa: BLE001
-            if attempt >= max_attempts - 1 or not is_retryable_connection_error(e):
-                raise
-            last_error = f"{type(e).__name__}: {e}"
-            if not ("already in progress" in str(e).lower() or "active snapshot operation" in str(e).lower() or "duplicate entry" in str(e).lower()):
-                sb = reconnect_sandbox(sb)
-            time.sleep(retry_delay(e, attempt))
-    raise RuntimeError("unreachable rollback retry state")
+    # An uncertain rollback must not be repeated with a new request id.
+    resp = sb.rollback(snapshot_id)
+    wall_ms = (time.perf_counter() - t0) * 1000.0
+    api_end = time.time_ns()
+    post_api_settle()
+    return sb, {
+        "ok": True,
+        "snapshot_id": snapshot_id,
+        "rollback_response": resp,
+        "sandbox_id": sb.sandbox_id,
+        "api_start_unix_ns": api_start,
+        "api_end_unix_ns": api_end,
+        "restore_wall_ms": wall_ms,
+        "api_retries": 0,
+        "last_retry_error": "",
+    }
 
 
 def delete_snapshots(snapshots: list[str]) -> None:
@@ -580,11 +586,13 @@ def run_instance(args: argparse.Namespace, row: dict[str, str]) -> dict[str, Any
                         worker_ops=by_idx[action_step_idx],
                         materialize_file_context=args.materialize_file_context,
                     )
-                    req_json = json.dumps(req, separators=(",", ":"))
+                    req_json = encode_action_request(req)
                     t_upload = time.perf_counter()
                     sb, request_upload = write_action_request(sb, req_json)
                     request_upload_ms = (time.perf_counter() - t_upload) * 1000.0
-                    sb, action = cube_run_retry(
+                    # A transport timeout does not prove that the action never ran.
+                    # Dispatch once; preserve an uncertain outcome instead of replaying it.
+                    action = cube_run(
                         sb,
                         schedule_action_command(args.materialize_file_context, args.warm_action_worker),
                         timeout=args.worker_timeout,
@@ -599,6 +607,24 @@ def run_instance(args: argparse.Namespace, row: dict[str, str]) -> dict[str, Any
                     action["request_upload_ms"] = request_upload_ms
                     action["request_upload"] = request_upload
                     action["response_tail"] = response_text[-4000:] if response_text else ""
+                action_ok = (action is None or bool(action.get("ok"))) and (response is None or bool(response.get("ok")))
+                if not action_ok:
+                    diagnostics = capture_action_failure(sb, result_dir, ev_i, req_json, action, response)
+                    iterations.append({
+                        "ok": False, "kind": "ckpt", "ev_i": ev_i,
+                        "iter": ev.get("iter"), "ckpt_id": ev.get("ckpt_id"),
+                        "node_id": node_id, "parent_node_id": ev.get("parent_node_id"),
+                        "table2_role": ev.get("table2_role"),
+                        "table2_step_idx": ev.get("table2_step_idx"),
+                        "action_step_idx": action_step_idx, "worker_ops_n": len(worker_ops),
+                        "latency_ms": latency_ms, "latency_source": ev.get("latency_source"),
+                        "cube_steps": [tail_record(action)] if action else [],
+                        "action_response": response, "action_failure_diagnostics": diagnostics,
+                        "checkpoint_not_started": True, "agent_mode": "real",
+                        "require_real_agent": True, "path": "cube-cow",
+                    })
+                    print(f"[cube {instance}] ev={ev_i} action failed; checkpoint not started", flush=True)
+                    break
                 sb, snap = snapshot_create(sb, f"{instance}-{ev.get('ckpt_id') or ev_i}")
                 ckpt_id = ev.get("ckpt_id")
                 if isinstance(ckpt_id, str) and ckpt_id:
