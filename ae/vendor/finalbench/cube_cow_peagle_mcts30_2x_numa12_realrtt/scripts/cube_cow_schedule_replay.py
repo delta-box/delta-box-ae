@@ -464,68 +464,44 @@ def write_action_request(sb: Sandbox, content: str) -> tuple[Sandbox, dict[str, 
 def snapshot_create(sb: Sandbox, name: str) -> tuple[Sandbox, dict[str, Any]]:
     api_start = time.time_ns()
     t0 = time.perf_counter()
-    last_error = ""
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            # Let CubeMaster allocate a fresh snapshot/template id. Reusing a
-            # deterministic name across retries can collide with a previous
-            # active template attempt and abort otherwise valid runs.
-            snap = sb.create_snapshot()
-            wall_ms = (time.perf_counter() - t0) * 1000.0
-            api_end = time.time_ns()
-            post_api_settle()
-            return sb, {
-                "snapshot_id": snap.snapshot_id,
-                "template_id": getattr(snap, "template_id", ""),
-                "name": name,
-                "sandbox_id": sb.sandbox_id,
-                "api_start_unix_ns": api_start,
-                "api_end_unix_ns": api_end,
-                "checkpoint_wall_ms": wall_ms,
-                "api_retries": attempt,
-                "last_retry_error": last_error,
-            }
-        except Exception as e:  # noqa: BLE001
-            if attempt >= max_attempts - 1 or not is_retryable_connection_error(e):
-                raise
-            last_error = f"{type(e).__name__}: {e}"
-            if not ("already in progress" in str(e).lower() or "active snapshot operation" in str(e).lower() or "duplicate entry" in str(e).lower()):
-                sb = reconnect_sandbox(sb)
-            time.sleep(retry_delay(e, attempt))
-    raise RuntimeError("unreachable snapshot retry state")
+    # This SDK cannot reuse a request id. A failed response can follow a
+    # committed snapshot, so dispatch once and preserve the original error.
+    snap = sb.create_snapshot()
+    wall_ms = (time.perf_counter() - t0) * 1000.0
+    api_end = time.time_ns()
+    post_api_settle()
+    return sb, {
+        "snapshot_id": snap.snapshot_id,
+        "template_id": getattr(snap, "template_id", ""),
+        "name": name,
+        "sandbox_id": sb.sandbox_id,
+        "api_start_unix_ns": api_start,
+        "api_end_unix_ns": api_end,
+        "checkpoint_wall_ms": wall_ms,
+        "api_retries": 0,
+        "last_retry_error": "",
+    }
 
 
 def snapshot_rollback(sb: Sandbox, snapshot_id: str) -> tuple[Sandbox, dict[str, Any]]:
     api_start = time.time_ns()
     t0 = time.perf_counter()
-    last_error = ""
-    max_attempts = 30
-    for attempt in range(max_attempts):
-        try:
-            resp = sb.rollback(snapshot_id)
-            wall_ms = (time.perf_counter() - t0) * 1000.0
-            api_end = time.time_ns()
-            post_api_settle()
-            return sb, {
-                "ok": True,
-                "snapshot_id": snapshot_id,
-                "rollback_response": resp,
-                "sandbox_id": sb.sandbox_id,
-                "api_start_unix_ns": api_start,
-                "api_end_unix_ns": api_end,
-                "restore_wall_ms": wall_ms,
-                "api_retries": attempt,
-                "last_retry_error": last_error,
-            }
-        except Exception as e:  # noqa: BLE001
-            if attempt >= max_attempts - 1 or not is_retryable_connection_error(e):
-                raise
-            last_error = f"{type(e).__name__}: {e}"
-            if not ("already in progress" in str(e).lower() or "active snapshot operation" in str(e).lower() or "duplicate entry" in str(e).lower()):
-                sb = reconnect_sandbox(sb)
-            time.sleep(retry_delay(e, attempt))
-    raise RuntimeError("unreachable rollback retry state")
+    # An uncertain rollback must not be repeated with a new request id.
+    resp = sb.rollback(snapshot_id)
+    wall_ms = (time.perf_counter() - t0) * 1000.0
+    api_end = time.time_ns()
+    post_api_settle()
+    return sb, {
+        "ok": True,
+        "snapshot_id": snapshot_id,
+        "rollback_response": resp,
+        "sandbox_id": sb.sandbox_id,
+        "api_start_unix_ns": api_start,
+        "api_end_unix_ns": api_end,
+        "restore_wall_ms": wall_ms,
+        "api_retries": 0,
+        "last_retry_error": "",
+    }
 
 
 def delete_snapshots(snapshots: list[str]) -> None:
