@@ -1,5 +1,5 @@
 """Keep the latest AE run at a stable path and verify backups before replacing it."""
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from datetime import datetime, timezone
 import errno
 import fcntl
@@ -30,7 +30,7 @@ def no_symlink_parents(path):
 
 
 @contextmanager
-def run_lock(path):
+def run_lock(path, *, shared=False, wait=False):
     """Shared by full, selected, quick, resume, and analysis invocations."""
     path = no_symlink_parents(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,12 +40,41 @@ def run_lock(path):
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise ValueError('Results lock must be a regular file with one link')
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | (0 if wait else fcntl.LOCK_NB))
         except BlockingIOError as error:
             raise ValueError('Another AE run or results backup is active') from error
         yield fd
     finally:
         os.close(fd)
+
+
+
+@contextmanager
+def parallel_run_locks(work, *, quick, rotate):
+    """One main run and one quick check; rotation excludes every active run."""
+    work = Path(work)
+    with ExitStack() as stack:
+        stack.enter_context(run_lock(work / ('.quick-run.lock' if quick else '.main-run.lock')))
+        gate = stack.enter_context(run_lock(work / '.results.lock', shared=not rotate,
+                                            wait=quick))
+        yield gate
+
+
+def measurement_phase(gate):
+    # Downgrade without dropping the rotation lease between backup and execution.
+    if gate is not None:
+        fcntl.flock(gate, fcntl.LOCK_SH)
+
+
+def parallel_output(root, output, *, quick):
+    """The quick lane owns only checks/<run>; the main lane never writes there."""
+    root, output = no_symlink_parents(root), no_symlink_parents(output)
+    checks = root / 'checks'
+    if quick:
+        if output == checks or not output.is_relative_to(checks):
+            raise ValueError('Parallel quick checks must use ae/results/checks/<run>')
+    elif output == checks or output.is_relative_to(checks):
+        raise ValueError('ae/results/checks is reserved for quick checks')
 
 
 def active_references(root):

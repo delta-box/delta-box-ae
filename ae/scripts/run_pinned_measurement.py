@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import time
 
@@ -61,6 +62,29 @@ def stop(process, grace=30):
         process.wait()
 
 
+
+def acquire_node_lock(node, *, timeout, root=Path('/run/lock')):
+    path = root / f'deltabox-numa-{node}.lock'
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    lock = os.fdopen(fd, 'a')
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.geteuid():
+            raise ValueError('Unsafe NUMA lease file')
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return lock
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('Timed out waiting for NUMA node ' + str(node))
+                time.sleep(0.2)
+    except BaseException:
+        lock.close()
+        raise
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--node', type=int, required=True)
@@ -103,6 +127,13 @@ def main():
         signal.signal(signum, interrupted)
     save()
     try:
+        manifest['status'] = 'waiting-for-numa'
+        save()
+        waiting = time.monotonic()
+        locks.append(acquire_node_lock(args.node, timeout=args.timeout))
+        manifest.update(status='preparing', resource_wait_s=time.monotonic() - waiting,
+                        numa_lease=f'/run/lock/deltabox-numa-{args.node}.lock')
+        save()
         for policy in policies:
             lock = open('/run/lock/deltabox-'+policy.name+'.lock', 'a')
             locks.append(lock)

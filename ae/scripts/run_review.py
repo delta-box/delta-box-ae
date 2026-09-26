@@ -26,7 +26,8 @@ sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
-from repro.result_storage import DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp
+from repro.result_storage import (DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp,
+                                 parallel_run_locks, parallel_output, measurement_phase, no_symlink_parents)
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -191,6 +192,9 @@ def make_output_accessible(root):
         os.chmod(path, mode, follow_symlinks=False)
     update(root)
     for directory, dirs, files in os.walk(root, followlinks=False):
+        # The other lane owns this subtree, including its live temporary files.
+        if Path(directory) == REPO / 'ae/results':
+            dirs[:] = [name for name in dirs if name != 'checks']
         for name in dirs + files:
             update(Path(directory) / name)
 
@@ -465,6 +469,11 @@ class Review:
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
         self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
                                   reason='GPU stage not reached or not selected')
+        self.record['concurrency_policy'] = dict(
+            enabled=config.get('review', {}).get('parallel_quick_check', False),
+            lane='quick' if args.quick_check else 'main',
+            control_cpus=config.get('review', {}).get('control_cpus'),
+            resource_scope='exclusive NUMA and CPU frequency policies during each measurement; exclusive results rotation')
         self.cube_memory_manifest = None
         self.cube_placement = None
         self.previous_record = {}
@@ -526,6 +535,11 @@ class Review:
         self.save()
 
     def step(self, name, command, timeout=14400, *, unavailable_on_failure=False, termination_grace=30):
+        control_cpus = self.config.get('review', {}).get('control_cpus')
+        if control_cpus and not name.endswith('-run'):
+            if not isinstance(control_cpus, str) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', control_cpus):
+                raise ValueError('Invalid control CPU list')
+            command = ['taskset', '-c', control_cpus, *command]
         log_dir = self.output / 'logs' / self.attempt / name
         item = dict(name=name, status='running', command=list(map(str, command)),
                     log=str((log_dir / 'stdout.log').relative_to(self.output)))
@@ -560,6 +574,8 @@ class Review:
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         config.pop('review', None)
+        if self.args.quick_check and self.args.numa_node is not None:
+            config['measurement'] = dict(pin=True, numa_node=self.args.numa_node, cpus=self.args.cpus)
         if name.endswith('-cube') and self.cube_memory_manifest is not None:
             config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
             config['measurement'] = {**config.get('measurement', {}), **self.cube_placement}
@@ -884,10 +900,13 @@ class Review:
                 # Validate fixed Cube settings early, but do not retain its RAM
                 # copy while unrelated memory-heavy experiments execute.
                 self.prepare_cube_service(contexts, validate_only=True)
-                if not self.step('prepare', [*self.cli, 'prepare']):
-                    return 1
-                if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
-                    return 1
+                # Shared bundles may be imported here. Serialize only preparation,
+                # not the subsequent independent VM measurements.
+                with run_lock(REPO / 'ae/work/.prepare.lock', wait=True):
+                    if not self.step('prepare', [*self.cli, 'prepare']):
+                        return 1
+                    if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
+                        return 1
                 cube_prepared = False
                 for name in self.experiments:
                     try:
@@ -962,6 +981,40 @@ def main(argv=None):
     if args.resume and (args.output or args.analyze_existing):
         p.error('--resume cannot be combined with --output/--analyze-existing')
     try:
+        config = {} if args.analyze_existing else load_config(args.config.resolve())
+        parallel = config.get('review', {}).get('parallel_quick_check', False)
+        if type(parallel) is not bool:
+            raise ValueError('review.parallel_quick_check must be a boolean')
+        if args.quick_check:
+            placement = config.get('review', {}).get('quick_check_measurement', {})
+            if args.numa_node is None and args.cpus is None and placement:
+                args.numa_node, args.cpus = placement['numa_node'], placement['cpus']
+        if parallel:
+            if args.no_pin or args.analyze_existing or args.experiment_config:
+                raise ValueError('Parallel mode requires configured pinned measurements')
+            if args.output is None and args.resume is None:
+                args.output = default_output(args)
+            output = (args.resume or args.output).absolute()
+            parallel_output(REPO / 'ae/results', output, quick=args.quick_check)
+            for override in [config, *[deep_merge(config, value) for value in
+                    config.get('review', {}).get('experiment_overrides', {}).values()]]:
+                if not pin_requested(args, override):
+                    raise ValueError('Parallel mode requires pinning for every experiment')
+            if args.quick_check:
+                if args.numa_node is None or not args.cpus:
+                    raise ValueError('Parallel quick check requires an explicit NUMA/CPU placement')
+                # Cube may retain its service between measured stages. Do not
+                # place the quick VM on that long-lived service's memory node.
+                for name, override in config.get('review', {}).get('experiment_overrides', {}).items():
+                    if name.endswith('-cube'):
+                        cube = deep_merge(config, override)
+                        if cube.get('cube', {}).get('manage_memory_service') and args.numa_node == cube.get('measurement', {}).get('numa_node'):
+                            raise ValueError('Quick check cannot use the managed Cube NUMA node')
+                if config.get('cube', {}).get('manage_memory_service') and args.numa_node == config.get('measurement', {}).get('numa_node'):
+                    raise ValueError('Quick check cannot use the managed Cube NUMA node')
+            rotate = output.resolve() == (REPO / 'ae/results').resolve() and not args.resume
+            with parallel_run_locks(REPO / 'ae/work', quick=args.quick_check, rotate=rotate) as gate:
+                return run_selected(args, p, gate=gate)
         with run_lock(REPO / 'ae/work/.results.lock'):
             return run_selected(args, p)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
@@ -969,13 +1022,13 @@ def main(argv=None):
         return 2
 
 
-def run_selected(args, p):
+def run_selected(args, p, *, gate=None):
     config = {} if args.analyze_existing else load_config(args.config.resolve())
     check_timeout(config)
     selected_output = args.resume or args.output or default_output(args)
     if selected_output.is_symlink():
         p.error('Output must not be a symlink')
-    output = selected_output.resolve()
+    output = no_symlink_parents(selected_output).resolve()
     if args.analyze_existing and not args.analyze_existing.is_dir():
         p.error('--analyze-existing must point to an existing directory')
     runner = Review(args, config, output)
@@ -997,6 +1050,7 @@ def run_selected(args, p):
         for name in ('review.json', 'SUMMARY.md', 'result.md'):
             if (output / name).exists():
                 shutil.copy2(output / name, history / name)
+    measurement_phase(gate)
     print(f'Output: {output}', flush=True)
     try:
         code = runner.run()
