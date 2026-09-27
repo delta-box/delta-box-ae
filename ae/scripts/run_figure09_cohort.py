@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the frozen Figure 9 cohort sequentially in one disposable VM.
+"""Run the fixed 80-input Figure 9 cohort sequentially in one disposable VM.
 
 VM boot is outside the metric. Each input/arm creates a new 4 GiB loop
 filesystem; every edit still gets a fresh overlay upper over its base file.
@@ -79,12 +79,13 @@ def main():
     require_memory_workdir(data.parent)
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
-    purpose = 'quick-check' if args.limit else 'full-cohort'
+    purpose = 'quick-check' if args.limit else 'full-trace'
     jobs = build_jobs(['figure-09'], config, args.config.resolve(), out/'runs', args.limit)
     suite = dict(schema_version=1, analysis_mode='fresh-measurement', experiment='figure-09',
                  run_purpose=purpose, status='running', release=release,
                  runtime=repository_state(), host=host_state(), config_source=file_record(args.config),
                  memory_backing=memory, jobs=jobs,
+                input_selection=dict(jobs[0]['input_selection']),
                  isolation='one sequential VM; new loop filesystem per input/arm; fresh upper per edit')
     write_json(out/'suite.json', suite)
     boot = out/'vm'; boot.mkdir()
@@ -118,7 +119,9 @@ def main():
                 record = dict(experiment='figure-09', analysis_mode='fresh-measurement',
                     run_purpose=purpose, status='preparing', release=release, runtime=suite['runtime'],
                     host=suite['host'], images=images, sources=sources, memory_backing=memory,
-                    batch_vm=str(boot), isolation=suite['isolation'], **{k:str(v) for k,v in paths.items()})
+                    batch_vm=str(boot), isolation=suite['isolation'],
+                    input_selection=dict(job['input_selection']),
+                    **{k:str(v) for k,v in paths.items()})
                 print(f'[{index}/{len(jobs)}] {job["key"]}', flush=True)
                 try:
                     extras, experiment = build_extra(run_args, output)

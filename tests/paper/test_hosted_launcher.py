@@ -213,6 +213,46 @@ class HostedTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     hosted.parse_arguments(['--checkout', str(self.runtime), *flags])
 
+    def test_figure09_reuse_forwards_trusted_old_result_without_mutation(self):
+        old = self.output / 'prior'
+        old.mkdir()
+        (old / 'review.json').write_text('{"status":"interrupted"}')
+        (old / 'SUMMARY.md').write_text('prior source remains unchanged')
+        with self.launcher() as (execute, _, stderr):
+            code = hosted.main(['--checkout', str(self.runtime), '--experiment', 'figure-09',
+                                '--experiment', 'correctness', '--reuse-completed-from', 'prior',
+                                '--output', 'continued'])
+            self.assertEqual(code, 0, stderr.getvalue())
+        command = execute.call_args.args[1]
+        self.assertEqual(command[command.index('--reuse-completed-from') + 1], str(old))
+        self.assertEqual((old / 'review.json').read_text(), '{"status":"interrupted"}')
+        self.assertFalse((old / 'continued').exists())
+
+    def test_figure09_reuse_rejects_unsafe_result_roots(self):
+        old = self.output / 'prior'
+        old.mkdir()
+        (old / 'review.json').write_text('{}')
+        (old / 'SUMMARY.md').write_text('old')
+        for source, output in [('../outside', 'new'), (str(self.root), 'new'),
+                               ('prior', 'prior/child')]:
+            with self.subTest(source=source, output=output), self.launcher() as (execute, _, _):
+                self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--experiment', 'figure-09',
+                    '--reuse-completed-from', source, '--output', output]), 2)
+                execute.assert_not_called()
+        self.untrusted.add(old / 'review.json')
+        with self.launcher() as (execute, _, _):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--experiment', 'figure-09',
+                '--reuse-completed-from', 'prior', '--output', 'new']), 2)
+            execute.assert_not_called()
+
+    def test_figure09_reuse_rejects_ambiguous_and_partial_modes(self):
+        for flags in [[], ['--list'], ['--test'], ['--all'], ['--resume', 'old'],
+                      ['--experiment', 'correctness'], ['--experiment', 'figure-09', '--limit', '1'],
+                      ['--experiment', 'figure-09', '--max-events', '1']]:
+            with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    hosted.parse_arguments(['--checkout', str(self.runtime), '--reuse-completed-from', 'old', *flags])
+
     def test_legacy_check_option_is_supported_but_hidden(self):
         new = hosted.parse_arguments(['--checkout', str(self.runtime), '--test'])
         old = hosted.parse_arguments(['--checkout', str(self.runtime), '--smoke'])
