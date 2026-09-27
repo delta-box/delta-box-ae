@@ -1,0 +1,35 @@
+{
+  "upstream_commit": "a7b099dba3f7c789c93e4b608fa44943c316505e",
+  "source_url": "https://api.github.com/repos/TencentCloud/CubeSandbox/tarball/a7b099dba3f7c789c93e4b608fa44943c316505e",
+  "source_archive_sha256": "ee889fac7a61bec9c7a67740adb691d6c6c247c343b8053380f74f14d3d03af1",
+  "patch_sha256": "6ecadd0372e5ef3caa7c9b1cbc08683ca61f9c6b95dac46adf5aebf7a8bf33cd",
+  "go_version": "go1.25.7",
+  "build_command": "go build -buildvcs=false -p 4 -o cubemaster-recovery ./cmd/cubemaster",
+  "patch_command": "patch -p1 < cubemaster-commit-recovery.patch",
+  "source_modules": [
+    "CubeMaster",
+    "cubelog"
+  ],
+  "scope": "Confirm uncertain persistence, execution claim and terminal-result writes using locking reads. Preserve a single physical dispatch and compare all intended terminal fields including the backend result. Recover failed response reads without mutating job state. No legacy-job takeover or inferred backend success. For transient database failures with confirmed absent job, retry the database-only persistence closure at most three times with unchanged logical IDs; never retry after observed commit, payload mismatch or cancellation.",
+  "validation": [
+    "20 real MySQL fault cases with real transactions; two real socket-timeout checks at 5s and 60s; full templatecenter package passed",
+    "Existing templatecenter package tests",
+    "Fresh schema migration through version4 on isolated MySQL passed before unchanged migration deployment"
+  ],
+  "measurement": "New measurements must record this service binary and patch identity separately from the AE source; old results retain their original service identity.",
+  "hosted_configuration": {
+    "path": "/usr/local/services/cubetoolbox/CubeMaster/conf.yaml",
+    "changes": {
+      "ossdb_config.read_timeout": {
+        "from": 5,
+        "to": 60
+      },
+      "instance_db_config.read_timeout": {
+        "from": 5,
+        "to": 60
+      }
+    },
+    "reason": "Observed database log/commit waits exceed 5s. Keep durability and finite snapshot deadline; record this environment difference in new measurements.",
+    "scope": "MySQL response timeout only; no durability, input, snapshot success, CPU or storage policy relaxed."
+  }
+}

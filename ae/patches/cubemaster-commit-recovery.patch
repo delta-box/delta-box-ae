@@ -1,0 +1,726 @@
+--- a/CubeMaster/pkg/templatecenter/snapshot_ops.go
++++ b/CubeMaster/pkg/templatecenter/snapshot_ops.go
+@@ -80,0 +81,2 @@
++	ctx, cancelOperation := synchronousSnapshotJobContext(ctx, nil)
++	defer cancelOperation()
+@@ -181,5 +183,7 @@
+-		return store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+-			if err := createDefinitionTx(ctx, tx, snapshotID, storedReq, createReq.InstanceType, constants.GetAppSnapshotVersion(createReq.Annotations), defOpts); err != nil {
+-				return err
+-			}
+-			return tx.Table(constants.TemplateImageJobTableName).Create(record).Error
++		return persistSnapshotJob(ctx, record, func() error {
++			return store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
++				if err := createDefinitionTx(ctx, tx, snapshotID, storedReq, createReq.InstanceType, constants.GetAppSnapshotVersion(createReq.Annotations), defOpts); err != nil {
++					return err
++				}
++				return tx.Table(constants.TemplateImageJobTableName).Create(record).Error
++			})
+@@ -191 +195 @@
+-	info, err := GetTemplateImageJobInfo(ctx, jobID)
++	info, err := getSnapshotJobInfoWithRecovery(ctx, jobID)
+@@ -338 +342 @@
+-	if err := updateTemplateImageJob(ctx, jobID, map[string]any{
++	if err := updateSnapshotJobWithConfirmation(ctx, jobID, map[string]any{
+@@ -353,0 +358,2 @@
++	ctx, cancelOperation := synchronousSnapshotJobContext(ctx, nil)
++	defer cancelOperation()
+@@ -465 +471,3 @@
+-		return store.db.WithContext(ctx).Table(constants.TemplateImageJobTableName).Create(record).Error
++		return persistSnapshotJob(ctx, record, func() error {
++			return store.db.WithContext(ctx).Table(constants.TemplateImageJobTableName).Create(record).Error
++		})
+@@ -469 +477 @@
+-	info, err := GetTemplateImageJobInfo(ctx, jobID)
++	info, err := getSnapshotJobInfoWithRecovery(ctx, jobID)
+@@ -531 +539 @@
+-	if err := updateTemplateImageJob(ctx, jobID, map[string]any{
++	if err := updateSnapshotJobWithConfirmation(ctx, jobID, map[string]any{
+@@ -570 +578 @@
+-	// and does not expose a polling interface to callers.
++// and does not expose a polling interface to callers.
+@@ -571,0 +580,2 @@
++	ctx, cancelOperation := synchronousSnapshotJobContext(ctx, nil)
++	defer cancelOperation()
+@@ -666,10 +676,12 @@
+-		return store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+-			if err := tx.Table(constants.TemplateDefinitionTableName).
+-				Where("template_id = ?", snapshotID).
+-				Updates(map[string]any{
+-					"status":     StatusDeleting,
+-					"updated_at": gorm.Expr("CURRENT_TIMESTAMP"),
+-				}).Error; err != nil {
+-				return err
+-			}
+-			return tx.Table(constants.TemplateImageJobTableName).Create(record).Error
++		return persistSnapshotJob(ctx, record, func() error {
++			return store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
++				if err := tx.Table(constants.TemplateDefinitionTableName).
++					Where("template_id = ?", snapshotID).
++					Updates(map[string]any{
++						"status":     StatusDeleting,
++						"updated_at": gorm.Expr("CURRENT_TIMESTAMP"),
++					}).Error; err != nil {
++					return err
++				}
++				return tx.Table(constants.TemplateImageJobTableName).Create(record).Error
++			})
+@@ -680 +692 @@
+-	info, err := GetTemplateImageJobInfo(ctx, jobID)
++	info, err := getSnapshotJobInfoWithRecovery(ctx, jobID)
+@@ -715 +727 @@
+-	if err := updateTemplateImageJob(ctx, jobID, map[string]any{
++	if err := updateSnapshotJobWithConfirmation(ctx, jobID, map[string]any{
+@@ -1138,0 +1151,4 @@
++	createReq, storedReq, err := buildSnapshotRequests(req, info.TemplateID)
++	if err != nil {
++		return nil, err
++	}
+@@ -1154,4 +1169,0 @@
+-	createReq, storedReq, err := buildSnapshotRequests(req, info.TemplateID)
+-	if err != nil {
+-		return nil, err
+-	}
+@@ -1238 +1250 @@
+-	info, err := GetTemplateImageJobInfo(ctx, jobID)
++	info, err := getSnapshotJobInfoWithRecovery(ctx, jobID)
+@@ -1250 +1262 @@
+-	info, err := GetTemplateImageJobInfo(ctx, jobID)
++	info, err := getSnapshotJobInfoWithRecovery(ctx, jobID)
+@@ -1272,12 +1284 @@
+-	tx := store.db.WithContext(ctx).Table(constants.TemplateImageJobTableName).
+-		Where("job_id = ? AND status = ?", jobID, JobStatusPending).
+-		Updates(map[string]any{
+-			"status":     JobStatusRunning,
+-			"phase":      phase,
+-			"progress":   progress,
+-			"updated_at": gorm.Expr("CURRENT_TIMESTAMP"),
+-		})
+-	if tx.Error != nil {
+-		return false, tx.Error
+-	}
+-	return tx.RowsAffected > 0, nil
++	return claimSnapshotJobWithToken(ctx, jobID, phase, progress, newSnapshotExecutionToken())
+@@ -1340 +1340,0 @@
+-
+--- /dev/null
++++ b/CubeMaster/pkg/templatecenter/snapshot_commit_recovery.go
+@@ -0,0 +1,171 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++
++package templatecenter
++
++import (
++	"context"
++	"database/sql/driver"
++	"errors"
++	"fmt"
++	mysql "github.com/go-sql-driver/mysql"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/log"
++	sandboxtypes "github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/service/sandbox/types"
++	"net"
++	"reflect"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/constants"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
++	"gorm.io/gorm"
++	"gorm.io/gorm/clause"
++)
++
++// Recovery reads never reuse the cancelled request/failed transaction. A locking
++// current read waits for the original transaction to commit or roll back; an
++// ordinary consistent read could incorrectly report its uncommitted row absent.
++func readSnapshotJobForRecovery(ctx context.Context, jobID string) (*models.TemplateImageJob, error) {
++	recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
++	defer cancel()
++	var last error
++	for {
++		var row models.TemplateImageJob
++		err := store.db.WithContext(recovery).Transaction(func(tx *gorm.DB) error {
++			return tx.Table(constants.TemplateImageJobTableName).
++				Clauses(clause.Locking{Strength: "UPDATE"}).Where("job_id = ?", jobID).Take(&row).Error
++		})
++		if err == nil {
++			return &row, nil
++		}
++		if errors.Is(err, gorm.ErrRecordNotFound) {
++			return nil, err
++		}
++		last = err
++		select {
++		case <-recovery.Done():
++			return nil, errors.Join(last, recovery.Err())
++		case <-time.After(100 * time.Millisecond):
++		}
++	}
++}
++
++// Retry only transient database failures, never validation/constraint errors.
++func transientSnapshotDBError(err error) bool {
++	var ne net.Error
++	var me *mysql.MySQLError
++	return errors.Is(err, mysql.ErrInvalidConn) || errors.Is(err, driver.ErrBadConn) ||
++		(errors.As(err, &ne) && ne.Timeout()) ||
++		(errors.As(err, &me) && (me.Number == 1205 || me.Number == 1213))
++}
++
++// The closure contains only the definition/job database transaction, no node
++// RPC. Reuse the exact logical IDs only after a locking read proves absence;
++// once COMMIT is visible, return without another write.
++func persistSnapshotJob(ctx context.Context, expected *models.TemplateImageJob, write func() error) error {
++	originalModel := expected.Model
++	for attempt := 0; attempt < 3; attempt++ {
++		cause := write()
++		if cause == nil {
++			return nil
++		}
++		row, err := readSnapshotJobForRecovery(ctx, expected.JobID)
++		if errors.Is(err, gorm.ErrRecordNotFound) && transientSnapshotDBError(cause) &&
++			ctx.Err() == nil && attempt < 2 {
++			// GORM may assign a numeric ID before the transaction rolls back.
++			expected.Model = originalModel
++			log.G(ctx).Warnf("retry snapshot job %s persistence after confirmed rollback: %v", expected.JobID, cause)
++			select {
++			case <-ctx.Done():
++				return errors.Join(cause, ctx.Err())
++			case <-time.After(time.Duration(attempt+1) * 100 * time.Millisecond):
++			}
++			continue
++		}
++		if err != nil {
++			return errors.Join(cause, fmt.Errorf("confirm snapshot job persistence: %w", err))
++		}
++		if row.RequestID != expected.RequestID || row.Operation != expected.Operation ||
++			row.ResourceID != expected.ResourceID || row.SandboxID != expected.SandboxID ||
++			row.RequestJSON != expected.RequestJSON {
++			return errors.Join(cause, errors.New("snapshot persistence confirmation payload mismatch"))
++		}
++		return nil
++	}
++	panic("unreachable")
++}
++
++func claimSnapshotJobWithToken(ctx context.Context, jobID, phase string, progress int32, token string) (bool, error) {
++	tx := store.db.WithContext(ctx).Table(constants.TemplateImageJobTableName).
++		Where("job_id = ? AND status = ?", jobID, JobStatusPending).
++		Updates(map[string]any{
++			"status": JobStatusRunning, "phase": phase, "progress": progress,
++			"execution_token": token, "updated_at": gorm.Expr("CURRENT_TIMESTAMP"),
++		})
++	if tx.Error == nil {
++		return tx.RowsAffected > 0, nil
++	}
++	row, err := readSnapshotJobForRecovery(ctx, jobID)
++	if err != nil {
++		return false, errors.Join(tx.Error, fmt.Errorf("confirm snapshot claim: %w", err))
++	}
++	if row.Status == JobStatusRunning && row.ExecutionToken == token {
++		return true, nil
++	}
++	if row.Status == JobStatusPending {
++		return false, tx.Error
++	}
++	// Another owner or a terminal result is not permission to issue a node RPC.
++	return false, nil
++}
++
++func newSnapshotExecutionToken() string { return uuid.NewString() }
++
++// updateSnapshotJobWithConfirmation is used only after the physical operation
++// succeeded. A lost update acknowledgement is not a reason to issue it again.
++// Verify every intended value, including the backend result payload, under a
++// locking current read; an uncommitted or different terminal result stays an error.
++func updateSnapshotJobWithConfirmation(ctx context.Context, jobID string, values map[string]any) error {
++	cause := updateTemplateImageJob(ctx, jobID, values)
++	if cause == nil {
++		return nil
++	}
++	row, err := readSnapshotJobForRecovery(ctx, jobID)
++	if err != nil {
++		return errors.Join(cause, fmt.Errorf("confirm snapshot completion: %w", err))
++	}
++	stmt := &gorm.Statement{DB: store.db}
++	if err := stmt.Parse(row); err != nil {
++		return errors.Join(cause, err)
++	}
++	for key, want := range values {
++		// MySQL timestamp precision can differ; it is not evidence of completion.
++		if key == "updated_at" {
++			continue
++		}
++		field := stmt.Schema.LookUpField(key)
++		if field == nil {
++			return errors.Join(cause, fmt.Errorf("unknown snapshot completion field %s", key))
++		}
++		got, _ := field.ValueOf(ctx, reflect.ValueOf(row))
++		if fmt.Sprint(got) != fmt.Sprint(want) {
++			return errors.Join(cause, fmt.Errorf("snapshot completion field %s does not match committed value", key))
++		}
++	}
++	log.G(ctx).Warnf("confirmed snapshot job %s completion after database acknowledgement error: %v", jobID, cause)
++	return nil
++}
++
++// This is a read-only recovery path. It cannot re-dispatch a snapshot operation
++// or turn a PENDING/RUNNING job into success; the existing finalizer enforces that.
++func getSnapshotJobInfoWithRecovery(ctx context.Context, jobID string) (*sandboxtypes.TemplateImageJobInfo, error) {
++	info, cause := GetTemplateImageJobInfo(ctx, jobID)
++	if cause == nil || errors.Is(cause, gorm.ErrRecordNotFound) || errors.Is(cause, ErrTemplateStoreNotInitialized) {
++		return info, cause
++	}
++	row, err := readSnapshotJobForRecovery(ctx, jobID)
++	if err != nil {
++		return nil, errors.Join(cause, fmt.Errorf("recover snapshot job response: %w", err))
++	}
++	return jobModelToInfo(context.WithoutCancel(ctx), row)
++}
+--- /dev/null
++++ b/CubeMaster/pkg/templatecenter/snapshot_commit_recovery_test.go
+@@ -0,0 +1,428 @@
++package templatecenter
++
++import (
++	"context"
++	"database/sql"
++	"errors"
++	"fmt"
++	mysql "github.com/go-sql-driver/mysql"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/constants"
++	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
++	gm "gorm.io/driver/mysql"
++	"gorm.io/gorm"
++	"gorm.io/gorm/logger"
++	"os"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++)
++
++func TestSnapshotRecoveryMySQL(t *testing.T) {
++	dsn := os.Getenv("CUBE_RECOVERY_MYSQL_DSN")
++	if dsn == "" {
++		t.Skip("isolated MySQL DSN required")
++	}
++	db, err := gorm.Open(gm.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err = db.AutoMigrate(&models.TemplateImageJob{}); err != nil {
++		t.Fatal(err)
++	}
++	old := store.db
++	store.db = db
++	defer func() { store.db = old }()
++	lost := errors.New("injected COMMIT response lost after durable commit")
++	newRow := func(id string) *models.TemplateImageJob {
++		r := &models.TemplateImageJob{JobID: id, RequestID: "req-" + id, ResourceID: "snap-" + id, SandboxID: "sandbox-test", Operation: JobOperationSnapshotCreate, Status: JobStatusPending, RequestJSON: "{\"test\":true}"}
++		return r
++	}
++	insert := func(id string) *models.TemplateImageJob {
++		r := newRow(id)
++		if e := db.Create(r).Error; e != nil {
++			t.Fatal(e)
++		}
++		return r
++	}
++	t.Run("create_commit_ack_lost", func(t *testing.T) {
++		r := newRow("create-ack")
++		writes := 0
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			if e := db.Transaction(func(tx *gorm.DB) error { return tx.Create(r).Error }); e != nil {
++				return e
++			}
++			return lost
++		})
++		if e != nil || writes != 1 {
++			t.Fatalf("err=%v writes=%d", e, writes)
++		}
++	})
++	t.Run("create_rollback_does_not_invent_job", func(t *testing.T) {
++		r := newRow("create-rollback")
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			return db.Transaction(func(tx *gorm.DB) error {
++				if e := tx.Create(r).Error; e != nil {
++					return e
++				}
++				return lost
++			})
++		})
++		if !errors.Is(e, lost) {
++			t.Fatalf("lost original error: %v", e)
++		}
++		var n int64
++		db.Model(r).Where("job_id = ?", r.JobID).Count(&n)
++		if n != 0 {
++			t.Fatal(n)
++		}
++	})
++	t.Run("cancelled_caller_confirmation", func(t *testing.T) {
++		r := newRow("create-cancel")
++		ctx, cancel := context.WithCancel(context.Background())
++		defer cancel()
++		e := persistSnapshotJob(ctx, r, func() error {
++			if e := db.Create(r).Error; e != nil {
++				return e
++			}
++			cancel()
++			return lost
++		})
++		if e != nil {
++			t.Fatal(e)
++		}
++	})
++	t.Run("payload_mismatch_rejected", func(t *testing.T) {
++		r := insert("mismatch")
++		r.RequestJSON = "different"
++		if e := persistSnapshotJob(context.Background(), r, func() error { return lost }); e == nil {
++			t.Fatal("accepted mismatch")
++		}
++	})
++	t.Run("claim_commit_ack_lost_one_owner", func(t *testing.T) {
++		r := insert("claim-ack")
++		if e := db.Callback().Update().After("gorm:commit_or_rollback_transaction").Register("ae_lost_ack", func(tx *gorm.DB) {
++			if tx.Error == nil {
++				tx.Error = lost
++			}
++		}); e != nil {
++			t.Fatal(e)
++		}
++		claimed, e := claimSnapshotJobWithToken(context.Background(), r.JobID, JobPhaseSnapshotting, 10, "owner-A")
++		db.Callback().Update().Remove("ae_lost_ack")
++		if e != nil || !claimed {
++			t.Fatalf("claimed=%v err=%v", claimed, e)
++		}
++		claimed, e = claimSnapshotJobWithToken(context.Background(), r.JobID, JobPhaseSnapshotting, 10, "owner-B")
++		if e != nil || claimed {
++			t.Fatalf("second owner claimed=%v err=%v", claimed, e)
++		}
++		row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++		if e != nil || row.ExecutionToken != "owner-A" {
++			t.Fatalf("%+v %v", row, e)
++		}
++	})
++	t.Run("claim_rollback_never_executes", func(t *testing.T) {
++		r := insert("claim-rollback")
++		db.Callback().Update().Before("gorm:update").Register("ae_rollback", func(tx *gorm.DB) { tx.Error = lost })
++		claimed, e := claimSnapshotJobWithToken(context.Background(), r.JobID, JobPhaseSnapshotting, 10, "owner-A")
++		db.Callback().Update().Remove("ae_rollback")
++		if claimed || !errors.Is(e, lost) {
++			t.Fatalf("claimed=%v err=%v", claimed, e)
++		}
++		row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++		if e != nil || row.Status != JobStatusPending {
++			t.Fatalf("%+v %v", row, e)
++		}
++	})
++	t.Run("concurrent_claims_one_owner", func(t *testing.T) {
++		r := insert("claim-concurrent")
++		var n atomic.Int32
++		var wg sync.WaitGroup
++		errs := make(chan error, 8)
++		for i := 0; i < 8; i++ {
++			wg.Add(1)
++			go func(i int) {
++				defer wg.Done()
++				yes, e := claimSnapshotJobWithToken(context.Background(), r.JobID, JobPhaseSnapshotting, 10, fmt.Sprintf("owner-%d", i))
++				if e != nil {
++					errs <- e
++				}
++				if yes {
++					n.Add(1)
++				}
++			}(i)
++		}
++		wg.Wait()
++		close(errs)
++		for e := range errs {
++			t.Error(e)
++		}
++		if n.Load() != 1 {
++			t.Fatalf("owners=%d", n.Load())
++		}
++	})
++	t.Run("locking_read_waits_for_inflight_commit", func(t *testing.T) {
++		r := insert("claim-wait")
++		tx := db.Begin()
++		if e := tx.Table(constants.TemplateImageJobTableName).Where("job_id = ?", r.JobID).Updates(map[string]any{"status": JobStatusRunning, "execution_token": "owner-wait"}).Error; e != nil {
++			t.Fatal(e)
++		}
++		done := make(chan *models.TemplateImageJob, 1)
++		errc := make(chan error, 1)
++		go func() {
++			row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++			if e != nil {
++				errc <- e
++			} else {
++				done <- row
++			}
++		}()
++		select {
++		case <-done:
++			t.Fatal("read uncommitted outcome")
++		case e := <-errc:
++			t.Fatal(e)
++		case <-time.After(150 * time.Millisecond):
++		}
++		if e := tx.Commit().Error; e != nil {
++			t.Fatal(e)
++		}
++		select {
++		case row := <-done:
++			if row.ExecutionToken != "owner-wait" {
++				t.Fatal(row.ExecutionToken)
++			}
++		case e := <-errc:
++			t.Fatal(e)
++		case <-time.After(10 * time.Second):
++			t.Fatal("confirmation stuck")
++		}
++	})
++
++	t.Run("terminal_commit_ack_lost", func(t *testing.T) {
++		r := insert("terminal-ack")
++		if e := db.Model(r).Updates(map[string]any{"status": JobStatusRunning, "execution_token": "owner-terminal"}).Error; e != nil {
++			t.Fatal(e)
++		}
++		var writes atomic.Int32
++		db.Callback().Update().After("gorm:commit_or_rollback_transaction").Register("ae_terminal_ack", func(tx *gorm.DB) {
++			writes.Add(1)
++			if tx.Error == nil {
++				tx.Error = lost
++			}
++		})
++		defer db.Callback().Update().Remove("ae_terminal_ack")
++		e := updateSnapshotJobWithConfirmation(context.Background(), r.JobID, map[string]any{"status": JobStatusReady, "phase": JobPhaseReady, "progress": 100, "result_json": `{"physical_rpc":"completed"}`})
++		if e != nil || writes.Load() != 1 {
++			t.Fatalf("err=%v writes=%d", e, writes.Load())
++		}
++	})
++	t.Run("terminal_rollback_not_success", func(t *testing.T) {
++		r := insert("terminal-rollback")
++		db.Callback().Update().Before("gorm:update").Register("ae_terminal_rollback", func(tx *gorm.DB) { tx.Error = lost })
++		defer db.Callback().Update().Remove("ae_terminal_rollback")
++		e := updateSnapshotJobWithConfirmation(context.Background(), r.JobID, map[string]any{"status": JobStatusReady, "progress": 100})
++		if !errors.Is(e, lost) {
++			t.Fatalf("accepted rolled back completion: %v", e)
++		}
++		row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++		if e != nil || row.Status != JobStatusPending {
++			t.Fatalf("%+v %v", row, e)
++		}
++	})
++	t.Run("terminal_payload_mismatch_rejected", func(t *testing.T) {
++		r := insert("terminal-mismatch")
++		db.Model(r).Updates(map[string]any{"status": JobStatusReady, "progress": 100, "result_json": "different"})
++		db.Callback().Update().Before("gorm:update").Register("ae_terminal_mismatch", func(tx *gorm.DB) { tx.Error = lost })
++		defer db.Callback().Update().Remove("ae_terminal_mismatch")
++		e := updateSnapshotJobWithConfirmation(context.Background(), r.JobID, map[string]any{"status": JobStatusReady, "progress": 100, "result_json": "expected"})
++		if !errors.Is(e, lost) {
++			t.Fatalf("accepted different result: %v", e)
++		}
++	})
++	t.Run("terminal_cancelled_caller_confirms_commit", func(t *testing.T) {
++		r := insert("terminal-cancel")
++		ctx, cancel := context.WithCancel(context.Background())
++		defer cancel()
++		db.Callback().Update().After("gorm:commit_or_rollback_transaction").Register("ae_terminal_cancel", func(tx *gorm.DB) {
++			if tx.Error == nil {
++				cancel()
++				tx.Error = lost
++			}
++		})
++		defer db.Callback().Update().Remove("ae_terminal_cancel")
++		if e := updateSnapshotJobWithConfirmation(ctx, r.JobID, map[string]any{"status": JobStatusReady, "progress": 100}); e != nil {
++			t.Fatal(e)
++		}
++	})
++	t.Run("response_read_failure_recovers_ready", func(t *testing.T) {
++		r := insert("response-ready")
++		db.Model(r).Updates(map[string]any{"status": JobStatusReady, "progress": 100})
++		var reads atomic.Int32
++		db.Callback().Query().Before("gorm:query").Register("ae_response_ready", func(tx *gorm.DB) {
++			if reads.Add(1) == 1 {
++				tx.Error = lost
++			}
++		})
++		defer db.Callback().Query().Remove("ae_response_ready")
++		info, e := finalizeSnapshotJobByID(context.Background(), r.JobID)
++		if e != nil || info == nil || info.Status != JobStatusReady {
++			t.Fatalf("%+v %v", info, e)
++		}
++	})
++	t.Run("response_read_does_not_promote_pending", func(t *testing.T) {
++		r := insert("response-pending")
++		var reads atomic.Int32
++		db.Callback().Query().Before("gorm:query").Register("ae_response_pending", func(tx *gorm.DB) {
++			if reads.Add(1) == 1 {
++				tx.Error = lost
++			}
++		})
++		defer db.Callback().Query().Remove("ae_response_pending")
++		if info, e := finalizeSnapshotJobByID(context.Background(), r.JobID); e == nil || info != nil {
++			t.Fatalf("promoted pending: %+v %v", info, e)
++		}
++	})
++	t.Run("response_read_does_not_hide_failure", func(t *testing.T) {
++		r := insert("response-failed")
++		db.Model(r).Updates(map[string]any{"status": JobStatusFailed, "error_message": "physical backend failure"})
++		var reads atomic.Int32
++		db.Callback().Query().Before("gorm:query").Register("ae_response_failed", func(tx *gorm.DB) {
++			if reads.Add(1) == 1 {
++				tx.Error = lost
++			}
++		})
++		defer db.Callback().Query().Remove("ae_response_failed")
++		if info, e := finalizeSnapshotJobByID(context.Background(), r.JobID); e == nil || e.Error() != "physical backend failure" || info != nil {
++			t.Fatalf("%+v %v", info, e)
++		}
++	})
++	t.Run("transient_rollback_reuses_exact_job", func(t *testing.T) {
++		r := newRow("transient-rollback")
++		writes := 0
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			return db.Transaction(func(tx *gorm.DB) error {
++				if e := tx.Create(r).Error; e != nil {
++					return e
++				}
++				if writes == 1 {
++					return mysql.ErrInvalidConn
++				}
++				return nil
++			})
++		})
++		if e != nil || writes != 2 {
++			t.Fatalf("err=%v writes=%d", e, writes)
++		}
++		row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++		if e != nil || row.RequestID != r.RequestID || row.RequestJSON != r.RequestJSON {
++			t.Fatalf("%+v %v", row, e)
++		}
++		var n int64
++		db.Model(r).Where("request_id = ?", r.RequestID).Count(&n)
++		if n != 1 {
++			t.Fatalf("logical jobs=%d", n)
++		}
++	})
++	t.Run("transient_rollback_bounded", func(t *testing.T) {
++		r := newRow("transient-bounded")
++		writes := 0
++		e := persistSnapshotJob(context.Background(), r, func() error { writes++; return mysql.ErrInvalidConn })
++		if !errors.Is(e, mysql.ErrInvalidConn) || writes != 3 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("cancelled_rollback_does_not_retry", func(t *testing.T) {
++		r := newRow("transient-cancelled")
++		writes := 0
++		ctx, cancel := context.WithCancel(context.Background())
++		defer cancel()
++		e := persistSnapshotJob(ctx, r, func() error { writes++; cancel(); return mysql.ErrInvalidConn })
++		if e == nil || writes != 1 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("inflight_insert_commit_is_not_repeated", func(t *testing.T) {
++		r := newRow("inflight-insert")
++		writes := 0
++		done := make(chan error, 1)
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			tx := db.Begin()
++			if e := tx.Create(r).Error; e != nil {
++				tx.Rollback()
++				return e
++			}
++			go func() { time.Sleep(200 * time.Millisecond); done <- tx.Commit().Error }()
++			return mysql.ErrInvalidConn
++		})
++		if ce := <-done; ce != nil {
++			t.Fatal(ce)
++		}
++		if e != nil || writes != 1 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("inflight_insert_rollback_then_retry", func(t *testing.T) {
++		r := newRow("inflight-rollback")
++		writes := 0
++		done := make(chan error, 1)
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			if writes == 2 {
++				return db.Create(r).Error
++			}
++			tx := db.Begin()
++			if e := tx.Create(r).Error; e != nil {
++				tx.Rollback()
++				return e
++			}
++			go func() { time.Sleep(200 * time.Millisecond); done <- tx.Rollback().Error }()
++			return mysql.ErrInvalidConn
++		})
++		if re := <-done; re != nil {
++			t.Fatal(re)
++		}
++		if e != nil || writes != 2 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++
++}
++
++func TestSnapshotDatabaseReadTimeout(t *testing.T) {
++	dsn := os.Getenv("CUBE_RECOVERY_MYSQL_DSN")
++	if dsn == "" {
++		t.Skip("isolated MySQL DSN required")
++	}
++	cfg, e := mysql.ParseDSN(dsn)
++	if e != nil {
++		t.Fatal(e)
++	}
++	for _, secs := range []int{5, 60} {
++		t.Run(fmt.Sprintf("read_timeout_%ds", secs), func(t *testing.T) {
++			c := *cfg
++			c.ReadTimeout = time.Duration(secs) * time.Second
++			conn, e := sql.Open("mysql", c.FormatDSN())
++			if e != nil {
++				t.Fatal(e)
++			}
++			defer conn.Close()
++			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++			defer cancel()
++			var result int
++			started := time.Now()
++			e = conn.QueryRowContext(ctx, "SELECT SLEEP(6)").Scan(&result)
++			t.Logf("readTimeout=%ds elapsed=%s error=%v", secs, time.Since(started), e)
++			if secs == 5 && e == nil {
++				t.Fatal("expected configured 5s socket timeout")
++			}
++			if secs == 60 && (e != nil || result != 0) {
++				t.Fatalf("6s response rejected: %v result=%d", e, result)
++			}
++		})
++	}
++}
+--- a/CubeMaster/pkg/base/db/models/template_image.go
++++ b/CubeMaster/pkg/base/db/models/template_image.go
+@@ -36,0 +37 @@
++	ExecutionToken string `json:"-" gorm:"column:execution_token"`
+--- /dev/null
++++ b/CubeMaster/pkg/base/dao/migrate/migrations/mysql/0004_snapshot_execution_token.sql
+@@ -0,0 +1,9 @@
++-- Snapshot claim ownership survives loss of a COMMIT acknowledgement.
++-- +goose NO TRANSACTION
++-- +goose Up
++CALL cubemaster_acquire_migration_lock('cubemaster_migration_0004_snapshot_execution_token', 60);
++CALL cubemaster_add_column_if_missing('t_cube_template_image_job', 'execution_token', "varchar(36) NOT NULL DEFAULT ''");
++SELECT RELEASE_LOCK('cubemaster_migration_0004_snapshot_execution_token');
++-- +goose Down
++-- Owner tokens are retained on rollback for forensic safety; old binaries ignore them.
++SELECT 1;
