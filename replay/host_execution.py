@@ -159,6 +159,41 @@ def finish_job(job: RunningJob) -> bool:
             ("close runner log", job.logfile.close, True),
         ], error)
         if error is not None:
+            failure_path = job.spec.output_dir / "guest_runtime_failure.json"
+            if failure_path.is_file():
+                try:
+                    # The child must bind the fatal record to this exact invocation.
+                    # A stale, foreign or malformed diagnostic cannot replace rc=N.
+                    raw = failure_path.read_bytes()
+                    failure = json.loads(raw)
+                    manifest = job.spec.config_path
+                    if (failure_path.is_symlink()
+                            or failure.get("runner_pid") != job.process.pid
+                            or failure.get("run_config_sha256") != hashlib.sha256(manifest.read_bytes()).hexdigest()
+                            or failure_path.stat().st_mtime_ns < manifest.stat().st_mtime_ns
+                            or failure.get("status") != "failed"
+                            or not isinstance(failure.get("reason"), str)
+                            or not failure["reason"]):
+                        raise ValueError("guest runtime failure record does not match this run")
+                    error = RuntimeError(f"{error}; {failure['reason']}")
+                    job.spec.config["runtime_failure"] = {
+                        "kind": failure.get("kind"), "reason": failure["reason"],
+                        "evidence": "guest_runtime_failure.json",
+                    }
+                    artifacts = []
+                    job.spec.config["artifacts"] = artifacts
+                    for name in ("guest_runtime_failure.json", "firecracker.log", "guest.log",
+                                 "dmesg.log", "diagnostics.tar.gz", job.spec.results_path.name,
+                                 "host_errors.json"):
+                        path = job.spec.output_dir / name
+                        if (path.is_file() and not path.is_symlink()
+                                and path.stat().st_mtime_ns >= manifest.stat().st_mtime_ns):
+                            content = path.read_bytes()
+                            artifacts.append({"path": name, "sha256": hashlib.sha256(content).hexdigest(),
+                                              "bytes": len(content)})
+                except Exception as reporting_error:
+                    record_host_error(job.spec.output_dir, "register guest runtime failure", reporting_error)
+        if error is not None:
             raise error
         raw = job.spec.results_path.read_bytes()
         job.spec.config["artifacts"] = [{"path": job.spec.results_path.name, "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}]

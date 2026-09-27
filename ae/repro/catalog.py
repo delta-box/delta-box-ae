@@ -99,6 +99,43 @@ def vm_flags(config):
     return flags
 
 
+
+def adaptive_guest_resources(config):
+    """Plan equal memory for both Figure 6(b) arms without changing their method.
+
+    The largest fixed trace keeps 184 checkpoints. Its observed near-full images,
+    incremental images and CoW templates give a 14272 MiB planning envelope.
+    16 GiB is a minimum to validate, not a bound on every possible runtime peak.
+    The guest's existing 14 GiB noswap store is only a capacity ceiling: the
+    nominal 2 GiB difference is shared working space, not a protected reservation.
+    """
+    minimum_mib = 16384
+    configured_mib = config.get('mem_mib', 8192)
+    if type(configured_mib) is not int or configured_mib <= 0:
+        raise ValueError('mem_mib must be a positive integer')
+    guest_mib = config.get('figure06_adaptive_mem_mib', max(configured_mib, minimum_mib))
+    if type(guest_mib) is not int or guest_mib < minimum_mib:
+        raise ValueError(
+            'figure-06-adaptive requires figure06_adaptive_mem_mib >= 16384 '
+            'for both complete standard/adaptive arms; snapshots and templates '
+            'are retained and the 8192 MiB guest exhausted memory')
+    effective = dict(config, mem_mib=guest_mib)
+    resources = dict(
+        guest_mem_mib=guest_mib,
+        minimum_guest_mem_mib=minimum_mib,
+        guest_snapshot_store_cap_mib=14336,
+        nominal_non_store_mib=guest_mib - 14336,
+        planning_envelope_mib=14272,
+        planning_basis='70 x 96 MiB near-full images + 114 x 16 MiB incremental '
+                       'images + 184 x 20 MiB templates + 2048 MiB guest working space',
+        scope='Both Figure 6 adaptive comparison arms; no checkpoint or template pruning',
+        limitation='Empirical capacity plan, not a strict peak-memory upper bound. '
+                   'Snapshot tmpfs is not preallocated; nominal non-store space '
+                   'is not an enforced or protected reservation.',
+        host_admission='Existing NUMA-bound RAM image and full guest allocation checks '
+                       'with the unchanged 2 GiB host reserve')
+    return effective, resources
+
 def replay_wait_budget(trace_dir, instance, *, legacy=False, max_events=None, legacy_timing_policy='recorded-wall'):
     """Sum the actual replay schedule, preserving recorded pacing and prefixes."""
     old_path = list(sys.path)
@@ -122,8 +159,10 @@ def replay_wait_budget(trace_dir, instance, *, legacy=False, max_events=None, le
         raise ValueError('Scheduled replay waits must be finite and nonnegative')
     source = ('paper Figure 6: zero injected pacing; recorded intervals retained as diagnostic metadata' if legacy_timing_policy=='paper-zero'
               else 'runtime legacy schedule: recorded inter-transition elapsed, not isolated LLM RTT') if legacy else 'runtime standard schedule: recorded ms_trace durations and declared mean-fill policy'
-    return dict(recorded_wait_s=math.fsum(waits), scheduled_events=len(events), wait_source=source,
-                legacy_timing_policy=legacy_timing_policy if legacy else None)
+    return dict(recorded_wait_s=math.fsum(waits), scheduled_events=len(events),
+                scheduled_checkpoints=sum(event['type'] == 'ckpt' for event in events),
+                scheduled_restores=sum(event['type'] == 'restore' for event in events),
+                wait_source=source, legacy_timing_policy=legacy_timing_policy if legacy else None)
 
 
 def build_jobs(experiments,config,config_path,output,limit=None,max_events=None):
@@ -139,6 +178,8 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
     for experiment in experiments:
         if experiment not in EXPERIMENTS:raise ValueError(f'Unknown experiment {experiment}')
         if experiment in ('table-02-deltabox','table-03-slow','figure-06-memory','figure-06-adaptive'):
+            vm_config, resources = (adaptive_guest_resources(config)
+                                    if experiment == 'figure-06-adaptive' else (config, None))
             if experiment=='figure-06-memory':
                 source='paper/figure-06/cohort-memory.csv'
                 arms=config.get('figure06_memory_policies',['none','skip','gc','warm'])
@@ -159,12 +200,14 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 for arm in arms:
                     key=experiment+'__'+row.get('pool','').replace('/','_')+'__'+instance+'__'+arm
                     cmd=[python,AE_ROOT.parent/'replay/run_instance.py','--instance',instance,'--experiment-id',experiment,'--trace-dir',(AE_ROOT/row['local']).parent,
-                         '--timeout',str(workload_timeout),'--data-xfs',data_image(config,instance),'--mode','slow' if arm=='slow' else 'fast','--out',output/key,*vm_flags(config)]
+                         '--timeout',str(workload_timeout),'--data-xfs',data_image(config,instance),'--mode','slow' if arm=='slow' else 'fast','--out',output/key,*vm_flags(vm_config)]
                     if arm=='adaptive':cmd+=['--adaptive']
                     if experiment=='figure-06-memory':cmd+=['--memory-policy',arm]
                     if experiment=='figure-06-adaptive':cmd+=['--trajectory-timing','--legacy-timing-policy',timing['legacy_timing_policy']]
                     if max_events:cmd+=['--max-events',str(max_events)]
                     add(experiment,key,cmd,[row['local']],timing=timing)
+                    if resources is not None:
+                        jobs[-1]['resources'] = dict(resources)
         elif experiment.startswith('table-02-') or experiment=='figure-01-cube':
             backend='cube' if experiment=='figure-01-cube' else experiment.removeprefix('table-02-')
             suffix='criu-attempts' if backend=='criu' else backend
