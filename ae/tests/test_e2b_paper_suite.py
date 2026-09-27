@@ -550,5 +550,167 @@ class Deployment(unittest.TestCase):
         with self.assertRaises(ValueError):self.checked()
 
 
+
+class ForwardingGuest(unittest.TestCase):
+    """Execute the generated guest program, replacing every OS command."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name)
+        self.commands=[];self.root_enabled=False;self.created=False;self.deleted=False
+        self.fail_write=False;self.wrong_root=False;self.wrong_namespace=False
+        self.fail_add=False;self.fail_delete=False;self.collision=False
+        self.timeout_add=False;self.proof=None
+        self.guest_exec=patch.object(m,'guest_json',side_effect=self.execute_guest)
+        self.guest_exec.start();self.addCleanup(self.guest_exec.stop)
+        self.actual_exists=Path.exists
+
+    def exists(self,path):
+        if str(path).startswith('/run/netns/e2b-paper-forward-'):
+            return self.collision or (self.created and not self.deleted)
+        return self.actual_exists(path)
+
+    def completed(self,argv,rc=0,out='',err=''):
+        return subprocess.CompletedProcess(argv,rc,out,err)
+
+    def fake_run(self,argv,**kwargs):
+        self.commands.append(argv)
+        self.assertEqual(kwargs,dict(text=True,capture_output=True,timeout=20))
+        if argv[:2]==['sysctl','-n']:
+            value='1' if self.root_enabled and not self.wrong_root else '0'
+            return self.completed(argv,out='\n'.join([value,value,value,'0'])+'\n')
+        if argv[:2]==['sysctl','-w']:
+            self.assertEqual(argv[2:],['net.ipv4.ip_forward=1','net.ipv4.conf.default.forwarding=1'])
+            if self.fail_write:return self.completed(argv,1,err='read-only sysctl fixture')
+            self.root_enabled=True
+            return self.completed(argv,out='net.ipv4.ip_forward = 1\nnet.ipv4.conf.default.forwarding = 1\n')
+        if argv[:3]==['ip','netns','add']:
+            if self.timeout_add:raise subprocess.TimeoutExpired(argv,20,output=b'partial add',stderr=b'add hung')
+            if self.fail_add:return self.completed(argv,1,err='add failed fixture')
+            self.assertFalse(self.created);self.created=True
+            return self.completed(argv)
+        if argv[:3]==['ip','netns','exec']:
+            self.assertTrue(self.created)
+            self.assertEqual(argv[4:6],['sysctl','-n'])
+            self.assertEqual(argv[6:],['net.ipv4.ip_forward','net.ipv4.conf.all.forwarding','net.ipv4.conf.default.forwarding'], 'global init_net-only sysctl must not be read in child namespace')
+            value='0' if self.wrong_namespace else '1'
+            return self.completed(argv,out='\n'.join([value,value,value])+'\n')
+        if argv[:3]==['ip','netns','delete']:
+            self.assertTrue(self.created)
+            if self.fail_delete:return self.completed(argv,1,err='delete failed fixture')
+            self.assertFalse(self.deleted);self.deleted=True
+            return self.completed(argv)
+        self.fail('Unexpected OS command: '+repr(argv))
+
+    def execute_guest(self,vm,source,**kwargs):
+        self.assertEqual(kwargs['timeout'],180)
+        self.assertEqual(Path(kwargs['log']),self.root/'forwarding-probe')
+        output=io.StringIO()
+        with patch.object(m.subprocess,'run',side_effect=self.fake_run),patch.object(Path,'exists',lambda path:self.exists(path)),redirect_stdout(output):
+            try:exec(compile(source,'<offline-forwarding-guest>','exec'),{})
+            finally:
+                if output.getvalue():self.proof=json.loads(output.getvalue())
+        return self.proof
+
+    def run_probe(self):return m.setup_owned_forwarding(object(),self.root)
+
+    def test_writes_only_owned_guest_sysctls_and_proves_fresh_namespace_inheritance(self):
+        proof=self.run_probe()
+        self.assertEqual(proof['status'],'verified')
+        self.assertEqual(proof['root_before']['net.ipv4.ip_forward'],0)
+        self.assertEqual(proof['root_after']['net.ipv4.ip_forward'],1)
+        self.assertEqual(proof['namespace_values']['net.ipv4.conf.all.forwarding'],1)
+        self.assertEqual(proof['namespace_values']['net.ipv4.conf.default.forwarding'],1)
+        self.assertEqual(proof['root_after']['net.core.devconf_inherit_init_net'],0)
+        self.assertNotIn('net.core.devconf_inherit_init_net',proof['namespace_values'])
+        self.assertTrue(proof['namespace_created']);self.assertTrue(proof['namespace_removed'])
+        self.assertEqual(json.loads((self.root/'forwarding.json').read_text()),proof)
+        adds=[x[3] for x in self.commands if x[:3]==['ip','netns','add']]
+        deletes=[x[3] for x in self.commands if x[:3]==['ip','netns','delete']]
+        self.assertEqual(adds,[proof['namespace']]);self.assertEqual(deletes,adds)
+        self.assertRegex(proof['namespace'],r'^e2b-paper-forward-[0-9a-f]{32}$')
+
+    def test_sysctl_write_failure_rejects_before_any_namespace(self):
+        self.fail_write=True
+        with self.assertRaisesRegex(RuntimeError,'read-only sysctl'):self.run_probe()
+        self.assertFalse(self.created);self.assertFalse(self.deleted)
+        self.assertEqual(self.proof['status'],'failed')
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+    def test_successful_write_but_bad_root_value_rejects(self):
+        self.wrong_root=True
+        with self.assertRaisesRegex(ValueError,'Root IPv4'):self.run_probe()
+        self.assertFalse(self.created);self.assertFalse(self.deleted)
+        self.assertEqual(self.proof['root_after']['net.ipv4.ip_forward'],0)
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+    def test_namespace_inheritance_failure_deletes_only_own_namespace(self):
+        self.wrong_namespace=True
+        with self.assertRaisesRegex(ValueError,'New namespace IPv4'):self.run_probe()
+        self.assertTrue(self.created);self.assertTrue(self.deleted)
+        self.assertEqual(self.proof['status'],'failed')
+        self.assertTrue(self.proof['namespace_removed'])
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+    def test_failed_add_does_not_delete_a_namespace(self):
+        self.fail_add=True
+        with self.assertRaisesRegex(RuntimeError,'add failed fixture'):self.run_probe()
+        self.assertFalse(self.created);self.assertFalse(self.deleted)
+        self.assertFalse(any(x[:3]==['ip','netns','delete'] for x in self.commands))
+
+    def test_preexisting_namespace_is_not_changed_or_deleted(self):
+        self.collision=True
+        with self.assertRaisesRegex(ValueError,'already exists'):self.run_probe()
+        self.assertFalse(self.commands)
+        self.assertFalse(self.deleted)
+        self.assertEqual(self.proof['status'],'failed')
+
+    def test_add_timeout_is_failure_not_success_or_foreign_cleanup(self):
+        self.timeout_add=True
+        with self.assertRaises(subprocess.TimeoutExpired):self.run_probe()
+        self.assertFalse(self.deleted)
+        self.assertEqual(self.proof['status'],'failed')
+        self.assertEqual(self.proof['commands'][-1]['stdout'],'partial add')
+        self.assertEqual(self.proof['commands'][-1]['stderr'],'add hung')
+
+    def test_cleanup_failure_rejects_successful_inheritance(self):
+        self.fail_delete=True
+        with self.assertRaisesRegex(RuntimeError,'delete failed fixture'):self.run_probe()
+        self.assertTrue(self.created);self.assertFalse(self.deleted)
+        self.assertEqual(self.proof['status'],'failed')
+        self.assertIn('cleanup_error',self.proof)
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+    def test_primary_namespace_error_survives_cleanup_error(self):
+        self.wrong_namespace=True;self.fail_delete=True
+        with self.assertRaisesRegex(ValueError,'New namespace IPv4'):self.run_probe()
+        self.assertIn('New namespace IPv4',self.proof['error'])
+        self.assertIn('delete failed fixture',self.proof['cleanup_error'])
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+    def test_unverified_guest_response_is_not_accepted(self):
+        with patch.object(m,'guest_json',return_value={'status':'verified'}):
+            with self.assertRaisesRegex(ValueError,'incomplete'):self.run_probe()
+        self.assertFalse((self.root/'forwarding.json').exists())
+
+
+class InstallForwardingOrder(unittest.TestCase):
+    def test_forwarding_gate_precedes_runtime_ready(self):
+        calls=[]
+        vm=object();data={'files':[]};evidence=Path('/fake-evidence')
+        with patch.object(m,'ssh',side_effect=lambda *a,**kw:calls.append('install')), \
+             patch.object(m,'setup_owned_forwarding',side_effect=lambda *a,**kw:calls.append('forwarding')), \
+             patch.object(m,'verify_runtime',side_effect=lambda *a,**kw:calls.append('verified') or {'status':'verified'}):
+            self.assertEqual(m.install_runtime(vm,data,evidence),{'status':'verified'})
+        self.assertEqual(calls,['install','forwarding','verified'])
+
+    def test_forwarding_failure_never_reaches_runtime_ready(self):
+        with patch.object(m,'ssh'), \
+             patch.object(m,'setup_owned_forwarding',side_effect=ValueError('forwarding unavailable')), \
+             patch.object(m,'verify_runtime') as ready:
+            with self.assertRaisesRegex(ValueError,'forwarding unavailable'):
+                m.install_runtime(object(),{'files':[]},Path('/fake-evidence'))
+            ready.assert_not_called()
+
+
 if __name__=='__main__':
     unittest.main()

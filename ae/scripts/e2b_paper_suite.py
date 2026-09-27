@@ -98,6 +98,92 @@ def guest_json(vm, source, *, log=None, timeout=1800):
     return json.loads(ssh(vm, 'sudo -n python3 -B -', stdin=source, timeout=timeout, log=log))
 
 
+def setup_owned_forwarding(vm, evidence):
+    """Prepare/verify IPv4 forwarding only inside this owned L1, before Go pools.
+
+    The namespace probe checks the kernel's real inheritance policy without
+    changing it. Only the UUID namespace successfully created here is removed.
+    All operations and failures remain in the preparation log, outside timers.
+    """
+    namespace = 'e2b-paper-forward-' + uuid.uuid4().hex
+    source = r'''import json,pathlib,subprocess,uuid
+namespace=REPLACE_NAMESPACE
+keys=('net.ipv4.ip_forward','net.ipv4.conf.all.forwarding',
+      'net.ipv4.conf.default.forwarding','net.core.devconf_inherit_init_net')
+proof={'scope':'owned L1 only; no host configuration','namespace':namespace,
+       'status':'preparing','commands':[],'namespace_created':False,'namespace_removed':False}
+def run(argv):
+ try:
+  cp=subprocess.run(argv,text=True,capture_output=True,timeout=20)
+ except subprocess.TimeoutExpired as error:
+  def text(value):
+   return value.decode(errors='replace') if isinstance(value,bytes) else (value or '')
+  proof['commands'].append({'argv':argv,'timeout':20,'stdout':text(error.stdout),'stderr':text(error.stderr)})
+  raise
+ proof['commands'].append({'argv':argv,'returncode':cp.returncode,'stdout':cp.stdout,'stderr':cp.stderr})
+ if cp.returncode:
+  raise RuntimeError('Forwarding command failed: '+repr(argv)+'; stderr='+cp.stderr)
+ return cp.stdout
+def read(prefix=()):
+ selected=keys[:3] if prefix else keys
+ values=run([*prefix,'sysctl','-n',*selected]).strip().splitlines()
+ if len(values)!=len(selected) or any(not v.strip().isdigit() for v in values):
+  raise ValueError('Malformed forwarding sysctl output')
+ return dict(zip(selected,(int(v.strip()) for v in values)))
+def verify(values,scope):
+ if any(values[k]!=1 for k in keys[:3]):
+  raise ValueError(scope+' IPv4 forwarding is not enabled: '+repr(values))
+primary=None
+cleanup_error=None
+try:
+ if pathlib.Path('/run/netns',namespace).exists():
+  raise ValueError('Unique forwarding namespace already exists')
+ proof['root_before']=read()
+ run(['sysctl','-w','net.ipv4.ip_forward=1','net.ipv4.conf.default.forwarding=1'])
+ proof['root_after']=read()
+ verify(proof['root_after'],'Root')
+ proof['namespace_add_attempted']=True
+ run(['ip','netns','add',namespace])
+ proof['namespace_created']=True
+ proof['namespace_values']=read(('ip','netns','exec',namespace))
+ verify(proof['namespace_values'],'New namespace')
+except BaseException as error:
+ primary=error
+ proof['error']=type(error).__name__+': '+str(error)
+finally:
+ if proof['namespace_created']:
+  try:
+   run(['ip','netns','delete',namespace])
+   if pathlib.Path('/run/netns',namespace).exists():
+    raise RuntimeError('Owned forwarding namespace remains after delete')
+   proof['namespace_removed']=True
+  except BaseException as error:
+   cleanup_error=error
+   proof['cleanup_error']=type(error).__name__+': '+str(error)
+ if proof.get('namespace_add_attempted') and not proof['namespace_created']:
+  proof['uncertain_namespace_cleanup']='No unconfirmed name is deleted; owned L1 is torn down on this failed preparation'
+ proof['status']='verified' if primary is None and cleanup_error is None else 'failed'
+ print(json.dumps(proof,sort_keys=True),flush=True)
+if primary is not None:
+ raise primary
+if cleanup_error is not None:
+ raise cleanup_error
+'''.replace('REPLACE_NAMESPACE', repr(namespace))
+    proof = guest_json(vm, source, log=Path(evidence)/'forwarding-probe', timeout=180)
+    required = ('net.ipv4.ip_forward', 'net.ipv4.conf.all.forwarding',
+                'net.ipv4.conf.default.forwarding')
+    if (not isinstance(proof, dict) or proof.get('status') != 'verified'
+            or proof.get('namespace') != namespace
+            or proof.get('namespace_created') is not True
+            or proof.get('namespace_removed') is not True
+            or any(type(proof.get(scope, {}).get(key)) is not int
+                   or proof[scope][key] != 1
+                   for scope in ('root_after', 'namespace_values') for key in required)):
+        raise ValueError('Owned L1 forwarding proof is incomplete or failed')
+    write(Path(evidence)/'forwarding.json', proof)
+    return proof
+
+
 def install_runtime(vm, data, evidence):
     """Copy frozen, read-only share to L1 disk and verify the complete tree."""
     script = '''set -euo pipefail
@@ -111,6 +197,7 @@ sudo -n sysctl -w vm.unprivileged_userfaultfd=1
 sudo -n sync
 '''
     ssh(vm, 'bash -s', stdin=script, log=evidence/'install-runtime', timeout=600)
+    setup_owned_forwarding(vm, evidence)
     return verify_runtime(vm, data, evidence/'runtime-before.json')
 
 
