@@ -101,8 +101,16 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             if kind == 'worker':
                 self.assertIn('--defer-audit', command)
                 self.assertIn('--skip-mock-spawn', command)
+                self.assertIn('--recorded-boundary', command)
+                self.assertEqual(command[command.index('--replay-contract-json') + 1],
+                                 str(self.output / 'replay_contract.json'))
+                write_json(self.output / 'replay_contract.json', {
+                    'status':'complete', 'structure_and_actions_verified':True,
+                    'scope':'all recorded expansions', 'configured_max_iterations':30,
+                    'expected':{'node_count':2, 'nodes':[{'node_id':0,'parent_id':None},
+                                                       {'node_id':1,'parent_id':0}]}})
                 (self.output / 'step_metrics.jsonl').write_text(json.dumps(
-                    dict(soft_dirty_bytes=4096, action_write_bytes=12)) + '\n')
+                    dict(node_id=1, parent_node_id=0, soft_dirty_bytes=4096, action_write_bytes=12)) + '\n')
             return Process(kind)
 
         def http(port, path):
@@ -143,6 +151,7 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             stack.enter_context(patch.object(profile, 'AE_ROOT', self.ae))
             stack.enter_context(patch.object(profile, 'host_state', return_value={}))
             stack.enter_context(patch.object(profile, 'repository_state', return_value={}))
+            stack.enter_context(patch.object(profile, 'from_environment', return_value={}))
             stack.enter_context(patch.object(profile.subprocess, 'Popen', side_effect=popen))
             stack.enter_context(patch.object(profile.subprocess, 'check_output', side_effect=['a' * 40, '12 repo']))
             stack.enter_context(patch.object(profile.os, 'killpg', side_effect=lambda pid, sig: events.append('kill_' + str(pid))))

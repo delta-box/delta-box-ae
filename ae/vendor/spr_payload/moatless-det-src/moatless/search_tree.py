@@ -462,9 +462,14 @@ class SearchTree(BaseModel):
             tree_data, persist_path=persist_path or file_path, **kwargs
         )
 
-    def run_search(self) -> Node | None:
-        """Run the MCTS algorithm for a specified number of iterations."""
+    def run_search(self, recorded_node_limit: int | None = None) -> Node | None:
+        """Run search, optionally stopping at a complete recording's node boundary."""
 
+        if recorded_node_limit is not None:
+            if type(recorded_node_limit) is not int or recorded_node_limit < 2:
+                raise ValueError("recorded_node_limit must include a root and at least one expansion")
+            if len(self.root.get_all_nodes()) > recorded_node_limit:
+                raise ValueError("Current tree already exceeds the recorded node boundary")
         self.assert_runnable()
         profile_path = self._step_metrics_path()
         prev_proc_snapshot = _proc_kb_snapshot() if profile_path else {}
@@ -479,6 +484,11 @@ class SearchTree(BaseModel):
             )
 
         while not self.is_finished():
+            # This independent replay boundary leaves all online search
+            # parameters unchanged. The preceding step's metrics are complete.
+            if recorded_node_limit is not None and len(self.root.get_all_nodes()) >= recorded_node_limit:
+                self.log(logger.info, f"Replay reached recorded node boundary {recorded_node_limit}")
+                break
             total_cost = self.total_usage().completion_cost
             self.log(
                 logger.info,

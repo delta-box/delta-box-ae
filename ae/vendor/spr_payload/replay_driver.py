@@ -154,11 +154,123 @@ def rewrite_model_base_url(data: dict, new_url: str, api_key: str = "dummy") -> 
     return n
 
 
+
+def recorded_replay_plan(data: dict) -> dict:
+    """Capture the complete recorded tree, independently of online search limits."""
+    root = data.get("root")
+    if not isinstance(root, dict):
+        raise ValueError("Recorded replay requires a root node")
+    nodes = []
+    seen = set()
+    stack = [(root, None)]
+    while stack:
+        node, parent_id = stack.pop()
+        if not isinstance(node, dict):
+            raise ValueError("Recorded replay has an invalid node")
+        node_id = node.get("node_id")
+        if type(node_id) is not int or node_id < 0 or node_id in seen:
+            raise ValueError("Recorded replay requires unique nonnegative node ids")
+        seen.add(node_id)
+        children = node.get("children", [])
+        steps = node.get("action_steps", [])
+        if not isinstance(children, list) or not isinstance(steps, list):
+            raise ValueError(f"Invalid recorded children/actions at node {node_id}")
+        if parent_id is None:
+            if steps or node.get("completions"):
+                raise ValueError("Recorded replay root must precede all actions")
+        elif not steps or not (node.get("completions") or {}).get("build_action"):
+            raise ValueError(f"Recorded node {node_id} has no complete action plan")
+        actions = []
+        for step in steps:
+            action = step.get("action") if isinstance(step, dict) else None
+            if not isinstance(action, dict) or not isinstance(action.get("action_args_class"), str):
+                raise ValueError(f"Invalid recorded action at node {node_id}")
+            if step.get("observation") is None and not node.get("is_duplicate"):
+                raise ValueError(f"Recorded action at node {node_id} was not executed")
+            actions.append({
+                "action": canonical_action(action),
+                "observation_present": step.get("observation") is not None,
+            })
+        nodes.append({
+            "node_id": node_id, "parent_id": parent_id, "actions": actions,
+            "terminal": bool(node.get("terminal", False)),
+            "is_duplicate": bool(node.get("is_duplicate", False)),
+        })
+        stack.extend((child, node_id) for child in reversed(children))
+    if len(nodes) < 2:
+        raise ValueError("Recorded replay has no recorded expansions")
+    return {
+        "root_id": root["node_id"],
+        "node_count": len(nodes),
+        "nodes": sorted(nodes, key=lambda node: node["node_id"]),
+    }
+
+
+
+def canonical_action(action: dict) -> dict:
+    if not isinstance(action, dict) or not isinstance(action.get("action_args_class"), str):
+        raise ValueError("Recorded replay requires typed executable action arguments")
+    result = json.loads(json.dumps(action))
+    # Thoughts are model reasoning, not executable action arguments.
+    result.pop("thoughts", None)
+    return result
+
+
+def recorded_error_annotations(data: dict) -> list[dict]:
+    annotations = []
+    stack = [data["root"]]
+    while stack:
+        node = stack.pop()
+        if node.get("error"):
+            annotations.append({"node_id": node["node_id"], "recorded_error": node["error"]})
+        stack.extend(node.get("children", []))
+    return annotations
+
+
+def validate_replayed_tree(expected: dict, tree) -> dict:
+    """Check small per-node contracts without serializing messages or contexts."""
+    nodes = []
+    seen = set()
+    for node in tree.root.get_all_nodes():
+        if node.node_id in seen or type(node.node_id) is not int:
+            raise ValueError("Replayed tree has invalid/duplicate node ids")
+        seen.add(node.node_id)
+        # Historical serialized errors may be stale annotations after a node was
+        # rerun. Any error produced in this fresh execution remains a failure.
+        if node.error:
+            raise ValueError(f"Replayed node {node.node_id} contains an execution error")
+        actions = []
+        for step in node.action_steps:
+            action = step.action.model_dump()
+            action["action_args_class"] = f"{step.action.__class__.__module__}.{step.action.__class__.__name__}"
+            actions.append({"action": canonical_action(action),
+                            "observation_present": step.observation is not None})
+        nodes.append({
+            "node_id": node.node_id,
+            "parent_id": node.parent.node_id if node.parent else None,
+            "actions": actions, "terminal": bool(node.terminal),
+            "is_duplicate": bool(node.is_duplicate),
+        })
+    actual = {"root_id": tree.root.node_id, "node_count": len(nodes),
+              "nodes": sorted(nodes, key=lambda node: node["node_id"])}
+    if actual != expected:
+        raise ValueError("Replayed tree differs from the complete recorded structure/actions")
+    return actual
+
+
+
+def write_replay_contract(path: Path | None, contract: dict | None) -> None:
+    if path is not None and contract is not None:
+        path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n")
+
+
 # ---------------- driver ----------------
 
 def run_replay(manifest_line: str, traces_root: Path, mock_port: int,
                repo_path: Path, index_store_dir: Path,
-               runtime_backend: str = "configured") -> int:
+               runtime_backend: str = "configured",
+               recorded_boundary: bool = False,
+               replay_contract_json: Path | None = None) -> int:
     from baseline_audit import stats_ok
     instance_id, variant = parse_manifest_line(manifest_line)
     traj_path = resolve_trajectory(traces_root, instance_id, variant)
@@ -181,6 +293,19 @@ def run_replay(manifest_line: str, traces_root: Path, mock_port: int,
     # 2. Load trajectory + strip + rewrite
     with open(traj_path) as f:
         data = json.load(f)
+    contract = None
+    plan = recorded_replay_plan(data) if recorded_boundary else None
+    if recorded_boundary:
+        contract = {
+            "schema_version": 1, "status": "planned",
+            "scope": "all recorded expansions; not continuation of online search",
+            "configured_max_iterations": data.get("max_iterations"),
+            "recorded_node_limit": plan["node_count"], "expected": plan,
+            "recorded_error_annotations": recorded_error_annotations(data),
+            "validation_scope": "node/parent/action arguments, observation presence, terminal/duplicate state; fresh node errors rejected",
+            "validation_timing": "after last step metrics; included in worker lifetime/RSS sampling; no full-tree serialization",
+        }
+        write_replay_contract(replay_contract_json, contract)
     data = strip_recorded_tree(data)
     n = rewrite_model_base_url(data, f"{mock_url_base}/v1")
     log.info("rewrote %d action completion_model.model_base_url → %s/v1", n, mock_url_base)
@@ -224,7 +349,12 @@ def run_replay(manifest_line: str, traces_root: Path, mock_port: int,
     # 4. Run MCTS
     t0 = time.perf_counter()
     try:
-        final_node = tree.run_search()
+        if recorded_boundary:
+            final_node = tree.run_search(recorded_node_limit=plan["node_count"])
+            contract["actual"] = validate_replayed_tree(plan, tree)
+            contract["structure_and_actions_verified"] = True
+        else:
+            final_node = tree.run_search()
         if runtime_backend == "configured":
             check_runtime(runtime)
         wall = time.perf_counter() - t0
@@ -235,6 +365,12 @@ def run_replay(manifest_line: str, traces_root: Path, mock_port: int,
         log.error("run_search() crashed after %.1fs: %s: %s", wall,
                   type(e).__name__, e)
         import traceback; traceback.print_exc()
+        if contract is not None:
+            contract.update(status="failed", error=f"{type(e).__name__}: {e}")
+            try:
+                write_replay_contract(replay_contract_json, contract)
+            except OSError as save_error:
+                log.error("Could not save failed replay contract: %s", save_error)
         # query mock final stats anyway
         try:
             stats = _http_json(f"{mock_url_base}/admin/stats", "GET")
@@ -249,7 +385,13 @@ def run_replay(manifest_line: str, traces_root: Path, mock_port: int,
              stats["cursor"], stats["total"], stats["n_served"], stats["n_mismatch"])
     if not stats_ok(stats) or stats['cursor'] != stats['total']:
         log.error("mock cursor/protocol/strict-message validation failed: %s", stats)
+        if contract is not None:
+            contract.update(status="failed", error="mock cursor/protocol/strict-message validation failed", mock_stats=stats)
+            write_replay_contract(replay_contract_json, contract)
         return 1
+    if contract is not None:
+        contract.update(status="complete", mock_stats=stats)
+        write_replay_contract(replay_contract_json, contract)
     return 0
 
 
@@ -278,7 +420,13 @@ def main() -> int:
                     help='Post-measurement mock audit evidence (standalone CLI only)')
     ap.add_argument('--defer-audit', action='store_true',
                     help='External owner exports audit after its measurement (requires --skip-mock-spawn)')
+    ap.add_argument("--recorded-boundary", action="store_true",
+                    help="Replay every recorded expansion without extending beyond the recording")
+    ap.add_argument("--replay-contract-json", type=Path,
+                    help="Save the recorded structure/action verification (requires --recorded-boundary)")
     args = ap.parse_args()
+    if bool(args.recorded_boundary) != bool(args.replay_contract_json):
+        ap.error("--recorded-boundary and --replay-contract-json must be supplied together")
     if args.defer_audit and not args.skip_mock_spawn:
         ap.error('--defer-audit requires an external mock owner (--skip-mock-spawn)')
 
@@ -298,7 +446,9 @@ def main() -> int:
             wait_for_mock(args.mock_port)
         rc = run_replay(args.manifest_line, Path(args.traces_root),
                         args.mock_port, repo_path, index_store_dir,
-                        runtime_backend=args.runtime)
+                        runtime_backend=args.runtime,
+                        recorded_boundary=args.recorded_boundary,
+                        replay_contract_json=args.replay_contract_json)
     finally:
         try:
             if not args.defer_audit and (mock_proc is not None or args.skip_mock_spawn):
