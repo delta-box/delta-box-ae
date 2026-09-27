@@ -152,7 +152,7 @@ def create_command(storage, build, oci):
              '-to-build', build, '-storage', storage, '-sandbox-dir', str(Path(storage).parent/'sandboxes'),
              '-firecracker', 'v1.14.1_458ca91', '-kernel', 'vmlinux-6.1.158',
              '-memory', '2048', '-vcpu', '1', '-disk', '4096', '-hugepages=false',
-             '-timeout', '12', '-oci-layout', GUEST+'/oci', '-oci-manifest', oci]
+             '-timeout', '12', '-v', '-oci-layout', GUEST+'/oci', '-oci-manifest', oci]
     env = ['sudo', '-n', 'env', '-u', 'LAUNCH_DARKLY_API_KEY',
            *[k+'='+v for k,v in ENV.items()]]
     return 'cd /opt/e2b-paper/runtime/packages/orchestrator && '+shlex.join(env+flags)

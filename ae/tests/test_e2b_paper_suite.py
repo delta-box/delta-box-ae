@@ -338,6 +338,7 @@ class Commands(unittest.TestCase):
                            ('-kernel','vmlinux-6.1.158'),('-oci-layout','/opt/e2b-paper/oci')):
             self.assertEqual(words[words.index(flag)+1],value)
         self.assertIn('-hugepages=false',words)
+        self.assertEqual(words.count('-v'),1,'Provisioning console evidence must remain enabled outside event timers')
         self.assertEqual(words[:5],['sudo','-n','env','-u','LAUNCH_DARKLY_API_KEY'])
         self.assertFalse(any('e2b-table2-storage' in v for v in words))
 
