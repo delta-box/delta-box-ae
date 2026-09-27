@@ -14,6 +14,12 @@ from ae.runners import gpu_timing
 
 
 class RemoteTests(unittest.TestCase):
+    def setUp(self):
+        storage = patch.object(remote, 'local_storage_admission',
+                               return_value=dict(available_bytes=100*1024**3, available_inodes=100000))
+        storage.start()
+        self.addCleanup(storage.stop)
+
     def settings(self):
         config = remote.load_settings(remote.DEFAULT_CONFIG)
         config['sample_interval_s'] = 0
@@ -61,6 +67,7 @@ class RemoteTests(unittest.TestCase):
     def remote_root(self, root):
         config = self.settings()
         config['remote_root'] = str(root / 'shared')
+        config['lock_root'] = str(root / 'shared/locks')
         remote.write_json(root / 'remote-config.json', config)
         remote.write_json(root / 'source.json', {'files': {}})
         return config
