@@ -25,13 +25,13 @@ class EnvironmentTests(unittest.TestCase):
         self.manifest = self.root/'transport.json'
         self.fresh = self.root/'fresh.json'
         self.config['e2b'].update(execution='paper-nested-ready', transport_manifest=str(self.manifest),
-            from_build='fresh', storage='/owned/storage')
-        self.proof = {'status':'verified','instance':'input','fresh_base_build_id':'fresh',
-            'guest_storage':'/owned/storage','runtime_manifest_sha':'1'*64,
-            'guest_proof':{'header_closure_verified':True,'vcpus':1,'mem_mib':2048,
-                'requested_disk_mib':4096,'actual_rootfs_bytes':5899*1024**2,
-                'snapshot_files':[{'file':n,'bytes':1,'sha256':'2'*64} for n in environment.SNAPSHOT_FILES]}}
-        self.stub = SimpleNamespace(manifest={'instance':'input','fresh_base_build_id':'fresh',
+            from_build='11111111-1111-4111-8111-111111111111', storage='/owned/storage')
+        from ae.scripts.e2b_paper_suite import base_proof
+        from ae.tests.test_e2b_paper_suite import closure_fixture
+        build='11111111-1111-4111-8111-111111111111'
+        closure=closure_fixture('/owned/storage',build)
+        self.proof=base_proof('input',build,'/owned',closure,'1'*64)
+        self.stub = SimpleNamespace(manifest={'instance':'input','fresh_base_build_id':'11111111-1111-4111-8111-111111111111',
             'fresh_base_manifest':str(self.fresh)},storage='/owned/storage',key=Path('/key'),
             port=56789,runtime='/opt/e2b-paper/runtime',guard=mock.Mock())
         self.manifest.write_text('{}')
@@ -88,10 +88,10 @@ class PhysicalEvidenceTests(unittest.TestCase):
         self.trace=self.out/'trajectory.json'
         self.action={'action_args_class':'pkg.Action','thoughts':None,'query':'exact'}
         self.trace.write_text(json.dumps({'root':{'node_id':0,'children':[{'node_id':30,'children':[],
-            'action_steps':[{'action':self.action}]}]}}))
+            'action_steps':[{'action':self.action}], 'completions':{'build_action':{'response':{'choices':[{'message':{'content':'Thought: original reasoning\nAction: Action\n{"query":"exact"}'}}]}}}}]}}))
         self.contract={'inputs':[{'instance':'input','observed_expansions':[
             {'seq':1,'node_id':30,'parent_node_id':0,'duplicate':False,'finished':True,'actual_n_actions':1}]}],
-            'ordered_measured_actions':[{'instance':'input','node_id':30,'action_index':0,'action_class':'pkg.Action'}]}
+            'ordered_measured_actions':[{'instance':'input','node_id':30,'action_index':0,'action_class':'pkg.Action','action':'Action'}]}
         self.proof={'contract':{'path':'/contract'},'manifest':{'sha256':'manifest'},'inputs':[
             {'instance':'input','repository_commit':'base','trajectory':{'sha256':'trace'},'expansions':1,'actions':1}]}
         self.env={'from_build':'base-id','fresh_base_manifest':{'path':'/fresh'}}
@@ -129,7 +129,7 @@ class PhysicalEvidenceTests(unittest.TestCase):
         if action:
             req=self.out/'action.req.json';resp=self.out/'action.resp.json'
             req.write_text(json.dumps({'instance':'input','seq':1,'node_id':30,
-                'action':dict(self.action,thoughts='')}))
+                'action':dict(self.action,thoughts='original reasoning')}))
             resp.write_text(json.dumps({'ok':True}))
             receipt['uploads']=[baseline.file_record(req)]
             receipt['downloads'].append(baseline.file_record(resp))
@@ -159,6 +159,19 @@ class PhysicalEvidenceTests(unittest.TestCase):
         rec=self.out/'action.receipt.json';value=json.loads(rec.read_text())
         value['uploads']=[baseline.file_record(req)];rec.write_text(json.dumps(value))
         with self.assertRaisesRegex(ValueError,'Real paper action'):self.validate()
+
+    def test_tampered_thought_with_updated_transfer_hash_is_rejected(self):
+        req=self.out/'action.req.json';value=json.loads(req.read_text())
+        value['action']['thoughts']='changed reasoning';req.write_text(json.dumps(value))
+        rec=self.out/'action.receipt.json';value=json.loads(rec.read_text())
+        value['uploads']=[baseline.file_record(req)];rec.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError,'Real paper action'):self.validate()
+
+    def test_original_nonempty_thought_conflict_is_rejected(self):
+        value=json.loads(self.trace.read_text())
+        value['root']['children'][0]['action_steps'][0]['action']['thoughts']='retained original'
+        self.trace.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError,'conflicts with retained'):self.validate()
 
     def test_go_timing_mismatch_rejected(self):
         timing=self.out/'action.timing.json';value=json.loads(timing.read_text())

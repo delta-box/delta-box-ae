@@ -385,6 +385,8 @@ def validate_trace_events(path, backend, trace, limit, schedule=None, policy='st
 def validate_paper_e2b(path, trace, instance, proof, environment, output):
     """Independently bind the complete original action order to real transfers."""
     from ae.scripts.e2b_paper_profile import _root_read
+    sys.path.insert(0, str(VENDOR / 'finalbench/e2b_finalbench'))
+    from e2b_paper_action import recorded_action_payload
     data = json.loads(path.read_text())
     contract = json.loads(_root_read(proof['contract']['path']))
     expected = next(x for x in contract['inputs'] if x['instance'] == instance)
@@ -494,9 +496,8 @@ def validate_paper_e2b(path, trace, instance, proof, environment, output):
                 raise ValueError('Physical action lacks complete request/response')
             request = json.loads(Path(requests[0]['path']).read_text())
             response = json.loads(Path(responses[0]['path']).read_text())
-            raw_action = dict(nodes[wanted['node_id']]['action_steps'][index]['action'])
-            if raw_action.get('thoughts', object()) is None:
-                raw_action['thoughts'] = ''  # Existing ActionArguments normalization, independently audited.
+            raw_action = recorded_action_payload(
+                nodes[wanted['node_id']], index, action['action_class'], action['action'])
             if (request.get('instance') != instance or request.get('seq') != wanted['seq']
                     or request.get('node_id') != wanted['node_id'] or request.get('action') != raw_action
                     or response.get('ok') is not True
@@ -534,7 +535,7 @@ def validate_paper_e2b(path, trace, instance, proof, environment, output):
             raise ValueError('Paper dual-mock audit differs from terminal statistics')
     return {'status': 'verified', 'expansions': len(observed), 'actions': count,
             'checkpoint_restore_pairs': count, 'mock_servers': 2, 'actual_l2_resources': resource,
-            'args_normalization': 'Existing schema: recorded thoughts null becomes empty string only',
+            'args_normalization': 'Full original functional arguments plus exact Thought from the same frozen ReAct completion; retained nonempty thoughts must agree',
             'original_request_bytes': 'not retained; comparison is to recovered recorded action contract',
             'contract': proof['contract']}
 

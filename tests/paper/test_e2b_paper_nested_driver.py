@@ -196,6 +196,29 @@ class DualMockTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'RTT'):
                     d.RunContract(args, transport)
 
+    def test_contract_requires_complete_actual_payload_without_rewriting(self):
+        import copy
+        d=self.driver
+        contract=object.__new__(d.RunContract)
+        contract.actions={(30,0):{'action_class':'pkg.Action'}}
+        contract.nodes={30:{'frozen':'recording'}}
+        wanted={'action_args_class':'pkg.Action','thoughts':'original thought',
+                'query':'exact','optional':None}
+        with mock.patch.object(d,'expected_action_payload',return_value=wanted):
+            original=copy.deepcopy(wanted)
+            contract.action(30,0,wanted)
+            self.assertEqual(wanted,original)
+            for bad in [dict(wanted,thoughts=''),dict(wanted,thoughts='different'),
+                        dict(wanted,query='changed'),dict(wanted,action_args_class='pkg.Other'),
+                        dict(wanted,extra=None),
+                        {k:v for k,v in wanted.items() if k!='optional'}]:
+                before=copy.deepcopy(bad)
+                with self.subTest(bad=bad),self.assertRaises(RuntimeError):
+                    contract.action(30,0,bad)
+                self.assertEqual(bad,before)
+            with self.assertRaisesRegex(RuntimeError,'outside'):
+                contract.action(31,0,wanted)
+
     def test_contract_rejects_wrong_parent_before_build(self):
         d = self.driver
         contract = object.__new__(d.RunContract)

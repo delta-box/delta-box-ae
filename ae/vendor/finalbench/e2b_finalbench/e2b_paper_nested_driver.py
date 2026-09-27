@@ -83,6 +83,55 @@ def consumed(before, after, completions, *, purpose, node_id):
     return selected
 
 
+
+def expected_action_payload(node, index, action_class):
+    """Recover the complete original ReAct action without issuing a model call.
+
+    The recorded action object can lose thoughts during serialization. Its
+    immutable build_action response retains them. Use the existing ReAct
+    format/schema parsing operations, then require every functional argument
+    and any retained nonempty thought to agree with the recorded action.
+    """
+    from moatless.actions.model import ActionArguments
+    from moatless.completion.react import ReActCompletionModel
+    import importlib
+    if index != 0:
+        raise RuntimeError('Original ReAct response must bind exactly one action')
+    choices = node['completions']['build_action']['response']['choices']
+    if len(choices) != 1:
+        raise RuntimeError('Recorded ReAct completion must have exactly one choice')
+    text = choices[0]['message']['content']
+    if not isinstance(text, str):
+        raise RuntimeError('Recorded ReAct completion has no text response')
+    # This is the same checker and slicing/schema dispatch used by the
+    # installed ReActCompletionModel.create_completion, without LLM/pricing I/O.
+    ReActCompletionModel._validate_react_format(None, text)
+    thought_start, action_start = text.find('Thought:'), text.find('Action:')
+    if thought_start < 0 or action_start <= thought_start:
+        raise RuntimeError('Invalid recorded ReAct Thought/Action order')
+    thought = text[thought_start + 8:action_start].strip()
+    parts = text[action_start + 7:].strip().split('\n', 1)
+    if len(parts) != 2:
+        raise RuntimeError('Recorded ReAct response lacks action arguments')
+    module, name = action_class.rsplit('.', 1)
+    schema = getattr(importlib.import_module(module), name)
+    if not issubclass(schema, ActionArguments) or parts[0].strip() != schema.name:
+        raise RuntimeError('Recorded completion action differs from original action class')
+    body = parts[1].strip()
+    if body.startswith('<') or body.startswith(chr(96)*3+'xml'):
+        parsed = schema.model_validate_xml(body)
+    else:
+        parsed = schema.model_validate_json(body)
+    parsed.thoughts = thought
+    payload = parsed.model_dump()
+    payload['action_args_class'] = action_class
+    from e2b_paper_action import recorded_action_payload
+    wanted = recorded_action_payload(node, index, action_class, schema.name)
+    if payload != wanted:
+        raise RuntimeError('Recorded completion changes original functional action arguments')
+    return wanted
+
+
 class RunContract:
     def __init__(self, args, transport):
         from ae.scripts import e2b_paper_profile as profile
@@ -132,16 +181,13 @@ class RunContract:
             raise RuntimeError('Selected parent/node differs from original paper contract')
 
     def action(self, node, index, payload):
-        from moatless.actions.model import ActionArguments
         expected = self.actions.get((node, index))
         if expected is None:
             raise RuntimeError('Unexpected physical action outside original paper contract')
-        recorded = copy.deepcopy(self.nodes[node]['action_steps'][index]['action'])
-        normalized = ActionArguments.model_validate(recorded).model_dump()
-        normalized['action_args_class'] = expected['action_class']
-        if payload != normalized:
-            keys = sorted(k for k in set(payload) | set(normalized) if payload.get(k) != normalized.get(k))
-            raise RuntimeError('Action differs from recovered contract after existing schema normalization: ' + ','.join(keys))
+        wanted = expected_action_payload(self.nodes[node], index, expected['action_class'])
+        if payload != wanted:
+            keys = sorted(k for k in set(payload) | set(wanted) if payload.get(k) != wanted.get(k))
+            raise RuntimeError('Action differs from the frozen original completion/argument contract: ' + ','.join(keys))
 
     def after_iteration(self, seq, result):
         if not result.get('ok'):
