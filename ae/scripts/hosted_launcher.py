@@ -265,6 +265,8 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--e2b-profile', choices=('paper-nested',), action=Once,
+                        help='E2B-only documented nested reconstruction; complete original eight inputs')
     parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
                         help='Cube-only documented disk/NUMA reconstruction; full twelve inputs')
     parser.add_argument('--gpu-cases', type=gpu_case_selection, action=Once, metavar='CASE,...',
@@ -282,6 +284,12 @@ def parse_arguments(argv):
     parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
     parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
     args = parser.parse_args(argv)
+    if args.e2b_profile is not None:
+        if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
+                or args.list or args.limit is not None or args.max_events is not None
+                or args.gpu_cases is not None or args.resume is not None or args.reuse_completed_from
+                or args.cube_profile is not None or args.numa_node is not None or args.cpus is not None):
+            parser.error('--e2b-profile requires complete explicit table-02-e2b only; no overrides, resume or reuse')
     if args.cube_profile is not None:
         if (set(args.experiment or []) != {'table-02-cube'} or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
@@ -407,6 +415,8 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if getattr(args, 'e2b_profile', None) is not None:
+        command += ['--e2b-profile', args.e2b_profile]
     if getattr(args, 'cube_profile', None) is not None:
         command += ['--cube-profile', args.cube_profile]
     if args.gpu_cases is not None:

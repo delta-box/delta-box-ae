@@ -168,6 +168,9 @@ def replay_wait_budget(trace_dir, instance, *, legacy=False, max_events=None, le
 
 def build_jobs(experiments,config,config_path,output,limit=None,max_events=None):
     jobs=[];runner=AE_ROOT/'runners';python=sys.executable
+    paper_e2b = config.get('e2b', {}).get('profile') == 'paper-nested'
+    if paper_e2b and (list(experiments) != ['table-02-e2b'] or limit is not None or max_events is not None):
+        raise ValueError('E2B paper profile requires all eight inputs without limits or mixed experiments')
     action_budget=float(config.get('timeout',14400))
     if not math.isfinite(action_budget) or action_budget<=0:raise ValueError('config timeout must be finite and positive')
     def add(experiment,key,command,inputs=(),timing=None):
@@ -212,20 +215,32 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
         elif experiment.startswith('table-02-') or experiment=='figure-01-cube':
             backend='cube' if experiment=='figure-01-cube' else experiment.removeprefix('table-02-')
             suffix='criu-attempts' if backend=='criu' else backend
-            rows=cohort('paper/table-02/cohort-'+suffix+'.csv')
-            rows, selection = baseline_rows(backend, rows, config)
+            if paper_e2b:
+                from ae.scripts.e2b_paper_profile import input_rows
+                rows = input_rows(config)
+                selection = dict(name='e2b-paper-original-eight', instances=8,
+                                 expansions=227, actions=185,
+                                 manifest=rows[0]['paper_manifest'], contract=rows[0]['paper_contract'])
+            else:
+                rows=cohort('paper/table-02/cohort-'+suffix+'.csv')
+                rows, selection = baseline_rows(backend, rows, config)
             if limit:rows=rows[:limit]
             for row in rows:
                 key=experiment+'__'+row['instance']
                 cmd=[python,runner/'baseline.py','--backend',backend,'--instance',row['instance'],'--trace',AE_ROOT/row['local'],
                      '--config',config_path,'--out',output/key]
-                if backend=='replay' and row.get('repository_commit'):cmd+=['--repository-commit',row['repository_commit']]
+                if (backend=='replay' or paper_e2b) and row.get('repository_commit'):cmd+=['--repository-commit',row['repository_commit']]
                 if backend=='cube':cmd+=['--schedule',AE_ROOT/row['schedule_local']]
                 if experiment=='figure-01-cube':cmd+=['--collect-phases']
                 elif backend=='cube' and config.get('cube', {}).get('profile') == 'paper-disk':
                     cmd+=['--collect-phases','--experiment-id','table-02-cube']
                 if max_events:cmd+=['--limit',str(max_events)]
                 add(experiment,key,cmd,[row['local']])
+                if paper_e2b:
+                    jobs[-1]['paper_contract'] = dict(expected_expansions=row['expected_expansions'],
+                        expected_actions=row['expected_actions'], trajectory_sha256=row['sha256'],
+                        repository_commit=row['repository_commit'], rtt=row['rtt'],
+                        contract=row['paper_contract'])
                 if selection:
                     jobs[-1]['input_selection'] = selection
                     if not limit and not max_events:

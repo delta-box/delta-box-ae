@@ -381,11 +381,181 @@ def validate_trace_events(path, backend, trace, limit, schedule=None, policy='st
         validate_stats(data['mock_stats'], policy)
 
 
+
+def validate_paper_e2b(path, trace, instance, proof, environment, output):
+    """Independently bind the complete original action order to real transfers."""
+    from ae.scripts.e2b_paper_profile import _root_read
+    data = json.loads(path.read_text())
+    contract = json.loads(_root_read(proof['contract']['path']))
+    expected = next(x for x in contract['inputs'] if x['instance'] == instance)
+    input_row = next(x for x in proof['inputs'] if x['instance'] == instance)
+    actions = {(a['node_id'], a['action_index']): a for a in contract['ordered_measured_actions']
+               if a['instance'] == instance}
+    nodes = {}; pending = [json.loads(trace.read_text())['root']]
+    while pending:
+        node = pending.pop(); nodes[node['node_id']] = node
+        pending.extend(node.get('children') or [])
+    binding = data.get('paper_input_contract', {})
+    if (data.get('instance') != instance or data.get('message_policy') != 'strict'
+            or binding.get('contract') != proof['contract']
+            or binding.get('manifest') != proof['manifest']
+            or binding.get('trajectory_sha256') != input_row['trajectory']['sha256']
+            or binding.get('repository_commit') != input_row['repository_commit']
+            or binding.get('expected_expansions') != input_row['expansions']
+            or binding.get('expected_actions') != input_row['actions']):
+        raise ValueError('Paper pilot is not bound to the frozen input/contract')
+    create = data.get('create', {})
+    if (create.get('ok') is not True or create.get('reused') is not False
+            or create.get('fresh_for_input') != instance
+            or create.get('build_id') != environment['from_build']
+            or create.get('fresh_base_manifest') != environment['fresh_base_manifest']['path']):
+        raise ValueError('Paper pilot used an unverified/reused base')
+
+    def receipt(step):
+        if (step.get('ok') is not True or step.get('host_rc') != 0
+                or step.get('timing_present') is not True):
+            raise ValueError('Paper physical step has no successful real Go result')
+        target = Path(step['transport_receipt'])
+        if (not target.is_absolute() or target.resolve() != target
+                or not target.is_relative_to(output)):
+            raise ValueError('Paper transport receipt escapes current input')
+        value = json.loads(target.read_text())
+        if (value.get('kind') != 'ssh-files-outside-inner-timers'
+                or value.get('returncode') != 0 or value.get('transfer_errors')):
+            raise ValueError('Paper transfer failed')
+        for row in value.get('uploads', []) + value.get('downloads', []):
+            item = Path(row['path'])
+            if item.resolve() != item or not item.is_relative_to(output):
+                raise ValueError('Paper action evidence escapes current input')
+            actual = file_record(item)
+            if any(actual[k] != row[k] for k in ('bytes', 'sha256')):
+                raise ValueError('Paper transferred bytes changed')
+        timings = [x for x in value.get('downloads', []) if x['path'].endswith('.timing.json')]
+        if len(timings) != 1:
+            raise ValueError('Missing independently hashed real timing result')
+        timing = json.loads(Path(timings[0]['path']).read_text())
+        if timing.get('ok') is not True or any(timing.get(k) != step.get(k)
+                  for k in ('checkpoint_persist_ms', 'resume_ms', 'pause_ms', 'snapshot_upload_ms', 'to_build')):
+            raise ValueError('Pilot timing differs from real Go result')
+        values = {k: number(timing.get(k), k) for k in
+                  ('checkpoint_persist_ms', 'resume_ms', 'pause_ms', 'snapshot_upload_ms')}
+        if (timing.get('to_build') != value.get('to_build')
+                or abs(values['checkpoint_persist_ms'] - values['pause_ms'] - values['snapshot_upload_ms']) > 0.003000001
+                or timing.get('pause_error') or timing.get('command_error')):
+            raise ValueError('Raw Go checkpoint source, success or pause+upload timing window differs')
+        return value
+
+    root = receipt(data['root_setup'])
+    if root['from_build'] != environment['from_build']:
+        raise ValueError('Root setup did not consume the freshly bound base')
+    resource_files = [r for r in root['downloads'] if Path(r['path']).name == 'root-l2-proof.json']
+    if len(resource_files) != 1:
+        raise ValueError('Root setup lacks transferred actual L2 resource proof')
+    resource = json.loads(Path(resource_files[0]['path']).read_text())
+    if (resource != data.get('guest_resource_proof') or type(resource.get('nproc')) is not int
+            or resource['nproc'] != 1 or len(resource.get('cpu_affinity', [])) != 1
+            or type(resource.get('mem_total_kib')) is not int
+            or not 1.8 * 1024**2 <= resource['mem_total_kib'] <= 2 * 1024**2
+            or type(resource.get('swap_total_kib')) is not int or resource['swap_total_kib'] != 0
+            or set(resource.get('sidecars', {})) != {'worker', 'index'}
+            or any(v.get('ok') is not True for v in resource['sidecars'].values())):
+        raise ValueError('Actual L2 CPU/memory/swap/sidecar conditions failed')
+    builds = {json.loads(trace.read_text())['root']['node_id']: root['to_build']}
+    seen_builds = {environment['from_build'], root['to_build']}
+    observed = data.get('iterations', [])
+    if len(observed) != len(expected['observed_expansions']):
+        raise ValueError('Paper expansion count differs')
+    count = 0
+    for wanted, row in zip(expected['observed_expansions'], observed):
+        ev = row.get('event', {}); steps = row.get('e2b_steps', [])
+        if (row.get('ok') is not True or row.get('node_id') != wanted['node_id']
+                or ev.get('new_node_id') != wanted['node_id']
+                or ev.get('selected_node_id') != wanted['parent_node_id']
+                or row.get('finished') is not wanted['finished']
+                or ev.get('is_duplicate') is not wanted['duplicate']
+                or len(steps) != wanted['actual_n_actions']
+                or ev.get('n_worker_actions') != len(steps)):
+            raise ValueError('Paper node/parent/terminal/action count differs')
+        parent_build = builds[wanted['parent_node_id']]
+        if row.get('selected_build_id') != parent_build:
+            raise ValueError('Paper selected build does not restore the recorded parent')
+        event_actions = ev.get('action_events', [])
+        if len(event_actions) != len(steps):
+            raise ValueError('Missing real action event')
+        for index, (step, event) in enumerate(zip(steps, event_actions)):
+            action = actions[(wanted['node_id'], index)]
+            rec = receipt(step)
+            if rec['from_build'] != parent_build or rec['to_build'] in seen_builds:
+                raise ValueError('Paper physical restore/checkpoint chain differs')
+            seen_builds.add(rec['to_build']); parent_build = rec['to_build']
+            requests = [x for x in rec.get('uploads', []) if x['path'].endswith('.req.json')]
+            responses = [x for x in rec.get('downloads', []) if x['path'].endswith('.resp.json')]
+            if len(requests) != 1 or len(responses) != 1:
+                raise ValueError('Physical action lacks complete request/response')
+            request = json.loads(Path(requests[0]['path']).read_text())
+            response = json.loads(Path(responses[0]['path']).read_text())
+            raw_action = dict(nodes[wanted['node_id']]['action_steps'][index]['action'])
+            if raw_action.get('thoughts', object()) is None:
+                raw_action['thoughts'] = ''  # Existing ActionArguments normalization, independently audited.
+            if (request.get('instance') != instance or request.get('seq') != wanted['seq']
+                    or request.get('node_id') != wanted['node_id'] or request.get('action') != raw_action
+                    or response.get('ok') is not True
+                    or event.get('node_id') != wanted['node_id']
+                    or event.get('action_args_class') != action['action_class']):
+                raise ValueError('Real paper action differs from the recovered ordered contract')
+            count += 1
+        if row.get('build_id') != parent_build:
+            raise ValueError('Paper node build does not equal the final real checkpoint')
+        builds[wanted['node_id']] = parent_build
+    if not observed[-1].get('finished') or count != input_row['actions'] or data.get('n_e2b_steps') != count:
+        raise ValueError('Paper input did not naturally complete all original actions')
+    # Replay calls remain split between two servers. Do not sum cursor values
+    # or demand the worker consume controller-only calls.
+    sys.path.insert(0, str(VENDOR / 'spr_payload'))
+    from trajectory_index import load_trajectory
+    completions = load_trajectory(str(trace))
+    for role, purpose in (('controller', 'build_action'), ('worker', 'exec.')):
+        stats = data[role + '_mock_stats']
+        validate_stats(stats, 'strict')
+        wanted = sum(c.purpose == purpose if role == 'controller' else c.purpose.startswith(purpose)
+                     for c in completions)
+        if (stats.get('ok') is not True or type(stats.get('n_served')) is not int
+                or stats['n_served'] != wanted or stats.get('total') != len(completions)):
+            raise ValueError('Paper dual-mock actual served counts differ')
+        if role == 'controller' and stats.get('cursor') != len(completions):
+            raise ValueError('Paper controller did not consume the complete recording')
+        audit_path = path.parent / (role + '_mock_audit.json')
+        audit = json.loads(audit_path.read_text())
+        stable = ('ok', 'instance_id', 'variant', 'cursor', 'total', 'n_served',
+                  'n_mismatch', 'n_protocol_errors', 'message_policy', 'latency_policy',
+                  'audit_records_dropped', 'audit_payloads_omitted', 'sleep_wall_s')
+        if (any(audit.get('stats', {}).get(k) != stats.get(k) for k in stable)
+                or data.get('mock_audits', {}).get(role) != str(audit_path)):
+            raise ValueError('Paper dual-mock audit differs from terminal statistics')
+    return {'status': 'verified', 'expansions': len(observed), 'actions': count,
+            'checkpoint_restore_pairs': count, 'mock_servers': 2, 'actual_l2_resources': resource,
+            'args_normalization': 'Existing schema: recorded thoughts null becomes empty string only',
+            'original_request_bytes': 'not retained; comparison is to recovered recorded action contract',
+            'contract': proof['contract']}
+
+
 def run(args):
     config = load_config(args.config)
     policy = message_policy(config.get('replay_message_policy', 'audit'))
     experiment = resolve_experiment(args.backend, args.collect_phases, getattr(args, 'experiment_id', None))
     cube_disk_profile = paper_cube_profile(config, args.backend, experiment, args.collect_phases)
+    paper_e2b = config.get('e2b', {}).get('profile') == 'paper-nested'
+    if paper_e2b:
+        from ae.scripts.e2b_paper_profile import verify_inputs
+        if args.backend != 'e2b' or experiment != 'table-02-e2b' or args.limit or os.environ.get('AE_MEMORY_JOB'):
+            raise ValueError('Paper nested profile requires the complete E2B-only disk suite')
+        paper_inputs = verify_inputs(config, guest_ready=True)
+        selected = next((r for r in paper_inputs['inputs'] if r['instance'] == args.instance), None)
+        if (selected is None or args.trace.absolute() != Path(selected['trajectory']['path'])
+                or getattr(args, 'repository_commit', None) != selected['repository_commit']):
+            raise ValueError('Paper runner input/base commit differs from frozen selection')
+        policy = 'strict'
+
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     trace = args.trace.absolute()  # Keep the logical bundle directory beside ms_trace.jsonl.
@@ -431,6 +601,8 @@ def run(args):
         if args.backend in ('replay', 'fc-diff', 'criu'):
             record['history_serialization'] = file_record(output / 'history-serialization.json')
         dirname, entry = DRIVERS[args.backend]
+        if paper_e2b:
+            entry = 'e2b_paper_nested_driver.py'
         base = output / 'driver'
         shutil.copytree(VENDOR / 'finalbench' / dirname, base)
         record['sources'] = records + [file_record(p) for p in sorted(base.rglob('*.py'))]
@@ -449,9 +621,9 @@ def run(args):
         python = configured_path(config, 'moatless_venv') / 'bin/python'
         if not python.is_file():
             raise FileNotFoundError(python)
-        command = [str(python), str(base / entry)]
+        command = [str(python), *(['-B'] if paper_e2b else []), str(base / entry)]
         prefix = 'ae_' + uuid.uuid4().hex[:12]
-        steps = args.limit or 29
+        steps = 30 if paper_e2b else args.limit or 29
         if args.backend == 'replay':
             command += [args.instance]
             if args.limit:
@@ -506,11 +678,21 @@ def run(args):
             e2b = config['e2b']
             from_build = configured_value(config, 'e2b.from_build')
             from e2b_environment import configure
-            record['e2b_environment'] = configure(config, env)
+            record['e2b_environment'] = configure(config, env, instance=args.instance)
             env.update(E2B_FINALBENCH_BASE=str(base), DELTABOX_STD_BASE=str(VENDOR / 'finalbench/deltabox_std'))
             command += ['--instance', args.instance, '--max-steps', str(steps),
                         '--traces-root', str(traces), '--trace-variant', 'ms',
                         '--run-id-prefix', prefix, '--storage', record['e2b_environment']['storage'], '--from-build', from_build]
+            if paper_e2b:
+                record['paper_input_contract'] = paper_inputs
+                command += ['--mem-mib', '2048', '--disk-mb', '4096',
+                            '--fc-version', 'v1.14.1_458ca91']
+                for key, flag in (('worker_mock_port', '--worker-mock-port'), ('index_port', '--index-port')):
+                    value = e2b.get(key)
+                    if value is not None:
+                        if type(value) is not int or not 1024 <= value <= 65535:
+                            raise ValueError('Invalid paper sidecar port')
+                        command += [flag, str(value)]
         if args.backend == 'e2b':
             warm_worker = config['e2b'].get('warm_action_worker', True)
             if type(warm_worker) is not bool:
@@ -540,10 +722,14 @@ def run(args):
         counts = validate_pilot(paths[0], args.backend, policy,
                                 latency_policy=record['mock_latency_policy'] if args.backend == 'replay' else None)
         record['test_runtime_execution'] = test_execution_summary(paths[0], args.backend)
-        validate_trace_events(paths[0], args.backend, trace, args.limit, args.schedule, policy)
+        if paper_e2b:
+            record['paper_contract_validation'] = validate_paper_e2b(
+                paths[0], trace, args.instance, paper_inputs, record['e2b_environment'], output)
+        else:
+            validate_trace_events(paths[0], args.backend, trace, args.limit, args.schedule, policy)
         if args.backend != 'cube':
             audit_paths = sorted((base / 'results').rglob('*mock_audit*.json'))
-            expected_reports = 1
+            expected_reports = 2 if paper_e2b else 1
             if args.backend == 'replay':
                 with (paths[0].parent / 'restores.csv').open() as stream:
                     expected_reports = sum(int(row['target_expansions']) > 0 for row in csv.DictReader(stream))
@@ -559,6 +745,11 @@ def run(args):
                   f"dropped={audit['audit_records_dropped']}; omitted={audit['audit_payloads_omitted']}; "
                   f"evidence: {base / 'results'}", flush=True)
         extra_artifacts = []
+        if paper_e2b:
+            # Preserve and bind the actual requests/responses and transport
+            # evidence separately from the (large) reconstructable payload tar.
+            extra_artifacts += [p for p in (base / 'work').rglob('*')
+                                if p.is_file() and p.suffix in ('.json', '.jsonl', '.log', '.txt')]
         if args.backend in ('replay', 'fc-diff', 'criu'):
             extra_artifacts += [output / 'history-serialization.json',
                                 payload / 'moatless-det-src/moatless/_replay_history_order.json']

@@ -65,7 +65,7 @@ def gpu_case_selection(value):
 class GPUCases(argparse.Action):
     def __call__(self, parser, namespace, value, option_string=None):
         if getattr(namespace, self.dest, None) is not None:
-            parser.error('--gpu-cases may be supplied only once')
+            parser.error(f'{option_string} may be supplied only once')
         setattr(namespace, self.dest, value)
 
 
@@ -90,6 +90,7 @@ def parser():
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
     p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
+    p.add_argument('--e2b-profile', choices=('paper-nested',), action=GPUCases, help='E2B-only documented nested reconstruction; original eight complete inputs')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
                    help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
@@ -307,6 +308,18 @@ def job_unavailable(job, config):
             return path
         except ValueError as error:
             reasons.append(str(error))
+    if name == 'table-02-e2b' and config.get('e2b', {}).get('profile') == 'paper-nested':
+        try:
+            from ae.scripts.e2b_paper_profile import input_rows
+            rows = {row['instance']: row for row in input_rows(config)}
+            instance = option(command, '--instance')
+            row = rows[instance]
+            if (option(command, '--trace') != row['local']
+                    or option(command, '--repository-commit') != row['repository_commit']
+                    or option(command, '--limit') is not None):
+                raise ValueError('Planned E2B paper input/commit differs from frozen manifest')
+        except (ValueError, KeyError, OSError) as exc:
+            reasons.append('E2B paper static input verification failed: ' + str(exc))
     if name.endswith('-cube') and config.get('cube', {}).get('profile') == 'paper-disk':
         try:
             from runners.cube_disk import verify as verify_cube_disk
@@ -411,7 +424,12 @@ def execute_review_job(index, job, plan, output, stop_event=None):
         from repro.staging_cleanup import cleanup_reconstructable_staging
         job['status'] = 'cleaning'
         try:
-            if memory:
+            if (plan.get('measurement_identity', {}).get('e2b_profile') == 'paper-nested'
+                    or plan.get('e2b_paper_inputs', {}).get('profile') == 'paper-nested'):
+                job['staging_cleanup'] = {
+                    'status': 'retained', 'reason': 'source-dependent-paper-reconstruction',
+                    'retained': 'Complete real requests, responses, transport receipts, logs and staged source are required for reproduction and paired validation'}
+            elif memory:
                 report = output / job['key'] / 'staging-cleanup.json'
                 job['staging_cleanup'] = json.loads(report.read_text()) if report.exists() else {'status': 'not-applicable'}
             else:
@@ -423,9 +441,19 @@ def execute_review_job(index, job, plan, output, stop_event=None):
     return job
 
 
-def execute_plan(path):
+def execute_plan(path, *, paper_context_ready=False, paper_before_job=None, paper_after_job=None):
     """Run a frozen suite; Replay can reproduce the paper's 16 trace workers."""
     plan = json.loads(path.read_text())
+    config = load_config(Path(plan['review_config'])) if plan.get('review_config') else {}
+    from ae.scripts.e2b_paper_profile import active as e2b_paper_active
+    if e2b_paper_active(config) and not paper_context_ready:
+        # run_pinned_measurement already holds this suite's NUMA/frequency lease.
+        # The wrapper starts/validates L1 and calls back with its guest config.
+        from ae.scripts.e2b_paper_suite import run
+        return run(path)
+    if (paper_before_job is not None or paper_after_job is not None) and not (
+            paper_context_ready and e2b_paper_active(config) and plan.get('workers', 1) == 1):
+        raise ValueError('Per-input paper callbacks require the owned serial nested context')
     output = Path(plan['review_output'])
     output.mkdir(parents=True, exist_ok=bool(plan.get('resume_verified') or plan.get('import_verified')))
     manifest = output / 'suite.json'
@@ -448,7 +476,23 @@ def execute_plan(path):
     try:
         if workers == 1:
             for index, job in pending:
-                job.update(execute_review_job(index, job, plan, output))
+                try:
+                    if paper_before_job is not None:
+                        paper_before_job(index, job, plan, output)
+                    job.update(execute_review_job(index, job, plan, output))
+                    if paper_after_job is not None:
+                        paper_after_job(index, job, plan, output)
+                except Exception as error:
+                    if paper_before_job is None and paper_after_job is None:
+                        raise
+                    job.update(status='failed', paper_context_error=type(error).__name__ + ': ' + str(error))
+                except BaseException as error:
+                    if paper_before_job is not None or paper_after_job is not None:
+                        job.update(status='interrupted', paper_context_error=type(error).__name__ + ': ' + str(error))
+                        for later_index, later in pending:
+                            if later_index > index:
+                                later.update(status='not-run', reason='Interrupted during ' + job['key'])
+                    raise
                 write_json(manifest, plan)
                 if job.get('status') != 'ok':
                     for later_index, later in pending:
@@ -484,6 +528,8 @@ class Review:
         validate_gpu_selection(args)
         from ae.scripts.cube_paper_profile import validate
         validate(args)
+        from ae.scripts.e2b_paper_profile import validate as validate_e2b_profile
+        validate_e2b_profile(args)
         self.args, self.config, self.output = args, config, output
         self.python = sys.executable
         self.cli = [self.python, str(REPO / 'ae/reproduce.py')]
@@ -534,6 +580,7 @@ class Review:
             resource_scope='exclusive NUMA and CPU frequency policies during each measurement; exclusive results rotation')
         self.cube_disk_manifest = None
         self.record['cube_profile'] = getattr(args, 'cube_profile', None)
+        self.record['e2b_profile'] = getattr(args, 'e2b_profile', None)
         self.cube_memory_manifest = None
         self.cube_placement = None
         self.previous_record = {}
@@ -650,6 +697,8 @@ class Review:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         from ae.scripts.cube_paper_profile import effective
         config = effective(config, getattr(self.args, 'cube_profile', None))
+        from ae.scripts.e2b_paper_profile import effective as effective_e2b_profile
+        config = effective_e2b_profile(config, getattr(self.args, 'e2b_profile', None))
         if self.cube_disk_manifest is not None:
             config['cube']['disk_manifest'] = str(self.cube_disk_manifest)
         config.pop('review', None)
@@ -754,6 +803,12 @@ class Review:
         if config.get('cube', {}).get('profile') == 'paper-disk':
             identity.update(cube_profile='paper-disk', service_cpus=config['cube']['service_cpus'],
                             frequency_policy_cpus=measurement['policy_cpus'])
+        if config.get('e2b', {}).get('profile') == 'paper-nested':
+            from ae.scripts.e2b_paper_profile import verify_inputs
+            identity.update(e2b_profile='paper-nested', topology='nested',
+                            action_worker='fresh-process', guest_vcpus=1,
+                            guest_mem_mib=2048, fresh_base_per_input=True)
+            plan['e2b_paper_inputs'] = verify_inputs(config)
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
@@ -791,11 +846,11 @@ class Review:
             command = [self.python, str(REPO / 'ae/scripts/run_pinned_measurement.py'),
                        '--node', str(row['measurement']['node']), '--cpus', row['measurement']['cpus'],
                        '--out', str(self.output / 'environment' / self.attempt / name), '--timeout', str(budget),
-                       '--stop-grace', '360' if plan.get('memory_measurement') else '30', '--', *command]
+                       '--stop-grace', '360' if plan.get('memory_measurement') or getattr(self.args, 'e2b_profile', None) else '30', '--', *command]
         if pinned and measurement.get('policy_cpus'):
             command[2:2] = ['--policy-cpus', measurement['policy_cpus']]
         ok = self.step(name + '-run', [*self.privilege, *command], budget + 120,
-                       termination_grace=420 if plan.get('memory_measurement') else 30)
+                       termination_grace=420 if plan.get('memory_measurement') or getattr(self.args, 'e2b_profile', None) else 30)
         row['status'] = 'partial' if ok and (row['unavailable_jobs'] or row['unavailable_arms']) else 'ok' if ok else 'failed'
         row['reasons'] += [str(item.get('arm', 'panel')) + ': ' + item['reason'] for item in row['unavailable_arms']]
         if (suite / 'suite.json').is_file():
@@ -1029,7 +1084,8 @@ class Review:
                         chosen = deep_merge(chosen, chosen.get('review', {}).get('experiment_overrides', {}).get(selected, {}))
                     if selected == 'table-02-fc-diff' and chosen.get('baseline_storage') == 'tmpfs':
                         job_size_gib(selected, chosen)
-                    if selected == 'table-02-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ:
+                    if (selected == 'table-02-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ
+                            and getattr(self.args, 'e2b_profile', None) is None):
                         from repro.staging_cleanup import validate_e2b_storage
                         validate_e2b_storage(chosen)
                 if GPU in self.experiments:
@@ -1104,6 +1160,8 @@ def main(argv=None):
         validate_gpu_selection(args)
         from ae.scripts.cube_paper_profile import validate
         validate(args)
+        from ae.scripts.e2b_paper_profile import validate as validate_e2b_profile
+        validate_e2b_profile(args)
     except ValueError as error:
         p.error(str(error))
     if args.list:
