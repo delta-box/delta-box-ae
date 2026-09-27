@@ -87,7 +87,7 @@ class ServiceFixture:
             mock.patch.object(context, 'visible_mount', return_value={
                 'source': '/dev/loop-original', 'fstype': 'xfs'}),
             mock.patch.object(context, 'service_property', side_effect=self.property),
-            mock.patch.object(context, 'sandboxes', side_effect=self.inventory),
+            mock.patch.object(context, 'master_idle_readiness', side_effect=self.readiness),
             mock.patch.object(context, 'output', side_effect=self.output),
             mock.patch.object(context, 'run', side_effect=self.run),
             mock.patch.object(context, 'process_start_ticks', return_value='ticks'),
@@ -105,13 +105,18 @@ class ServiceFixture:
         info = Path(text).stat()
         return {'device': info.st_dev, 'inode': info.st_ino}
 
-    def inventory(self):
+    def readiness(self, pid, evidence, **kwargs):
         self.inventory_calls += 1
-        return [{'sandbox': 'someone-else'}] if self.inventory_changes and self.inventory_calls == 2 else []
+        if self.inventory_changes and self.inventory_calls == 2:
+            raise ValueError('Cube must be idle: activity appeared before stop')
+        if not self.active or str(pid) != self.pid:
+            raise AssertionError('readiness must only run against active current service')
+        return {'ready': True, 'idle': True, 'service_pid': pid}
+
 
     def property(self, name):
         return {'ActiveState': 'active' if self.active else 'inactive',
-                'MainPID': self.pid, 'AllowedCPUs': self.allowed_cpus,
+                'MainPID': self.pid if self.active else '0', 'AllowedCPUs': self.allowed_cpus,
                 'AllowedMemoryNodes': self.allowed_nodes}[name]
 
     def output(self, *args):
@@ -251,18 +256,18 @@ class CubeDiskContextTests(CompatibleCase):
                 self.fail('must not yield')
         fixture.assert_restored()
 
-    def test_inventory_change_after_stop_prevents_copy_and_restores_original(self):
+    def test_inventory_change_before_stop_prevents_copy_without_stopping_original(self):
         fixture = ServiceFixture(self)
         fixture.inventory_changes = True
-        with self.assertRaisesRegex(ValueError, 'inventory changed'):
+        with self.assertRaisesRegex(ValueError, 'activity appeared'):
             with fixture.open():
                 self.fail('must not yield')
         fixture.assert_restored(loop_expected=False)
-        self.assertFalse(any(args[0] == 'cp' for args in fixture.calls))
+        self.assertFalse(any(args[0] == 'cp' or args[:2] == ('systemctl', 'stop') for args in fixture.calls))
 
     def test_busy_service_before_stop_closes_lease_without_touching_service(self):
         fixture = ServiceFixture(self)
-        with mock.patch.object(context, 'sandboxes', return_value=[{}]):
+        with mock.patch.object(context, 'master_idle_readiness', side_effect=ValueError('Cube must be idle')):
             with self.assertRaisesRegex(ValueError, 'must be idle'):
                 with fixture.open():
                     self.fail('must not yield')
@@ -285,6 +290,36 @@ class CubeDiskContextTests(CompatibleCase):
                 with fixture.open():
                     self.fail('must not yield')
         fixture.assert_restored()
+
+    def test_private_rpc_readiness_failure_restores_original_and_owned_mounts(self):
+        fixture = ServiceFixture(self)
+        original = fixture.readiness
+        def readiness(pid, evidence, **kwargs):
+            if fixture.drop.exists():
+                raise TimeoutError('cached Master channel unavailable')
+            return original(pid, evidence, **kwargs)
+        with mock.patch.object(context, 'master_idle_readiness', side_effect=readiness):
+            with self.assertRaisesRegex(TimeoutError, 'cached Master'):
+                with fixture.open():
+                    self.fail('must not yield before real RPC succeeds')
+        fixture.assert_restored()
+
+    def test_original_restore_rpc_failure_is_recorded_and_prevents_clean_exit(self):
+        fixture = ServiceFixture(self)
+        original = fixture.readiness
+        def readiness(pid, evidence, **kwargs):
+            if Path(evidence).name == 'restored-readiness.json':
+                raise TimeoutError('original Master channel unavailable')
+            return original(pid, evidence, **kwargs)
+        with mock.patch.object(context, 'master_idle_readiness', side_effect=readiness):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup/restoration failed'):
+                with fixture.open():
+                    pass
+        self.assertTrue(fixture.lease.closed)
+        self.assertTrue(fixture.active)
+        self.assertFalse(fixture.drop.exists())
+        self.assertFalse(fixture.mounted)
+        self.assertTrue((fixture.out / 'cleanup-errors.json').exists())
 
     def test_cleanup_error_is_recorded_and_does_not_mask_measurement_error(self):
         fixture = ServiceFixture(self)
@@ -333,6 +368,114 @@ class CubeDiskContextTests(CompatibleCase):
             with self.assertRaises(BlockingIOError):
                 context.acquire_lock()
         self.assertTrue(handle.closed)
+
+
+
+
+class CubeMasterReadinessTests(CompatibleCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.evidence = self.root / 'ready.json'
+        self.urls = []
+        self.clock = 0.0
+        self.responses = []
+        self.enterContext(mock.patch.object(context, 'service_property',
+            side_effect=lambda name: '123' if name == 'MainPID' else 'active'))
+        self.enterContext(mock.patch.object(context, 'process_start_ticks', return_value='stable'))
+        self.enterContext(mock.patch.object(context.time, 'monotonic', side_effect=lambda: self.clock))
+        self.enterContext(mock.patch.object(context.time, 'sleep', side_effect=self.sleep))
+        self.enterContext(mock.patch.object(context.urllib.request, 'urlopen', side_effect=self.urlopen))
+
+    def sleep(self, seconds):
+        self.clock += seconds
+
+    def urlopen(self, url, **kwargs):
+        self.urls.append(url)
+        if not self.responses:
+            raise AssertionError('unexpected extra readiness read')
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        request_id = context.urllib.parse.parse_qs(context.urllib.parse.urlsplit(url).query)['requestID'][0]
+        value = {'requestID': request_id, 'ret': {'ret_code': response}} if type(response) is int else response
+        return io.StringIO(json.dumps(value))
+
+    def test_cached_rpc_failure_then_actual_empty_success_only_repeats_reads(self):
+        self.responses = [130595, 130406]
+        proof = context.master_idle_readiness(123, self.evidence, timeout=1)
+        self.assertTrue(proof['ready'])
+        self.assertEqual([r['ret_code'] for r in proof['attempts']], [130595, 130406])
+        self.assertEqual(len(set(self.urls)), 2)
+        for url in self.urls:
+            parsed = context.urllib.parse.urlsplit(url)
+            self.assertEqual(parsed.path, '/cube/sandbox/info')
+            self.assertEqual(set(context.urllib.parse.parse_qs(parsed.query)), {'host_id', 'requestID'})
+            self.assertEqual(context.urllib.parse.parse_qs(parsed.query)['host_id'], ['198.18.0.1'])
+
+    def test_http_success_alone_is_not_rpc_success_or_idle(self):
+        self.responses = [200]
+        with self.assertRaisesRegex(ValueError, 'must be idle'):
+            context.master_idle_readiness(123, self.evidence)
+        self.assertFalse(json.loads(self.evidence.read_text())['ready'])
+        self.assertEqual(len(self.urls), 1)
+
+    def test_wrong_request_identity_and_invalid_error_code_fail_closed(self):
+        for value in [
+            {'requestID': 'other', 'ret': {'ret_code': 130406}},
+            {'requestID': 'other', 'ret': {'ret_code': '130406'}},
+            [],
+            130401,
+        ]:
+            with self.subTest(value=value):
+                self.responses = [value]
+                with self.assertRaises(ValueError):
+                    context.master_idle_readiness(123, self.evidence)
+                self.assertFalse(json.loads(self.evidence.read_text())['ready'])
+
+    def test_success_code_with_nonempty_data_is_rejected(self):
+        def contradictory(url, **kwargs):
+            request_id = context.urllib.parse.parse_qs(context.urllib.parse.urlsplit(url).query)['requestID'][0]
+            return io.StringIO(json.dumps({'requestID': request_id, 'ret': {'ret_code': 130406},
+                                          'data': [{'sandbox_id': 'busy'}]}))
+        with mock.patch.object(context.urllib.request, 'urlopen', side_effect=contradictory):
+            with self.assertRaisesRegex(ValueError, 'must be idle'):
+                context.master_idle_readiness(123, self.evidence)
+
+    def test_bound_boolean_code_and_success_with_empty_data_are_rejected(self):
+        for code in (True, 200):
+            def invalid(url, **kwargs):
+                request_id = context.urllib.parse.parse_qs(context.urllib.parse.urlsplit(url).query)['requestID'][0]
+                return io.StringIO(json.dumps({'requestID': request_id, 'ret': {'ret_code': code}, 'data': []}))
+            with self.subTest(code=code), mock.patch.object(context.urllib.request, 'urlopen', side_effect=invalid):
+                with self.assertRaises(ValueError):
+                    context.master_idle_readiness(123, self.evidence)
+
+    def test_authentication_error_is_not_retried_as_transient_readiness(self):
+        self.responses = [context.urllib.error.HTTPError('local', 403, 'denied', {}, None)]
+        with self.assertRaisesRegex(ValueError, 'HTTP request rejected: 403'):
+            context.master_idle_readiness(123, self.evidence)
+        self.assertEqual(len(self.urls), 1)
+        self.assertEqual(json.loads(self.evidence.read_text())['attempts'][0]['http_status'], 403)
+
+    def test_service_restart_during_call_is_rejected(self):
+        self.responses = [130406]
+        with mock.patch.object(context, 'process_start_ticks', side_effect=['stable', 'stable', 'restarted']):
+            with self.assertRaisesRegex(ValueError, 'identity changed'):
+                context.master_idle_readiness(123, self.evidence)
+
+    def test_timeout_preserves_failed_rpc_evidence_without_accepting_empty_response(self):
+        self.responses = [130595, 130595]
+        with self.assertRaisesRegex(TimeoutError, 'did not become ready'):
+            context.master_idle_readiness(123, self.evidence, timeout=0.5)
+        proof = json.loads(self.evidence.read_text())
+        self.assertFalse(proof['ready'])
+        self.assertEqual(len(proof['attempts']), 2)
+
+    def test_read_transport_failure_may_recover_before_deadline(self):
+        self.responses = [TimeoutError('read timeout'), 130406]
+        proof = context.master_idle_readiness(123, self.evidence, timeout=1)
+        self.assertTrue(proof['ready'])
+        self.assertEqual(proof['attempts'][0]['transport_error_type'], 'TimeoutError')
 
 
 class CubeDiskVerificationTests(CompatibleCase):

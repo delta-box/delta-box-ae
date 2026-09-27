@@ -20,6 +20,9 @@ import sys
 import tempfile
 import time
 import urllib.request
+import urllib.error
+import urllib.parse
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from runners.cube_disk import (CGROUP, GIB, PATHS, SERVICE, allocated_bytes,
@@ -41,12 +44,76 @@ def output(*args):
     return subprocess.check_output(list(map(str, args)), text=True, timeout=60).strip()
 
 
-def sandboxes():
-    with urllib.request.urlopen('http://127.0.0.1:3000/sandboxes', timeout=10) as response:
-        value = json.load(response)
-    if not isinstance(value, list):
-        raise ValueError('Unknown Cube inventory format')
-    return value
+def master_idle_readiness(pid, evidence, *, timeout=90.0):
+    """Prove a fresh read-only RPC through Master's existing Cubelet pool.
+
+    /sandboxes and /cube/sandbox/list swallow Cubelet RPC errors and may return
+    an empty successful response. In contrast, sandbox/info with host_id only
+    returns NotFoundAtCubelet (130406) *after* Cubelet.List succeeds and is empty.
+    No VM is created, and only preparation-stage reads are repeated. Do not set
+    a custom X-Caller: Master's pool key includes that header; the default must
+    match the measurement caller rather than creating a fresh, unrelated pool.
+    """
+    if type(pid) is not int or pid <= 0 or timeout <= 0:
+        raise ValueError('Invalid Cube readiness PID or timeout')
+    ticks = process_start_ticks(pid)
+    started = time.monotonic()
+    deadline = started + timeout
+    proof = {'service_pid': pid, 'service_start_ticks': ticks,
+             'master_endpoint': 'http://127.0.0.1:8089',
+             'cubelet_endpoint': '198.18.0.1:9999',
+             'rpc': 'Master sandbox/info(host_id only) -> Cubelet.List',
+             'attempts': [], 'ready': False}
+
+    def same_process():
+        if (service_property('ActiveState') != 'active'
+                or int(service_property('MainPID')) != pid
+                or process_start_ticks(pid) != ticks):
+            raise ValueError('Cube service identity changed during RPC readiness')
+
+    try:
+        while time.monotonic() < deadline:
+            same_process()
+            request_id = 'ae-disk-readiness-' + uuid.uuid4().hex
+            query = urllib.parse.urlencode({'host_id': '198.18.0.1', 'requestID': request_id})
+            url = proof['master_endpoint'] + '/cube/sandbox/info?' + query
+            attempt = {'request_id': request_id}
+            proof['attempts'].append(attempt)
+            try:
+                with urllib.request.urlopen(url, timeout=min(5.0, max(0.01, deadline - time.monotonic()))) as response:
+                    value = json.load(response)
+            except urllib.error.HTTPError as error:
+                attempt['http_status'] = error.code
+                if error.code < 500:
+                    raise ValueError('Master RPC readiness HTTP request rejected: ' + str(error.code)) from error
+            except (urllib.error.URLError, TimeoutError) as error:
+                attempt['transport_error_type'] = type(error).__name__
+            else:
+                same_process()
+                if (not isinstance(value, dict) or value.get('requestID') != request_id
+                        or not isinstance(value.get('ret'), dict)
+                        or type(value['ret'].get('ret_code')) is not int):
+                    raise ValueError('Unbound or malformed Master RPC readiness response')
+                code = value['ret']['ret_code']
+                attempt['ret_code'] = code
+                data = value.get('data')
+                if code == 130406 and (data is None or data == []):
+                    proof.update(ready=True, idle=True, elapsed_s=time.monotonic() - started)
+                    write_json(evidence, proof)
+                    return proof
+                if code == 200 or data not in (None, []):
+                    raise ValueError('Cube must be idle: Master returned sandbox data')
+                if code != 130595:
+                    raise ValueError('Master RPC readiness returned unexpected code: ' + str(code))
+            write_json(evidence, proof)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(0.25, remaining))
+        raise TimeoutError('Cube Master-to-Cubelet read-only RPC did not become ready')
+    except BaseException as error:
+        proof.update(error_type=type(error).__name__, elapsed_s=time.monotonic() - started)
+        write_json(evidence, proof)
+        raise
 
 
 def write_json(path, value):
@@ -209,13 +276,14 @@ def disk_service(output_dir, *, workspace, node, cpus, reserve_gib=10):
     copied = {}
     freeze_state = {}
     try:
-        if DROP.exists() or MEMORY_DROP.exists() or sandboxes():
+        if DROP.exists() or MEMORY_DROP.exists():
             raise ValueError('Cube must be idle and have no prior experimental override')
         if service_property('ActiveState') != 'active':
             raise ValueError('Expected an active original Cube service')
         original_pid = int(service_property('MainPID'))
         if original_pid <= 0:
             raise ValueError('Original Cube service has no live MainPID')
+        original_ready = master_idle_readiness(original_pid, out / 'original-readiness.json')
         device = visible_mount(STORAGE)['source']
         if not device.startswith('/dev/loop'):
             raise ValueError('Original Cube storage must be a loop-backed XFS image')
@@ -234,6 +302,7 @@ def disk_service(output_dir, *, workspace, node, cpus, reserve_gib=10):
         admitted = require_space(workspace, reserve_bytes=reserve_gib * GIB,
                                  allocation_bytes=source.stat().st_size + directories_bytes)
         before = {
+            'readiness': original_ready,
             'main_pid': original_pid, 'unit_sha256': hashlib.sha256(output('systemctl', 'cat', SERVICE).encode()).hexdigest(),
             'source': str(source), 'source_loop': source_loop,
             'source_size': source.stat().st_size, 'source_allocated_bytes': source.stat().st_blocks * 512,
@@ -259,10 +328,11 @@ def disk_service(output_dir, *, workspace, node, cpus, reserve_gib=10):
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             raise KeyboardInterrupt(f'signal {signum}')
         prior_signal = signal.signal(signal.SIGTERM, interrupted)
+        master_idle_readiness(original_pid, out / 'before-stop-readiness.json')
         stopped = True  # A failed stop can still have changed service state.
         run('systemctl', 'stop', SERVICE)
-        if sandboxes():
-            raise ValueError('Cube inventory changed during exclusive disk setup')
+        if int(service_property('MainPID')) != 0 or service_property('ActiveState') != 'inactive':
+            raise ValueError('Original Cube service did not stop before disk setup')
         copied['image'] = copy_image(source, image, freeze_state)
         write_json(out / 'copy-proof.json', copied)
         # The image is charged at its full logical size during every setup step;
@@ -314,11 +384,10 @@ def disk_service(output_dir, *, workspace, node, cpus, reserve_gib=10):
         pid = int(service_property('MainPID'))
         if pid <= 0 or service_property('ActiveState') != 'active':
             raise ValueError('Private Cube disk service failed to start')
-        if sandboxes():
-            raise ValueError('Unexpected Cube activity before disk measurement')
+        private_ready = master_idle_readiness(pid, out / 'private-readiness.json')
         measure_paths = [image, *[private / f'path-{i}' for i in range(len(PATHS))]]
         proof = {
-            'schema_version': 1, 'profile': 'paper-disk',
+            'schema_version': 1, 'profile': 'paper-disk', 'readiness': private_ready,
             'service_pid': pid, 'service_start_ticks': process_start_ticks(pid),
             'node': node, 'cpus': cpus, 'workspace': str(workspace),
             'private_root': str(private), 'private_root_identity': path_identity(private),
@@ -391,6 +460,7 @@ def disk_service(output_dir, *, workspace, node, cpus, reserve_gib=10):
                         or restored['AllowedMemoryNodes'] != before['allowed_nodes']):
                     raise RuntimeError('Original Cube service state/placement was not restored')
                 restored_pid = int(restored['MainPID'])
+                restored['readiness'] = master_idle_readiness(restored_pid, out / 'restored-readiness.json')
                 for path, expected in before['original_bindings'].items():
                     if path_identity(f'/proc/{restored_pid}/root{path}') != expected:
                         raise RuntimeError('Original Cube service storage was not restored: ' + path)
