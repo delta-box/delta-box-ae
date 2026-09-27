@@ -127,11 +127,20 @@ def configure_paper(config, env, *, instance):
             or proof.get('requested_disk_mib') != 4096
             or type(proof.get('actual_rootfs_bytes')) is not int or proof['actual_rootfs_bytes'] <= 0):
         raise ValueError('Paper fresh-base source/resources/header closure proof is incomplete')
+    from ae.scripts.e2b_paper_suite import validate_snapshot_closure
+    closure = fresh.get('snapshot_closure')
+    files = validate_snapshot_closure(closure, transport.storage, [chosen['from_build']])
     rows = proof.get('snapshot_files', [])
-    if (len(rows) != len(SNAPSHOT_FILES) or {r.get('file') for r in rows} != set(SNAPSHOT_FILES)
-            or any(type(r.get('bytes')) is not int or r['bytes'] <= 0
-                   or not re.fullmatch('[0-9a-f]{64}', str(r.get('sha256'))) for r in rows)):
-        raise ValueError('Paper fresh base must bind all six real snapshot files')
+    expected = {path: dict(file=Path(path).name, path=path, bytes=row['bytes'], sha256=row['sha256'])
+                for path, row in files.items()}
+    if (not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows)
+            or len(rows) != len(expected) or len({r.get('path') for r in rows}) != len(rows)
+            or any(r != expected.get(r.get('path')) for r in rows)):
+        raise ValueError('Paper fresh base must bind all six real snapshot files per closure build')
+    root_headers = closure['builds'][chosen['from_build']]['headers']
+    disk = next(h for h in root_headers if h['file'] == 'rootfs.ext4.header')
+    if proof['actual_rootfs_bytes'] != disk['logical_bytes']:
+        raise ValueError('Paper fresh-base disk resource proof differs from its header')
     # Common module import still expects its historical SSH environment, but
     # the paper driver immediately installs the owned transport before use.
     for name in list(env):

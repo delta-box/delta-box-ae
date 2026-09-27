@@ -260,7 +260,163 @@ def ready_config(original, transport_path, build, root, worker, index):
     return value
 
 
+SNAPSHOT_FILES = ('metadata.json', 'snapfile', 'memfile', 'memfile.header',
+                  'rootfs.ext4', 'rootfs.ext4.header')
+
+
+def validate_snapshot_closure(raw, storage, roots):
+    """Validate the complete guest-probed V3 mapping closure, never a count alone.
+
+    Files remain in the owned guest. The trusted preparation manifest binds
+    their hashes and parsed header semantics; the suite repeats the real guest
+    SHA/header probe after the input. A fresh create can contain several builds.
+    """
+    def ident(value):
+        if not isinstance(value, str) or str(uuid.UUID(value)) != value or uuid.UUID(value).int == 0:
+            raise ValueError('Invalid snapshot build identity')
+        return value
+    if not isinstance(raw, dict) or raw.get('schema_version') != 1 or raw.get('status') != 'verified':
+        raise ValueError('Snapshot closure is not verified')
+    if (not isinstance(storage, str) or raw.get('storage') != storage
+            or str(Path(storage)) != storage or '..' in Path(storage).parts):
+        raise ValueError('Snapshot closure storage differs')
+    if not isinstance(roots, list) or not roots or len(set(roots)) != len(roots):
+        raise ValueError('Snapshot closure roots are empty or duplicated')
+    roots = [ident(b) for b in roots]
+    requested = raw.get('requested_builds')
+    if (not isinstance(requested, list) or len(requested) != len(set(requested))
+            or set(requested) != set(roots)):
+        raise ValueError('Snapshot closure requested identities differ')
+    builds, rows = raw.get('builds'), raw.get('files')
+    if (not isinstance(builds, dict) or not isinstance(rows, list)
+            or type(raw.get('build_count')) is not int or raw['build_count'] != len(builds)):
+        raise ValueError('Snapshot closure build count or files differ')
+    for build in builds:
+        ident(build)
+    expected = {str(Path(storage)/'templates'/b/name) for b in builds for name in SNAPSHOT_FILES}
+    files = {}
+    for row in rows:
+        if (not isinstance(row, dict) or row.get('path') not in expected
+                or row['path'] in files or type(row.get('bytes')) is not int or row['bytes'] < 0
+                or not isinstance(row.get('sha256'), str) or len(row['sha256']) != 64
+                or any(c not in '0123456789abcdef' for c in row['sha256'])):
+            raise ValueError('Snapshot closure file identity is missing, duplicated or invalid')
+        files[row['path']] = row
+    if set(files) != expected:
+        raise ValueError('Snapshot closure requires exactly six files per build')
+    visited, pending = set(), list(roots)
+    while pending:
+        build = pending.pop()
+        if build in visited:
+            continue
+        if build not in builds:
+            raise ValueError('Snapshot closure is missing a referenced build')
+        visited.add(build)
+        detail = builds[build]
+        template = detail.get('template', {})
+        if (template.get('build_id') != build or template.get('firecracker_version') != 'v1.14.1_458ca91'
+                or template.get('kernel_version') != 'vmlinux-6.1.158'):
+            raise ValueError('Snapshot closure runtime or build identity differs')
+        headers = detail.get('headers')
+        if (not isinstance(headers, list) or len(headers) != 2
+                or {h.get('file') for h in headers} != {'memfile.header', 'rootfs.ext4.header'}):
+            raise ValueError('Snapshot closure must contain both headers per build')
+        for header in headers:
+            size = header.get('logical_bytes')
+            if (header.get('build') != build or header.get('version') != 3
+                    or header.get('block_size') != 4096 or type(size) is not int
+                    or size <= 0 or size % 4096
+                    or (header['file'] == 'memfile.header' and size != 2048*1024**2)):
+                raise ValueError('Snapshot closure header resource/version/identity differs')
+            refs = header.get('referenced_builds')
+            if not isinstance(refs, dict):
+                raise ValueError('Snapshot closure header has no mapping references')
+            mapped = 0
+            for parent, bound in refs.items():
+                ident(parent)
+                if (not isinstance(bound, dict) or any(type(bound.get(k)) is not int or bound[k] <= 0
+                        or bound[k] % 4096 for k in ('mapped_bytes', 'required_file_bytes'))):
+                    raise ValueError('Snapshot closure mapped extent is invalid')
+                target = str(Path(storage)/'templates'/parent/header['file'].removesuffix('.header'))
+                if target not in files or files[target]['bytes'] < bound['required_file_bytes']:
+                    raise ValueError('Snapshot closure parent is missing or shorter than mapped extent')
+                mapped += bound['mapped_bytes']
+                pending.append(parent)
+            if mapped > size:
+                raise ValueError('Snapshot closure mapped bytes exceed logical size')
+    if visited != set(builds):
+        raise ValueError('Snapshot closure contains an unreferenced build')
+    return files
+
+
+def completed_build_ids(output, fresh_ids, expected_actions, base):
+    """Bind every new build to a successful raw root/action transport receipt."""
+    output = Path(output)
+    if output.resolve() != output:
+        raise ValueError('Completed input path is not canonical')
+    record = json.loads((output/'run.json').read_text())
+    if record.get('status') != 'ok':
+        raise ValueError('Completed input has no successful run record')
+    result = record.get('result', {})
+    rel = Path(result.get('path', ''))
+    path = output/rel
+    if (rel.is_absolute() or '..' in rel.parts or path.resolve() != path
+            or not path.is_relative_to(output) or not path.is_file()):
+        raise ValueError('Completed pilot escapes this input')
+    content = path.read_bytes()
+    if result.get('bytes') != len(content) or result.get('sha256') != hashlib.sha256(content).hexdigest():
+        raise ValueError('Completed pilot identity changed')
+    data = json.loads(content)
+    actions = [step for row in data.get('iterations', []) for step in row.get('e2b_steps', [])]
+    if len(actions) != expected_actions or data.get('n_e2b_steps') != expected_actions:
+        raise ValueError('Completed input action count differs')
+    steps = [data.get('root_setup', {})] + actions
+    seen, created = set(fresh_ids), []
+    for step in steps:
+        build = step.get('to_build')
+        if (step.get('ok') is not True or not isinstance(build, str)
+                or str(uuid.UUID(build)) != build or uuid.UUID(build).int == 0 or build in seen):
+            raise ValueError('Completed input reuses or omits a physical build identity')
+        receipt_path = Path(step.get('transport_receipt', ''))
+        if (not receipt_path.is_absolute() or receipt_path.resolve() != receipt_path
+                or not receipt_path.is_relative_to(output)):
+            raise ValueError('Completed transport receipt escapes this input')
+        bound = [r for r in record.get('artifacts', []) if r.get('path') == str(receipt_path.relative_to(output))]
+        receipt_bytes = receipt_path.read_bytes()
+        if (len(bound) != 1 or bound[0].get('bytes') != len(receipt_bytes)
+                or bound[0].get('sha256') != hashlib.sha256(receipt_bytes).hexdigest()):
+            raise ValueError('Completed transport receipt identity changed')
+        receipt = json.loads(receipt_bytes)
+        if (receipt.get('kind') != 'ssh-files-outside-inner-timers' or receipt.get('returncode') != 0
+                or receipt.get('transfer_errors') or receipt.get('to_build') != build
+                or receipt.get('from_build') not in seen or (not created and receipt.get('from_build') != base)):
+            raise ValueError('Completed transport build lineage differs')
+        seen.add(build);created.append(build)
+    return created
+
+
+def validate_post_closure(before, after_base, all_builds, storage, base, created=None):
+    """Keep every initial ancestor immutable and reject unaccounted new builds."""
+    initial = validate_snapshot_closure(before, storage, [base])
+    repeated = validate_snapshot_closure(after_base, storage, [base])
+    if repeated != initial or after_base['builds'] != before['builds']:
+        raise ValueError('Fresh base changed during input execution')
+    roots = all_builds.get('requested_builds')
+    all_files = validate_snapshot_closure(all_builds, storage, roots)
+    if (any(all_files.get(p) != row for p, row in initial.items())
+            or any(all_builds['builds'].get(b) != row for b, row in before['builds'].items())):
+        raise ValueError('Fresh base changed in complete post-input closure')
+    if created is not None:
+        expected = set(before['builds']) | set(created)
+        if (len(created) != len(set(created)) or set(created) & set(before['builds'])
+                or set(all_builds['builds']) != expected or set(roots) != expected):
+            raise ValueError('Snapshot count differs or identities differ from fresh closure+root+complete action contract')
+    return {'initial_build_ids': sorted(before['builds']), 'created_build_ids': created,
+            'all_build_ids': sorted(all_builds['builds'])}
+
+
 def base_proof(instance, build, root, raw, runtime_sha):
+    validate_snapshot_closure(raw, root+'/storage', [build])
     details = raw['builds'][build]
     memory = next(h for h in details['headers'] if h['file']=='memfile.header')
     disk = next(h for h in details['headers'] if h['file']=='rootfs.ext4.header')
@@ -340,18 +496,21 @@ def run(path):
                 item=items[index]
                 # Prove the old base did not change, including all six files.
                 raw=capture(vm,item['root'],[item['build']],item['row']/'base-after.json')
+                validate_snapshot_closure(raw, item['root']+'/storage', [item['build']])
                 if raw['files'] != item['base']['files'] or raw['builds'] != item['base']['builds']:
                     raise ValueError('Fresh base changed during input execution')
                 listing=guest_json(vm,"import json,pathlib\np=pathlib.Path("+repr(item['root']+'/storage/templates')+")\nprint(json.dumps(sorted(x.name for x in p.iterdir() if x.is_dir())))\n",log=item['row']/'list-builds')
                 all_builds=capture(vm,item['root'],listing,item['row']/'all-builds-after.json')
-                expected=COHORT[index-1][5]+2
-                if job.get('status')=='ok' and all_builds['build_count'] != expected:
-                    raise ValueError('Snapshot count differs from base+root+complete action contract')
+                created = (completed_build_ids(item['output'], set(item['base']['builds']), COHORT[index-1][5], item['build'])
+                           if job.get('status')=='ok' else None)
+                identities = validate_post_closure(item['base'], raw, all_builds,
+                    item['root']+'/storage', item['build'], created)
                 verify_runtime(vm,data,item['row']/'runtime-after.json')
                 ssh(vm,'sudo -n sync',log=item['row']/'sync')
                 job['paper_post_validation']=dict(status='verified',base_unchanged=True,
                     all_builds_manifest=str(item['row']/'all-builds-after.json'),
-                    sha256=digest(item['row']/'all-builds-after.json'),build_count=all_builds['build_count'])
+                    sha256=digest(item['row']/'all-builds-after.json'),build_count=all_builds['build_count'],
+                    snapshot_identities=identities)
             result=review.execute_plan(path,paper_context_ready=True,paper_before_job=before,paper_after_job=after)
             state.update(status='completed' if result==0 else 'failed',returncode=result)
             save_state()

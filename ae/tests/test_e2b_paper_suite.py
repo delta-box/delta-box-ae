@@ -15,6 +15,7 @@ import sys
 import tempfile
 import types
 import unittest
+import uuid
 from unittest.mock import Mock, patch
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -22,6 +23,30 @@ sys.path.insert(0,str(ROOT))
 from ae.scripts import e2b_paper_suite as m
 from ae.scripts import e2b_paper_profile as profile
 from ae.scripts import run_review as review
+
+
+def closure_fixture(storage, root_build, ancestors=2):
+    ids = [str(uuid.uuid4()) for _ in range(ancestors)] + [root_build]
+    raw = dict(schema_version=1, status='verified', storage=storage,
+               requested_builds=[root_build], build_count=len(ids), builds={}, files=[])
+    for index, build in enumerate(ids):
+        append_build(raw, build, ids[index-1] if index else None)
+    return raw
+
+
+def append_build(raw, build, parent=None):
+    refs = {build: {'mapped_bytes':4096,'required_file_bytes':4096}}
+    if parent: refs[parent] = {'mapped_bytes':4096,'required_file_bytes':4096}
+    raw['builds'][build] = dict(template=dict(build_id=build,
+        kernel_version='vmlinux-6.1.158',firecracker_version='v1.14.1_458ca91'),
+        headers=[dict(file=name,build=build,version=3,block_size=4096,
+                      logical_bytes=2048*1024**2 if name=='memfile.header' else 6185549824,
+                      referenced_builds=copy.deepcopy(refs))
+                 for name in ('memfile.header','rootfs.ext4.header')])
+    raw['files'].extend(dict(path=raw['storage']+'/templates/'+build+'/'+name,
+        bytes=4096,sha256=hashlib.sha256((build+name).encode()).hexdigest(),mtime_ns=1,ctime_ns=1)
+        for name in m.SNAPSHOT_FILES)
+    raw['build_count']=len(raw['builds'])
 
 
 class SuiteFixture(unittest.TestCase):
@@ -111,13 +136,7 @@ class SuiteFixture(unittest.TestCase):
         output=Path(output);idx=self.row_index(output)
         build=builds[0] if builds else 'missing'
         if output.name=='base-before.json':
-            raw={'status':'verified','build_count':1,
-                 'files':[{'path':guest_root+'/storage/templates/'+build+'/'+name,
-                           'bytes':4096,'sha256':hashlib.sha256(name.encode()).hexdigest(),
-                           'mtime_ns':1,'ctime_ns':1} for name in
-                          ('metadata.json','snapfile','memfile','memfile.header','rootfs.ext4','rootfs.ext4.header')],
-                 'builds':{build:{'headers':[{'file':'memfile.header','logical_bytes':2048*1024**2},
-                                            {'file':'rootfs.ext4.header','logical_bytes':5899000000}]}}}
+            raw=closure_fixture(guest_root+'/storage',build)
             self.base_records[guest_root]=copy.deepcopy(raw)
         elif output.name=='base-after.json':
             self.events.append(('after',idx))
@@ -125,14 +144,18 @@ class SuiteFixture(unittest.TestCase):
             if self.after_change_at==idx:raw['files'][0]['sha256']='f'*64
         else:
             raw=copy.deepcopy(self.base_records[guest_root])
-            raw['build_count']=m.COHORT[idx-1][5]+2-(1 if self.bad_count_at==idx else 0)
+            initial_root=raw['requested_builds'][0]
+            count=m.COHORT[idx-1][5]+1-(1 if self.bad_count_at==idx else 0)
+            for i in range(count):
+                append_build(raw,str(uuid.uuid5(uuid.UUID(initial_root),'step-'+str(i))),initial_root)
+            raw['requested_builds']=list(raw['builds'])
         m.write(output,raw)
         return raw
 
     def list_builds(self,vm,source,**kw):
         idx=self.row_index(kw['log'])
         self.assertIn('/storage/templates',source)
-        return ['fake-build-'+str(i) for i in range(m.COHORT[idx-1][5]+2)]
+        return ['fixture-listing-is-not-used-by-fake-capture']
 
     def verify_runtime(self,vm,data,result):
         idx=self.row_index(result)
@@ -151,6 +174,19 @@ class SuiteFixture(unittest.TestCase):
         self.assertEqual(effective['e2b']['execution'],'paper-nested-ready')
         self.assertFalse(effective['e2b']['warm_action_worker'])
         self.assertEqual(effective['e2b']['vcpus'],1)
+        initial=effective['e2b']['from_build']
+        steps=[];artifacts=[]
+        for i in range(m.COHORT[index-1][5]+1):
+            build=str(uuid.uuid5(uuid.UUID(initial),'step-'+str(i)))
+            receipt=target/('step-'+str(i)+'.json')
+            receipt.write_text(json.dumps(dict(kind='ssh-files-outside-inner-timers',returncode=0,
+                transfer_errors=[],from_build=initial,to_build=build)))
+            artifacts.append(dict(path=receipt.name,bytes=receipt.stat().st_size,sha256=hashlib.sha256(receipt.read_bytes()).hexdigest()))
+            steps.append(dict(ok=True,to_build=build,transport_receipt=str(receipt)))
+        pilot=dict(root_setup=steps[0],iterations=[dict(e2b_steps=steps[1:])],n_e2b_steps=len(steps)-1)
+        result=target/'pilot.json';result.write_text(json.dumps(pilot))
+        (target/'run.json').write_text(json.dumps(dict(status='ok',artifacts=artifacts,result=dict(path='pilot.json',
+            bytes=result.stat().st_size,sha256=hashlib.sha256(result.read_bytes()).hexdigest()))))
         return dict(job,status='failed' if self.producer_fail_at==index else 'ok')
 
     def assert_statuses(self,statuses):
@@ -177,10 +213,11 @@ class Lifecycle(SuiteFixture):
             self.assertEqual({r['file'] for r in proof['guest_proof']['snapshot_files']},
                 {'metadata.json','snapfile','memfile','memfile.header','rootfs.ext4','rootfs.ext4.header'})
             self.assertTrue(all('path' in r for r in proof['guest_proof']['snapshot_files']))
+            self.assertEqual(len(proof['guest_proof']['snapshot_files']),18)
             for marker in ('base-before.json','base-after.json','all-builds-after.json','runtime-after.json'):
                 self.assertTrue((evidence/marker).exists())
             job=self.suite()['jobs'][idx-1]
-            self.assertEqual(job['paper_post_validation']['build_count'],row[5]+2)
+            self.assertEqual(job['paper_post_validation']['build_count'],row[5]+4)
             self.assertEqual(job['paper_preparation']['sha256'],m.digest(evidence/'fresh-base.json'))
         self.assertEqual(len(roots),8);self.assertEqual(len(builds),8)
         self.assertEqual(self.events[0],('l1-enter',0));self.assertEqual(self.events[-1],('l1-exit',0))
@@ -710,6 +747,192 @@ class InstallForwardingOrder(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'forwarding unavailable'):
                 m.install_runtime(object(),{'files':[]},Path('/fake-evidence'))
             ready.assert_not_called()
+
+
+class ReceiptIdentity(SuiteFixture):
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(m.run(self.planpath),0)
+        self.target=self.output/self.plan['jobs'][0]['key']
+        self.pilotpath=self.target/'pilot.json'
+        self.pilot=json.loads(self.pilotpath.read_text())
+        self.recordpath=self.target/'run.json'
+        self.record=json.loads(self.recordpath.read_text())
+        self.raw=next(iter(self.base_records.values()))
+        self.base=self.raw['requested_builds'][0]
+
+    def check(self):
+        return m.completed_build_ids(self.target,set(self.raw['builds']),m.COHORT[0][5],self.base)
+
+    def rebind_pilot(self):
+        self.pilotpath.write_text(json.dumps(self.pilot))
+        self.record['result'].update(bytes=self.pilotpath.stat().st_size,sha256=hashlib.sha256(self.pilotpath.read_bytes()).hexdigest())
+        self.recordpath.write_text(json.dumps(self.record))
+
+    def test_complete_raw_receipts_bind_every_new_uuid(self):
+        self.assertEqual(len(self.check()),m.COHORT[0][5]+1)
+
+    def test_pilot_changed_after_bound_result_rejected(self):
+        self.pilotpath.write_text('{}')
+        with self.assertRaisesRegex(ValueError,'pilot identity'):self.check()
+
+    def test_receipt_changed_after_baseline_binding_rejected(self):
+        p=Path(self.pilot['root_setup']['transport_receipt'])
+        v=json.loads(p.read_text());v['to_build']=str(uuid.uuid4());p.write_text(json.dumps(v))
+        with self.assertRaisesRegex(ValueError,'receipt identity'):self.check()
+
+    def test_duplicate_action_build_rejected(self):
+        self.pilot['iterations'][0]['e2b_steps'][-1]['to_build']=self.pilot['root_setup']['to_build']
+        self.rebind_pilot()
+        with self.assertRaisesRegex(ValueError,'reuses'):self.check()
+
+    def test_missing_action_rejected(self):
+        self.pilot['iterations'][0]['e2b_steps'].pop();self.rebind_pilot()
+        with self.assertRaisesRegex(ValueError,'action count'):self.check()
+
+    def test_receipt_escape_rejected(self):
+        self.pilot['root_setup']['transport_receipt']=str(self.target/'..'/'foreign.json')
+        self.rebind_pilot()
+        with self.assertRaisesRegex(ValueError,'escapes'):self.check()
+
+    def test_changed_root_parent_rejected_even_if_rebound(self):
+        path=Path(self.pilot['root_setup']['transport_receipt'])
+        value=json.loads(path.read_text());value['from_build']=next(b for b in self.raw['builds'] if b!=self.base)
+        path.write_text(json.dumps(value))
+        row=next(r for r in self.record['artifacts'] if r['path']==path.name)
+        row.update(bytes=path.stat().st_size,sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+        self.recordpath.write_text(json.dumps(self.record))
+        with self.assertRaisesRegex(ValueError,'lineage'):self.check()
+
+
+class ClosureContract(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.output=Path(self.tmp.name)
+        self.build=str(uuid.uuid4())
+        self.storage='/var/tmp/e2b-paper-'+'a'*32+'/storage'
+        self.raw=closure_fixture(self.storage,self.build)
+
+    def check(self, raw=None):
+        return m.validate_snapshot_closure(raw or self.raw,self.storage,[self.build])
+
+    def test_three_build_closure_is_eighteen_distinct_files(self):
+        self.assertEqual(len(self.check()),18)
+        proof=m.base_proof('instance',self.build,self.storage[:-8],self.raw,'b'*64)
+        self.assertEqual(len(proof['guest_proof']['snapshot_files']),18)
+        self.assertEqual(proof['snapshot_closure'],self.raw)
+
+    def test_extra_unreferenced_build_rejected(self):
+        append_build(self.raw,str(uuid.uuid4()))
+        with self.assertRaisesRegex(ValueError,'unreferenced'):self.check()
+
+    def test_missing_ancestor_rejected(self):
+        parent=next(b for b in self.raw['builds'] if b!=self.build)
+        del self.raw['builds'][parent];self.raw['build_count']-=1
+        self.raw['files']=[r for r in self.raw['files'] if '/'+parent+'/' not in r['path']]
+        with self.assertRaisesRegex(ValueError,'missing'):self.check()
+
+    def test_missing_file_rejected(self):
+        self.raw['files'].pop()
+        with self.assertRaisesRegex(ValueError,'six files'):self.check()
+
+    def test_duplicate_file_rejected_even_with_correct_row_count(self):
+        self.raw['files'][-1]=copy.deepcopy(self.raw['files'][0])
+        with self.assertRaisesRegex(ValueError,'duplicated'):self.check()
+
+    def test_duplicate_requested_root_rejected(self):
+        self.raw['requested_builds']*=2
+        with self.assertRaisesRegex(ValueError,'requested'):self.check()
+
+    def test_bad_hash_rejected(self):
+        self.raw['files'][0]['sha256']='g'*64
+        with self.assertRaisesRegex(ValueError,'invalid'):self.check()
+
+    def test_file_path_escape_rejected(self):
+        self.raw['files'][0]['path']=self.storage+'/../elsewhere'
+        with self.assertRaisesRegex(ValueError,'invalid'):self.check()
+
+    def test_header_build_mismatch_rejected(self):
+        self.raw['builds'][self.build]['headers'][0]['build']=str(uuid.uuid4())
+        with self.assertRaisesRegex(ValueError,'identity'):self.check()
+
+    def test_short_mapped_parent_rejected(self):
+        self.raw['builds'][self.build]['headers'][0]['referenced_builds'][self.build]['required_file_bytes']=8192
+        with self.assertRaisesRegex(ValueError,'shorter'):self.check()
+
+    def test_wrong_header_runtime_rejected(self):
+        self.raw['builds'][self.build]['template']['kernel_version']='other'
+        with self.assertRaisesRegex(ValueError,'runtime'):self.check()
+
+    def test_complete_created_set_accepts_three_initial_ancestors(self):
+        allraw=copy.deepcopy(self.raw);created=[str(uuid.uuid4()) for _ in range(3)]
+        for build in created:append_build(allraw,build,self.build)
+        allraw['requested_builds']=list(allraw['builds'])
+        proof=m.validate_post_closure(self.raw,copy.deepcopy(self.raw),allraw,self.storage,self.build,created)
+        self.assertEqual(len(proof['initial_build_ids']),3)
+        self.assertEqual(proof['created_build_ids'],created)
+        self.assertEqual(len(proof['all_build_ids']),6)
+
+    def test_unaccounted_post_build_rejected_even_if_valid_header(self):
+        allraw=copy.deepcopy(self.raw);append_build(allraw,str(uuid.uuid4()),self.build)
+        allraw['requested_builds']=list(allraw['builds'])
+        with self.assertRaisesRegex(ValueError,'identities differ'):
+            m.validate_post_closure(self.raw,self.raw,allraw,self.storage,self.build,[])
+
+    def test_changed_ancestor_hash_rejected(self):
+        after=copy.deepcopy(self.raw);after['files'][0]['sha256']='f'*64
+        with self.assertRaisesRegex(ValueError,'Fresh base changed'):
+            m.validate_post_closure(self.raw,after,after,self.storage,self.build,None)
+
+    def test_changed_ancestor_in_all_capture_rejected(self):
+        after=copy.deepcopy(self.raw);after['requested_builds']=list(after['builds'])
+        after['files'][0]['mtime_ns']+=1
+        with self.assertRaisesRegex(ValueError,'Fresh base changed'):
+            m.validate_post_closure(self.raw,self.raw,after,self.storage,self.build,[])
+
+    def test_same_count_different_created_uuid_rejected(self):
+        after=copy.deepcopy(self.raw);append_build(after,str(uuid.uuid4()),self.build)
+        after['requested_builds']=list(after['builds'])
+        with self.assertRaisesRegex(ValueError,'identities differ'):
+            m.validate_post_closure(self.raw,self.raw,after,self.storage,self.build,[str(uuid.uuid4())])
+
+    def test_created_build_must_not_reuse_initial_ancestor(self):
+        after=copy.deepcopy(self.raw);after['requested_builds']=list(after['builds'])
+        with self.assertRaisesRegex(ValueError,'identities differ'):
+            m.validate_post_closure(self.raw,self.raw,after,self.storage,self.build,[self.build])
+
+    def configure(self, mutate=None):
+        sys.path.insert(0,str(ROOT/'ae'))
+        from ae.runners import e2b_environment as environment
+        fresh=m.base_proof('fixture-input',self.build,self.storage[:-8],self.raw,'b'*64)
+        if mutate:mutate(fresh)
+        freshpath=self.output/'fresh.json';freshpath.write_text(json.dumps(fresh))
+        manifest=self.output/'transport.json';manifest.write_text('{}')
+        transport=types.SimpleNamespace(manifest=dict(instance='fixture-input',fresh_base_build_id=self.build,
+            fresh_base_manifest=str(freshpath)),storage=self.storage,key=Path('/unused-key'),port=57785,runtime='/opt/e2b-paper/runtime')
+        config=m.ready_config(profile.effective({},profile.PROFILE),manifest,self.build,self.storage[:-8],14021,19661)
+        with patch('ae.scripts.e2b_paper_profile._root_read',side_effect=lambda p:Path(p).read_bytes()), \
+             patch('ae.scripts.e2b_paper_transport.Transport',return_value=transport), \
+             patch('subprocess.run',side_effect=AssertionError('No external commands')):
+            return environment.configure_paper(config,{},instance='fixture-input')
+
+    def test_three_build_base_proof_passes_real_configure_paper_without_ssh(self):
+        evidence=self.configure()
+        self.assertEqual(evidence['from_build'],self.build)
+        self.assertEqual(len(evidence['fresh_base_proof']['guest_proof']['snapshot_files']),18)
+        self.assertEqual(evidence['fresh_base_proof']['snapshot_closure']['build_count'],3)
+
+    def test_configure_rejects_truncating_proof_to_root_six(self):
+        with self.assertRaisesRegex(ValueError,'per closure build'):
+            self.configure(lambda f:f['guest_proof'].update(snapshot_files=f['guest_proof']['snapshot_files'][-6:]))
+
+    def test_configure_rejects_flat_file_hash_not_matching_closure(self):
+        with self.assertRaisesRegex(ValueError,'per closure build'):
+            self.configure(lambda f:f['guest_proof']['snapshot_files'][0].update(sha256='f'*64))
+
+    def test_configure_rejects_mismatched_actual_disk_bytes(self):
+        with self.assertRaisesRegex(ValueError,'disk resource'):
+            self.configure(lambda f:f['guest_proof'].update(actual_rootfs_bytes=4096))
 
 
 if __name__=='__main__':
