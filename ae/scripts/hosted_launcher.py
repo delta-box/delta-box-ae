@@ -264,6 +264,8 @@ def parse_arguments(argv):
     output = parser.add_mutually_exclusive_group()
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
+    parser.add_argument('--reuse-completed-from', type=Path, action=Once,
+                        help='Verify and reuse completed Figure9 jobs from a separate prior result; retain their original source')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
     parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
@@ -274,6 +276,11 @@ def parse_arguments(argv):
         parser.error('--all cannot be combined with a selected experiment/group')
     if args.list and (args.output or args.resume):
         parser.error('--list does not create or resume results')
+    if args.reuse_completed_from is not None:
+        selected_figure09 = 'figure-09' in (args.experiment or []) or 'figure-09' in (args.group or [])
+        if (not selected_figure09 or args.quick_check or args.all or args.resume or args.list
+                or args.limit is not None or args.max_events is not None):
+            parser.error('--reuse-completed-from requires explicit Figure9 selection, a new output, and complete inputs')
     if args.numa_node is not None or args.cpus is not None:
         if not args.quick_check or args.numa_node is None or args.cpus is None:
             parser.error('--numa-node and --cpus must be supplied together with --test')
@@ -380,6 +387,8 @@ def command_line(policy, args, output):
     for key in ('limit', 'max_events', 'numa_node', 'cpus'):
         if getattr(args, key) is not None:
             command += ['--' + key.replace('_', '-'), str(getattr(args, key))]
+    if args.reuse_completed_from is not None:
+        command += ['--reuse-completed-from', str(args.reuse_completed_from)]
     if output is not None:
         command += ['--resume' if args.resume else '--output', str(output)]
     return command
@@ -441,6 +450,11 @@ def main(argv=None):
         output = None if args.list else result_path(policy, selected, caller,
                                                     resume=bool(args.resume), trust=trust,
                                                     allow_root=not (args.quick_check or args.limit is not None or args.max_events is not None or args.experiment or args.group))
+        if args.reuse_completed_from is not None:
+            source = result_path(policy, args.reuse_completed_from, caller, resume=True, trust=trust)
+            if source == output or output.is_relative_to(source) or source.is_relative_to(output):
+                raise ValueError('Reused and new result directories must be separate')
+            args.reuse_completed_from = source
         command = command_line(policy, args, output)
         audit_launch(policy, caller, command, trust=trust)
         print(f'Hosted AE runtime: {runtime}; caller: {caller.pw_name} (uid {caller.pw_uid})', flush=True)

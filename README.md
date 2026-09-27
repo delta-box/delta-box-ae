@@ -328,6 +328,8 @@ The authors configure the remote model and Python environments. Admission probes
 
 **Goal.** Compare copy-up data and device writes when editing files on ext4, XFS, and XFS+reflink, evaluating whether shared data blocks reduce write amplification.
 
+The fixed [80-trajectory cohort](ae/paper/figure-09/cohort-80.json) runs each complete input on ext4, XFS, and XFS+reflink: **240 jobs**. It covers four model/search combinations, ten projects, and long edit sequences. There is no 185-input execution mode; historical inputs remain evidence. `--baseline-inputs all` affects only the three Table 2 baselines and does not change this Figure 9 cohort.
+
 **Run.**
 
 ```bash
@@ -335,6 +337,16 @@ bash ae/run_all.sh --group figure-09 --output "$AE_RUN/figure-09"
 ```
 
 A dedicated RAM-backed entry point and configuration are described in the [self-hosting and targeted-run guide](ae/docs/self-hosting.md#specialized-runs).
+
+To continue an interrupted Figure 9 run in a new output, reuse verified successful jobs and execute only missing jobs:
+
+```bash
+bash ae/run_all.sh --group figure-09 \
+  --reuse-completed-from "$AE_RUN/figure-09-old" \
+  --output "$AE_RUN/figure-09-continued"
+```
+
+Reuse verifies complete inputs, filesystem arms, resource settings, measurement code, and artifact hashes. Original results retain their original source identity, and reports distinguish reused and newly measured sources. Source and destination directories must be separate. This option reuses only Figure 9 and cannot be combined with `--resume`, quick checks, or input/event limits.
 
 **Output and interpretation.** In both panels of `figure-09-comparison.png`, compare the three curves within each file-size bin. Examine whether reflink reduces private copy-up data and how that reduction affects device I/O. Filesystem journals and metadata also generate writes, so these quantities need not be equal. The vertical axis is bytes/edit; device writes are measured using loop-device write counters.
 

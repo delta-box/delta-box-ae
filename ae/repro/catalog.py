@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 from .common import AE_ROOT, REPO_ROOT, configured_path, digest
+from .figure09_cohort import figure09_rows
 
 EXPERIMENTS = {
  'table-02-deltabox': 'Table 2 DeltaBox fast / Table 3 components / Figure 7 components',
@@ -24,7 +25,7 @@ EXPERIMENTS = {
  'figure-08-deltabox': 'Figure 8 CPU 64 MiB inherited-memory fanout',
  'figure-08-cube': 'Figure 8 official Cube sandbox fanout',
  'figure-08-e2b': 'Figure 8 official E2B sandbox fanout',
- 'figure-09': 'Figure 9 measured write amplification, 185 inputs x three filesystems',
+ 'figure-09': 'Figure 9 measured write amplification, fixed 80 inputs x three filesystems',
  'correctness': 'Recovered filesystem correctness tests (not a recovered 53-case suite)',
 }
 SKIPPED = [{'experiment':'figure-08-gpu','status':'not-run',
@@ -235,13 +236,17 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 add(experiment,key,[python,runner/'profile.py','--panel',panel,'--instance',row['instance'],
                     '--trace',AE_ROOT/row['local'],'--config',config_path,'--out',output/key],[row['local']])
         elif experiment=='figure-09':
-            rows=cohort('paper/figure-09/cohort-war.csv')
+            rows, selection = figure09_rows(cohort('paper/figure-09/cohort-war.csv'), config)
             if limit:rows=rows[:limit]
             for row in rows:
                 for arm in ('ext4','xfs','xfs_reflink'):
                     input_key=row['pool'].replace('/','_')+'__'+row['instance'];key=experiment+'__'+input_key+'__'+arm
                     add(experiment,key,[python,runner/'vm_experiment.py','--experiment',experiment,'--actions',AE_ROOT/row['action_local'],
                         '--input-key',input_key,'--arm',arm,'--config',config_path,'--out',output/key],[row['action_local']])
+                    jobs[-1]['input_selection'] = dict(selection)
+                    jobs[-1]['expected_edits'] = int(row['n_edits'])
+                    if not limit and not max_events:
+                        jobs[-1]['run_purpose'] = 'full-trace'
         elif experiment in ('figure-08-deltabox','correctness'):
             cmd=[python,runner/'vm_experiment.py','--experiment',experiment,'--config',config_path,'--out',output/experiment]
             if experiment.startswith('figure-08') and max_events:cmd+=['--forks','1']

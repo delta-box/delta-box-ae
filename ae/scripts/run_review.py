@@ -67,6 +67,8 @@ def parser():
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
     p.add_argument('--output', type=Path, help='Explicit new output directory; default full run rotates ae/results after verified backup')
     p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
+    p.add_argument('--reuse-completed-from', type=Path, metavar='RUN_DIR',
+                   help='Explicit Figure 9 completed-job import into a new output; retains original source identities')
     p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
                    help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
     p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
@@ -388,7 +390,7 @@ def execute_plan(path):
     """Run a frozen suite; Replay can reproduce the paper's 16 trace workers."""
     plan = json.loads(path.read_text())
     output = Path(plan['review_output'])
-    output.mkdir(parents=True, exist_ok=bool(plan.get('resume_verified')))
+    output.mkdir(parents=True, exist_ok=bool(plan.get('resume_verified') or plan.get('import_verified')))
     manifest = output / 'suite.json'
     workers = plan.get('workers', 1)
     if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
@@ -459,6 +461,12 @@ class Review:
             for flag, value in (('--limit', args.limit), ('--max-events', args.max_events)):
                 if value is not None:
                     self.limits += [flag, str(value)]
+        if getattr(args, 'reuse_completed_from', None):
+            if 'figure-09' not in self.experiments or args.quick_check or args.available or self.limits:
+                raise ValueError('--reuse-completed-from requires complete selected Figure 9 jobs')
+            source = args.reuse_completed_from.absolute()
+            if output.is_relative_to(source) or source.is_relative_to(output):
+                raise ValueError('Reuse source and new output must be disjoint')
         self.attempt = 'attempt-001'
         self.record = dict(schema_version=2, status='running', experiments=self.experiments,
                            selection_mode='available' if self.available else 'required',
@@ -480,6 +488,8 @@ class Review:
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
             self.previous_record = previous
+            if previous.get('completed_job_reuse'):
+                self.record['completed_job_reuse'] = copy.deepcopy(previous['completed_job_reuse'])
             if previous.get('release', {}).get('source_sha256') != self.record['release']['source_sha256']:
                 raise ValueError('Resume source fingerprint differs; start a new output')
             if previous.get('baseline_inputs', 'all') != self.record['baseline_inputs']:
@@ -503,6 +513,13 @@ class Review:
             reasons = '; '.join(row.get('reasons', [])) or ('See review.json for unavailable jobs' if row.get('unavailable_jobs') else '')
             reasons = reasons.replace('|', '\\|').replace('\n', ' ')
             lines.append(f'| {row["experiment"]} | {row["status"]} | {row.get("available_jobs", 0)} / {row.get("planned_jobs", "?")} | {reasons} |')
+        imported = self.record.get('completed_job_reuse')
+        if imported:
+            old = imported['original_release']
+            lines += ['', f"Figure 9 explicitly reuses {imported['reused_jobs']} verified completed jobs from "
+                      f"`{old['source_commit']}` (source SHA-256 `{old['source_sha256']}`). "
+                      'Their original manifests are retained byte for byte; new jobs use the planner source. '
+                      'This is a multi-source campaign; statistical populations remain separate.', '']
         lines += ['', '| Step | Status | Log |', '|---|---|---|']
         for step in self.record['steps']:
             lines.append(f'| {step["name"]} | {step["status"]} | [log]({step["log"]}) |')
@@ -675,6 +692,22 @@ class Review:
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
+        if name == 'figure-09' and getattr(self.args, 'reuse_completed_from', None):
+            from ae.repro.figure09_reuse import prepare_reuse
+            from ae.repro.result_storage import active_references
+            imported = prepare_reuse(plan, self.args.reuse_completed_from, suite, repo=REPO,
+                verify_images=lambda value: verify_reused_images(value,
+                    cache=self.output / f'.reuse-image-hashes-{os.geteuid()}.json'),
+                check_active=active_references)
+            row['reused_jobs'] = [job['job'] for job in imported['jobs']]
+            row['measurement_sources'] = plan['measurement_sources']
+            row['reuse_manifest'] = plan['reuse_manifest']
+            self.record['completed_job_reuse'] = dict(
+                experiment=name, reused_jobs=imported['reused_jobs'], selected_jobs=len(jobs),
+                original_release=imported['original_release'], planner_release=self.record['release'],
+                manifest=plan['reuse_manifest'],
+                analysis_policy=imported['analysis_policy'])
+            self.save()
         if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
             if not pinned:
                 raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
@@ -719,6 +752,9 @@ class Review:
         for job in plan['jobs']:
             prior = previous.get(job['key'])
             if prior and prior.get('status') == 'ok':
+                if prior.get('execution') == 'copied-completed-measurement':
+                    from ae.repro.figure09_reuse import verify_imported_job
+                    verify_imported_job(prior, old)
                 # Generated config paths are attempt-specific; compare their contents above.
                 def normalized(command):
                     result = list(command)
@@ -738,6 +774,9 @@ class Review:
                     verify_reused_images(validated.config,
                         cache=self.output / f'.resume-image-hashes-{os.geteuid()}.json')
                 job.update(status='ok', reused_verified=True, process_manifest=prior.get('process_manifest'))
+                for field in ('execution', 'measurement_release', 'original_run', 'reuse_origin'):
+                    if field in prior:
+                        job[field] = copy.deepcopy(prior[field])
                 reused.append(job['key'])
             elif (suite / job['key']).exists():
                 failed_paths.append(job['key'])
@@ -746,6 +785,10 @@ class Review:
             saved = self.output / 'failed-attempts' / self.attempt / row['experiment'] / key
             saved.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(suite / key), saved)
+        for field in ('measurement_sources', 'reuse_manifest'):
+            if field in old:
+                plan[field] = copy.deepcopy(old[field])
+                row[field] = copy.deepcopy(old[field])
         plan['resume_verified'] = True
         row['reused_jobs'] = reused
 
@@ -978,6 +1021,9 @@ def main(argv=None):
         p.error('limits must be positive')
     if not args.analyze_existing and sys.platform != 'linux':
         p.error('Measurements require the Linux AE host; use --analyze-existing to plot copied evidence locally')
+    if args.reuse_completed_from and (not args.output or args.resume or args.analyze_existing or args.quick_check
+            or args.all or args.available or args.limit is not None or args.max_events is not None):
+        p.error('--reuse-completed-from requires a new explicit --output and complete selected experiments')
     if args.resume and (args.output or args.analyze_existing):
         p.error('--resume cannot be combined with --output/--analyze-existing')
     try:

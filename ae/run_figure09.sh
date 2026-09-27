@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Figure 9: all 185 inputs, RAM-backed storage, NUMA 2, maximum P-state.
+# Figure 9: fixed 80 inputs, RAM-backed storage, NUMA 2, maximum P-state.
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 python=${AE_PYTHON:-$repo/.venv/bin/python}

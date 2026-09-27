@@ -310,6 +310,8 @@ bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 
 **验证目标。** 比较 ext4、XFS 与 XFS+reflink 在编辑文件时产生的 copy-up 数据和设备写入量，评估共享数据块能否减少写放大。
 
+固定运行 [80 条轨迹](ae/paper/figure-09/cohort-80.json)，每条完整执行 ext4、XFS 和 XFS+reflink，共 **240 项**。清单覆盖四种模型/搜索组合、十个项目及编辑数量长尾；不再提供 185 条完整运行模式，历史输入只保留作证据。`--baseline-inputs all` 仅影响 Table 2 的三个基线，不改变 Figure 9 的 80 条清单。
+
 **运行。**
 
 ```bash
@@ -317,6 +319,16 @@ bash ae/run_all.sh --group figure-09 --output "$AE_RUN/figure-09"
 ```
 
 内存盘专用入口及配置见[自建与定向运行指南](ae/docs/self-hosting-zh.md#specialized-runs)。
+
+已有一轮中断结果时，可在新输出中复用经过核验的 Figure 9 成功项，只运行缺项：
+
+```bash
+bash ae/run_all.sh --group figure-09 \
+  --reuse-completed-from "$AE_RUN/figure-09-old" \
+  --output "$AE_RUN/figure-09-continued"
+```
+
+复用检查完整输入、文件系统、资源配置、实际测量代码和产物哈希。旧结果保持原源码身份，报告分别列出复用与新测来源；来源目录与新输出必须分开。该选项只复用 Figure 9，不能与 `--resume`、快速检查或输入/事件限额合用。
 
 **输出与判断。** 查看 `figure-09-comparison.png` 的两个面板，在相同文件大小桶内比较三条曲线。关注 reflink 是否降低 copy-up 私有数据量，以及这种降低如何反映到设备 I/O；文件系统日志和元数据也会产生写入，因此两者不要求相等。纵轴为 bytes/edit，设备计量来自 loop 写入量。
 
