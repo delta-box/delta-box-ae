@@ -1,6 +1,9 @@
 """Offline transport tests. All SSH/SCP and owned-process queries are faked."""
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stdout
 import importlib.util
+import io
+import shlex
+import struct
 import hashlib
 import json
 import os
@@ -280,6 +283,13 @@ class Step(TransportFixture):
         self.driver=types.SimpleNamespace(e2b_resume_build_cmd=self.build_command)
         self.t.remote=Mock(side_effect=self.remote)
         self.t.copy=Mock(side_effect=self.copy)
+        self.capacity_calls=[]
+        def admitted(build,pending,evidence,*,download_count=0):
+            self.capacity_calls.append((build,pending,str(evidence),download_count))
+            self.trace.append(('capacity',pending))
+            Path(evidence).write_text(json.dumps({'status':'verified','pending_upload_bytes':pending}))
+            return {'status':'verified'}
+        self.t.capacity_guard=Mock(side_effect=admitted)
         self.kw={'from_build':str(uuid.uuid4()),'to_build':str(uuid.uuid4()),
                  'storage':self.t.storage,'command':'python3 /tmp/fixed.py',
                  'timings_path':self.timing,'uploads':[(self.payload,'/tmp/payload')],
@@ -455,6 +465,207 @@ class Installation(TransportFixture):
     def test_install_without_explicit_profile_transport_fails(self):
         with patch.dict(os.environ,{},clear=True),self.assertRaises(ValueError):
             m.install(types.SimpleNamespace())
+
+
+class Capacity(TransportFixture):
+    def setUp(self):
+        super().setUp()
+        self.asset=self.root/'assets.json';self.asset.write_text(json.dumps({'disk_size_gib':128}))
+        self.life.write_text(json.dumps(dict(status='ready',ownership=self.identity,
+            asset_manifest=dict(path=str(self.asset),sha256=hashlib.sha256(self.asset.read_bytes()).hexdigest()),
+            reconstruction={'disk_size_gib':128})))
+        (self.root/'l1.qcow2').write_bytes(b'fixed tiny overlay')
+        self.t=self.transport()
+        self.build=str(uuid.uuid4());self.guest=self.root/'guest-storage';self.guest.mkdir()
+        self.expected={'memfile.header':2048*1024**2,'rootfs.ext4.header':5899*1024**2}
+        self.fresh=self.root/'fresh.json'
+        self.fresh.write_text(json.dumps(dict(guest_storage=str(self.guest),fresh_base_build_id=self.build,
+            snapshot_closure={'builds':{self.build:{'headers':[dict(file=k,logical_bytes=v) for k,v in self.expected.items()]}}})))
+        self.t.storage=str(self.guest);self.t.manifest.update(fresh_base_manifest=str(self.fresh),fresh_base_build_id=self.build)
+        self.headerdir=self.guest/'templates'/self.build;self.headerdir.mkdir(parents=True)
+        for name,size in self.expected.items():
+            (self.headerdir/name).write_bytes(struct.pack('<QQQQ16s16s',3,4096,size,1,uuid.UUID(self.build).bytes,uuid.UUID(self.build).bytes))
+        self.cache_bytes=0
+        for name,size in (('memfile',32100),('rootfs.ext4',412000),('metadata.json',2),('snapfile',8)):
+            (self.headerdir/name).write_bytes(b'x'*size)
+            if name in ('memfile','rootfs.ext4'):self.cache_bytes+=size
+        self.available=100*1024**3
+        def statvfs(path):
+            return types.SimpleNamespace(f_bavail=self.available if Path(path)==self.guest else 200*1024**3,f_frsize=1)
+        self.stack.enter_context(patch.object(m.os,'statvfs',side_effect=statvfs))
+        self.host=self.stack.enter_context(patch.object(l1,'capacity',return_value={'available_bytes':200*1024**3,'required_bytes':138*1024**3}))
+        self.t.remote=Mock(side_effect=self.remote_probe)
+        self.evidence=self.output/'capacity.json'
+
+    def remote_probe(self,command,**kw):
+        parts=shlex.split(command)
+        self.assertEqual(parts[:5],['sudo','-n','python3','-B','-c'])
+        self.assertEqual(kw['timeout'],30)
+        buf=io.StringIO()
+        with redirect_stdout(buf):exec(compile(parts[5],'<guest-capacity>','exec'),{})
+        return subprocess.CompletedProcess([],0,buf.getvalue(),'')
+
+    def check(self,pending=0,downloads=0):
+        return self.t.capacity_guard(self.build,pending,self.evidence,download_count=downloads)
+
+    def test_two_copies_and_full_parent_data_headers_upload_and_reserve(self):
+        pending=1234567;proof=self.check(pending)
+        g=proof['guest']
+        self.assertEqual(g['full_copy_count'],2)
+        self.assertEqual(g['required_bytes'],2*sum(self.expected.values())+self.cache_bytes+256*1024**2+pending+10*1024**3)
+        self.assertEqual(g['logical_bytes'],self.expected)
+        self.assertEqual(proof['status'],'verified')
+        self.assertEqual(self.evidence.stat().st_mode&0o777,0o600)
+        self.host.assert_called_once_with(self.root,128,allocated=(self.root/'l1.qcow2').stat().st_blocks*512)
+
+    def test_parent_data_larger_than_logical_is_fully_charged(self):
+        p=self.headerdir/'memfile'
+        size=2*sum(self.expected.values())
+        with p.open('r+b') as stream:stream.truncate(size)
+        self.cache_bytes=size+412000
+        proof=self.check()
+        self.assertEqual(proof['guest']['parent_cache_bound_bytes'],self.cache_bytes)
+        self.assertGreater(proof['guest']['parent_cache_bound_bytes'],sum(self.expected.values()))
+        self.assertEqual(proof['guest']['required_bytes'],2*sum(self.expected.values())+self.cache_bytes+256*1024**2+10*1024**3)
+
+    def test_parent_data_symlink_rejected(self):
+        p=self.headerdir/'memfile';p.unlink();p.symlink_to(self.root/'l1.qcow2')
+        with self.assertRaisesRegex(AssertionError,'independent'):self.check()
+
+    def test_missing_parent_file_rejected(self):
+        (self.headerdir/'memfile').unlink()
+        with self.assertRaisesRegex(AssertionError,'file set'):self.check()
+
+    def test_unknown_build_directory_rejected(self):
+        (self.guest/'templates/not-a-uuid').mkdir()
+        with self.assertRaises(ValueError):self.check()
+
+    def test_explicit156_capacity_is_supported_without_changing_inner_sizes(self):
+        self.asset.write_text(json.dumps({'disk_size_gib':156}))
+        d=json.loads(self.life.read_text());d['asset_manifest']['sha256']=hashlib.sha256(self.asset.read_bytes()).hexdigest();d['reconstruction']['disk_size_gib']=156;self.life.write_text(json.dumps(d))
+        self.assertEqual(self.check()['guest']['logical_bytes'],self.expected)
+        self.assertEqual(self.host.call_args.args[1],156)
+
+    def test_larger_logical_disk_increases_metadata_budget(self):
+        self.expected['rootfs.ext4.header']=64*1024**3
+        d=json.loads(self.fresh.read_text())
+        d['snapshot_closure']['builds'][self.build]['headers']=[dict(file=k,logical_bytes=v) for k,v in self.expected.items()]
+        self.fresh.write_text(json.dumps(d))
+        p=self.headerdir/'rootfs.ext4.header'
+        p.write_bytes(struct.pack('<QQQQ16s16s',3,4096,self.expected['rootfs.ext4.header'],1,uuid.UUID(self.build).bytes,uuid.UUID(self.build).bytes))
+        self.available=200*1024**3
+        g=self.check()['guest']
+        expected=2*sum((n//4096)*40+64 for n in self.expected.values())+32*1024**2
+        self.assertGreater(expected,256*1024**2)
+        self.assertEqual(g['metadata_reserve_bytes'],expected)
+
+    def test_lifecycle_disk_manifest_mismatch_rejected(self):
+        d=json.loads(self.life.read_text());d['reconstruction']['disk_size_gib']=156
+        self.life.write_text(json.dumps(d))
+        with self.assertRaisesRegex(ValueError,'disk capacity identity'):self.check()
+        self.t.remote.assert_not_called()
+
+    def test_cache_hardlink_rejected(self):
+        os.link(self.headerdir/'memfile',self.root/'foreign-link')
+        with self.assertRaisesRegex(AssertionError,'independent'):self.check()
+
+    def test_declared_response_outputs_reserve_one_rootfs_each(self):
+        g=self.check(17,downloads=2)['guest']
+        self.assertEqual(g['download_count'],2)
+        self.assertEqual(g['download_bound_bytes'],2*self.expected['rootfs.ext4.header'])
+        self.assertEqual(g['required_bytes'],2*sum(self.expected.values())+self.cache_bytes+2*self.expected['rootfs.ext4.header']+256*1024**2+17+10*1024**3)
+
+    def test_download_reserve_one_byte_short_rejects(self):
+        self.available=2*sum(self.expected.values())+self.cache_bytes+self.expected['rootfs.ext4.header']+256*1024**2+10*1024**3-1
+        with self.assertRaisesRegex(ValueError,'Insufficient'):self.check(downloads=1)
+
+    def test_noninteger_download_count_rejected_before_guest(self):
+        with self.assertRaisesRegex(ValueError,'download count'):self.check(downloads=True)
+        self.t.remote.assert_not_called()
+
+    def test_host_capacity_failure_precedes_guest(self):
+        self.host.side_effect=ValueError('Insufficient full-growth capacity')
+        with self.assertRaisesRegex(ValueError,'full-growth'):self.check()
+        self.t.remote.assert_not_called()
+        data=json.loads(self.evidence.read_text())
+        self.assertEqual(data['status'],'failed');self.assertIn('host_observed',data)
+
+    def test_guest_one_byte_short_rejected_with_actual_values(self):
+        self.available=2*sum(self.expected.values())+self.cache_bytes+256*1024**2+10*1024**3-1
+        with self.assertRaisesRegex(ValueError,'Insufficient'):self.check()
+        d=json.loads(self.evidence.read_text());self.assertEqual(d['guest']['status'],'insufficient')
+        self.assertEqual(d['guest']['required_bytes']-d['guest']['available_bytes'],1)
+
+    def test_guest_exact_boundary_passes(self):
+        self.available=2*sum(self.expected.values())+self.cache_bytes+256*1024**2+10*1024**3
+        self.assertEqual(self.check()['status'],'verified')
+
+    def test_pending_upload_is_charged(self):
+        self.available=2*sum(self.expected.values())+self.cache_bytes+256*1024**2+10*1024**3
+        with self.assertRaisesRegex(ValueError,'Insufficient'):self.check(1)
+
+    def test_header_uuid_mismatch_rejected(self):
+        p=self.headerdir/'memfile.header';p.write_bytes(struct.pack('<QQQQ16s16s',3,4096,self.expected['memfile.header'],1,uuid.uuid4().bytes,uuid.uuid4().bytes))
+        with self.assertRaisesRegex(AssertionError,'identity'):self.check()
+        self.assertEqual(json.loads(self.evidence.read_text())['status'],'failed')
+
+    def test_header_logical_mismatch_rejected(self):
+        p=self.headerdir/'rootfs.ext4.header';p.write_bytes(struct.pack('<QQQQ16s16s',3,4096,4096,1,uuid.UUID(self.build).bytes,uuid.UUID(self.build).bytes))
+        with self.assertRaisesRegex(AssertionError,'dimensions'):self.check()
+
+    def test_header_symlink_rejected_before_read(self):
+        p=self.headerdir/'memfile.header';other=self.root/'elsewhere';other.write_bytes(p.read_bytes());p.unlink();p.symlink_to(other)
+        with self.assertRaisesRegex(AssertionError,'symlink'):self.check()
+
+    def test_storage_symlink_rejected(self):
+        alias=self.root/'alias';alias.symlink_to(self.guest);self.t.storage=str(alias)
+        d=json.loads(self.fresh.read_text());d['guest_storage']=str(alias);self.fresh.write_text(json.dumps(d))
+        with self.assertRaisesRegex(AssertionError,'canonical'):self.check()
+
+    def test_changed_asset_manifest_rejected_before_guest(self):
+        self.asset.write_text('{"disk_size_gib":80}')
+        with self.assertRaisesRegex(ValueError,'manifest changed'):self.check()
+        self.t.remote.assert_not_called()
+
+    def test_guest_malformed_result_rejected_with_evidence(self):
+        self.t.remote.side_effect=None;self.t.remote.return_value=subprocess.CompletedProcess([],0,'{}','')
+        with self.assertRaisesRegex(ValueError,'[Ii]nvalid'):self.check()
+        self.assertEqual(json.loads(self.evidence.read_text())['status'],'failed')
+
+    def test_guest_timeout_does_not_admit(self):
+        self.t.remote.side_effect=subprocess.TimeoutExpired('probe',30)
+        with self.assertRaises(subprocess.TimeoutExpired):self.check()
+        self.assertEqual(json.loads(self.evidence.read_text())['status'],'failed')
+
+
+class CapacityDispatchOrder(Step):
+    def test_success_checks_before_upload_and_resume_without_double_count(self):
+        self.assertTrue(self.step()['ok'])
+        self.assertEqual([x[1] for x in self.capacity_calls],[self.payload.stat().st_size,0])
+        self.assertEqual([x[3] for x in self.capacity_calls],[1,1])
+        self.assertEqual(self.trace[0],('capacity',self.payload.stat().st_size))
+        second=self.trace.index(('capacity',0));dispatch=self.trace.index(('remote','RUN_DRIVER'))
+        self.assertLess(second,dispatch)
+        self.assertTrue(any(x[:2]==('copy',True) for x in self.trace[:second]))
+
+    def test_first_capacity_failure_has_no_upload_or_resume(self):
+        self.t.capacity_guard.side_effect=ValueError('not enough guest space')
+        with self.assertRaisesRegex(ValueError,'guest space'):self.step()
+        self.t.remote.assert_not_called();self.t.copy.assert_not_called()
+        self.assertIsNone(self.command_args)
+
+    def test_recheck_failure_keeps_upload_receipt_and_never_builds_physical_command(self):
+        admitted=self.t.capacity_guard.side_effect
+        def guard(build,pending,path,**kw):
+            if pending==0:raise ValueError('space changed before resume')
+            return admitted(build,pending,path,**kw)
+        self.t.capacity_guard.side_effect=guard
+        with self.assertRaisesRegex(ValueError,'before resume'):self.step()
+        self.assertIsNone(self.command_args)
+        self.assertFalse(any(x==('remote','RUN_DRIVER') for x in self.trace))
+        receipt=json.loads(next(self.output.glob('*.transport/receipt.json')).read_text())
+        self.assertFalse(receipt['physical_resume_dispatched']);self.assertFalse(receipt['ok'])
+        self.assertEqual(len(receipt['uploads']),1)
 
 
 if __name__=='__main__':

@@ -79,10 +79,12 @@ class Manifest(AssetsFixture):
         self.assertTrue(key.startswith('ssh-ed25519 '))
         self.assertEqual(shares, [(self.share, 'ae_assets')])
 
-    def test_80_disk_is_allowed(self):
-        self.value['disk_size_gib'] = 80
-        self.write_manifest()
-        self.assertEqual(m.read_manifest(self.config)[0]['disk_size_gib'], 80)
+    def test_reviewed_disk_capacities_are_allowed(self):
+        for disk_gib in (80, 128, 156):
+            with self.subTest(disk_gib=disk_gib):
+                self.value['disk_size_gib'] = disk_gib
+                self.write_manifest()
+                self.assertEqual(m.read_manifest(self.config)[0]['disk_size_gib'], disk_gib)
 
     def test_arbitrary_sizes_denied(self):
         for val in (64, 256, True, '128'):

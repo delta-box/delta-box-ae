@@ -20,7 +20,7 @@ from ae.scripts.e2b_paper_profile import verify_inputs, validate_effective, COHO
 
 REPO = Path('/home/atc-ae/delta-box-ae')
 WORK = REPO / 'ae/work/e2b-paper-reproduction'
-DEPLOYMENT = WORK / 'runtime-deployment.json'
+DEPLOYMENT = WORK / 'runtime-deployment-156g.json'
 GUEST = '/opt/e2b-paper'
 ENV = {'HOST_ENVD_PATH': GUEST+'/runtime/envd/envd',
        'HOST_BUSYBOX_DIR': GUEST+'/runtime/busybox', 'BUSYBOX_VERSION': '1.36.1',
@@ -45,7 +45,7 @@ def checked_deployment():
     if data.get('schema_version') != 1 or data.get('kind') != 'e2b-paper-runtime-deployment-v1':
         raise ValueError('Unknown paper runtime deployment')
     l1 = file_asset(data['l1_manifest'])
-    if l1 != WORK/'l1-measurement-assets.json' or data.get('share_tag') != 'ae_runtime_v1':
+    if l1 != WORK/'l1-measurement-assets-156g.json' or data.get('share_tag') != 'ae_runtime_v1':
         raise ValueError('Unexpected paper assets or share')
     if data.get('oci_manifest') != 'sha256:9da1d3aecd725a91d879bbc59e9872ed4cab3b98d21b802426a24f877d69ee12':
         raise ValueError('Offline OCI manifest differs from recovered layers')

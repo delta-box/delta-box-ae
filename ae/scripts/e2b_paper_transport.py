@@ -126,6 +126,150 @@ class Transport:
             json.dump({'scope': 'L1 to controller through QEMU user-network gateway; L2 checked separately', 'sidecars': evidence}, stream, indent=2)
         return evidence
 
+    def capacity_guard(self, from_build, pending_upload_bytes, evidence, *, download_count=0):
+        """Read-only admission outside all Go timers; never dispatch on failure.
+
+        Reserve two full memory+rootfs copies (pause working output and saved
+        snapshot), all retained input data files as a parent-read-cache upper
+        bound, one rootfs of bytes per declared response download, worst-case
+        V3 headers and metadata, uploads not yet copied,
+        and 10GiB free inside L1. Host admission retains the already reviewed
+        full remaining qcow growth plus 10GiB rule.
+        """
+        from ae.scripts.e2b_l1_context import capacity, trusted
+        proof = {'status': 'checking', 'from_build': from_build,
+                 'pending_upload_bytes': pending_upload_bytes, 'download_count': download_count,
+                 'scope': 'read-only before physical resume; outside C/R timers'}
+        try:
+            self.guard()
+            if str(uuid.UUID(from_build)) != from_build:
+                raise ValueError('Noncanonical capacity build UUID')
+            if type(pending_upload_bytes) is not int or pending_upload_bytes < 0:
+                raise ValueError('Invalid pending upload capacity')
+            if type(download_count) is not int or download_count < 0:
+                raise ValueError('Invalid response download count')
+            life = json.loads(trusted(self.lifecycle).read_text())
+            asset = life['asset_manifest']
+            raw = trusted(asset['path']).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != asset['sha256']:
+                raise ValueError('Owned L1 asset manifest changed')
+            value = json.loads(raw)
+            disk_gib = value.get('disk_size_gib')
+            if (type(disk_gib) is not int or disk_gib not in (80, 128, 156)
+                    or life.get('reconstruction', {}).get('disk_size_gib') != disk_gib):
+                raise ValueError('Owned L1 disk capacity identity differs')
+            overlay = trusted(self.lifecycle.parent/'l1.qcow2')
+            allocated = overlay.stat().st_blocks*512
+            fs = os.statvfs(overlay.parent)
+            proof['host_observed'] = dict(available_bytes=fs.f_bavail*fs.f_frsize,
+                required_bytes=max(0,disk_gib*1024**3-allocated)+10*1024**3,
+                allocated_overlay_bytes=allocated,disk_size_gib=disk_gib)
+            proof['host'] = capacity(overlay.parent,disk_gib,allocated=allocated)
+            fresh = json.loads(trusted(self.manifest['fresh_base_manifest']).read_text())
+            if (fresh.get('guest_storage') != self.storage or fresh.get('fresh_base_build_id')
+                    != self.manifest.get('fresh_base_build_id')):
+                raise ValueError('Fresh capacity proof differs from owned storage/base')
+            headers = fresh['snapshot_closure']['builds'][fresh['fresh_base_build_id']]['headers']
+            expected = {h['file']: h['logical_bytes'] for h in headers}
+            if (set(expected) != {'memfile.header','rootfs.ext4.header'}
+                    or len(headers) != 2 or expected['memfile.header'] != 2048*1024**2
+                    or any(type(v) is not int or v <= 0 or v % 4096 or v > disk_gib*1024**3 for v in expected.values())):
+                raise ValueError('Fresh capacity header dimensions are invalid')
+            source = '''import json,os,pathlib,stat,struct,uuid
+storage=STORAGE
+build=BUILD
+expected=EXPECTED
+pending=PENDING
+download_count=DOWNLOAD_COUNT
+root=pathlib.Path(storage)
+assert root.resolve()==root and root.is_dir(), 'storage is not canonical'
+dev=root.stat().st_dev
+proof={'storage':storage,'from_build':build,'logical_bytes':{},'headers':[]}
+for name in ('memfile.header','rootfs.ext4.header'):
+ p=root/'templates'/build/name
+ assert p.resolve()==p and not any(x.is_symlink() for x in (p,*p.parents)), 'header path is a symlink'
+ fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW)
+ try:
+  st=os.fstat(fd)
+  assert stat.S_ISREG(st.st_mode) and st.st_nlink==1 and st.st_dev==dev, 'header must be an independent file on storage filesystem'
+  data=os.read(fd,64)
+  assert len(data)==64, 'truncated V3 header'
+  version,block,size,generation,ident,base=struct.unpack('<QQQQ16s16s',data)
+  assert version==3 and block==4096 and str(uuid.UUID(bytes=ident))==build, 'V3 header identity/version differs'
+  assert size==expected[name] and size>0 and size%block==0, 'logical header dimensions changed'
+  again=os.fstat(fd)
+  assert (st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)==(again.st_ino,again.st_size,again.st_mtime_ns,again.st_ctime_ns), 'header changed during capacity read'
+  proof['logical_bytes'][name]=size
+  proof['headers'].append({'path':str(p),'bytes':st.st_size,'inode':st.st_ino})
+ finally:os.close(fd)
+templates=root/'templates'
+assert templates.resolve()==templates and templates.is_dir(), 'templates is not canonical'
+files=('metadata.json','snapfile','memfile','memfile.header','rootfs.ext4','rootfs.ext4.header')
+children=sorted(templates.iterdir())
+cache_rows=[]
+for folder in children:
+ assert folder.resolve()==folder and not folder.is_symlink() and folder.is_dir(), 'cache build directory is not canonical'
+ assert str(uuid.UUID(folder.name))==folder.name, 'cache build UUID is not canonical'
+ assert {p.name for p in folder.iterdir()}==set(files), 'cache build file set differs'
+ for name in ('memfile','rootfs.ext4'):
+  p=folder/name;st=p.lstat()
+  assert stat.S_ISREG(st.st_mode) and st.st_nlink==1 and st.st_dev==dev, 'cache data must be an independent file on storage filesystem'
+  cache_rows.append(dict(path=str(p),bytes=st.st_size,inode=st.st_ino,mtime_ns=st.st_mtime_ns,ctime_ns=st.st_ctime_ns))
+for row in cache_rows:
+ st=pathlib.Path(row['path']).lstat()
+ assert (st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)==(row['inode'],row['bytes'],row['mtime_ns'],row['ctime_ns']), 'cache data changed during capacity read'
+assert sorted(templates.iterdir())==children, 'cache build set changed during capacity read'
+cache_bytes=sum(row['bytes'] for row in cache_rows)
+proof['parent_cache_data_files']=cache_rows
+proof['parent_cache_bound_bytes']=cache_bytes
+fs=os.statvfs(root)
+logical=sum(proof['logical_bytes'].values())
+metadata=max(256*1024**2,2*sum((v//4096)*40+64 for v in proof['logical_bytes'].values())+32*1024**2)
+download_bytes=download_count*expected['rootfs.ext4.header']
+required=2*logical+cache_bytes+download_bytes+metadata+pending+10*1024**3
+available=fs.f_bavail*fs.f_frsize
+proof.update(status='verified' if available>=required else 'insufficient',available_bytes=available,
+ required_bytes=required,pending_upload_bytes=pending,download_count=download_count,download_bound_bytes=download_bytes,full_copy_count=2,metadata_reserve_bytes=metadata,
+ free_reserve_bytes=10*1024**3,formula='2*(memory+rootfs)+all-input-data-files+download-count*rootfs+max(256MiB,2*V3-worst-headers+32MiB)+pending-upload+10GiB')
+print(json.dumps(proof,sort_keys=True))
+'''.replace('STORAGE',repr(self.storage)).replace('BUILD',repr(from_build)).replace('EXPECTED',repr(expected)).replace('PENDING',str(pending_upload_bytes)).replace('DOWNLOAD_COUNT',str(download_count))
+            cp = self.remote('sudo -n python3 -B -c '+shlex.quote(source),timeout=30)
+            guest = json.loads(cp.stdout)
+            proof['guest'] = guest
+            logical = sum(expected.values())
+            metadata = max(256*1024**2,2*sum((v//4096)*40+64 for v in expected.values())+32*1024**2)
+            cache_rows = guest.get('parent_cache_data_files')
+            if not isinstance(cache_rows,list) or not cache_rows:
+                raise ValueError('Invalid parent cache capacity proof')
+            data_paths=set()
+            for row in cache_rows:
+                p=PurePosixPath(row.get('path',''))
+                if (p.parent.parent != PurePosixPath(self.storage)/'templates'
+                        or p.name not in ('memfile','rootfs.ext4') or str(uuid.UUID(p.parent.name)) != p.parent.name
+                        or p in data_paths or type(row.get('bytes')) is not int or row['bytes']<0):
+                    raise ValueError('Invalid parent cache data-file bound')
+                data_paths.add(p)
+            cache_bytes=sum(row['bytes'] for row in cache_rows)
+            if guest.get('parent_cache_bound_bytes') != cache_bytes:
+                raise ValueError('Invalid parent cache total')
+            required = 2*logical+cache_bytes+download_count*expected['rootfs.ext4.header']+metadata+pending_upload_bytes+10*1024**3
+            if (guest.get('storage') != self.storage or guest.get('from_build') != from_build
+                    or guest.get('logical_bytes') != expected
+                    or guest.get('download_count') != download_count
+                    or guest.get('download_bound_bytes') != download_count*expected['rootfs.ext4.header']
+                    or type(guest.get('available_bytes')) is not int or guest['available_bytes'] < required
+                    or guest.get('required_bytes') != required or guest.get('status') != 'verified'):
+                raise ValueError('Insufficient or invalid owned L1 step capacity')
+            proof['status'] = 'verified'
+            return proof
+        except BaseException as error:
+            proof.update(status='failed',error=type(error).__name__+': '+str(error))
+            raise
+        finally:
+            with Path(evidence).open('x') as stream:
+                json.dump(proof,stream,indent=2);stream.write('\n')
+            Path(evidence).chmod(0o600)
+
     def step(self, driver, *, from_build, to_build, storage, command, timings_path,
              uploads, downloads, timeout=1200.0):
         if storage != self.storage:
@@ -143,6 +287,8 @@ class Transport:
         transfer = self.guest_root + '/transfers/' + uuid.uuid4().hex
         evidence = timing.parent / (timing.stem + '.transport')
         evidence.mkdir(mode=0o700)
+        self.capacity_guard(from_build,sum(Path(p).stat().st_size for p,_ in uploads),
+                            evidence/'capacity-before-upload.json', download_count=len(downloads))
         self.remote('mkdir -m 700 -p ' + shlex.quote(transfer))
         uploaded, download_map = [], []
         records = {'kind': 'ssh-files-outside-inner-timers', 'uploads': [], 'downloads': [],
@@ -162,6 +308,12 @@ class Transport:
             uploaded.append((Path(remote), target))
         for i, (source, p) in enumerate(downloads):
             download_map.append((source, Path(transfer + '/download-' + str(i))))
+        try:
+            self.capacity_guard(from_build,0,evidence/'capacity-before-resume.json',download_count=len(downloads))
+        except BaseException as error:
+            records.update(ok=False,physical_resume_dispatched=False,capacity_error=type(error).__name__+': '+str(error))
+            (evidence/'receipt.json').write_text(json.dumps(records,indent=2)+'\n')
+            raise
         remote_timing = Path(transfer + '/timing.json')
         remote_command = driver.e2b_resume_build_cmd(from_build=from_build, to_build=to_build,
             storage=storage, command=command, finalbench_json=remote_timing,

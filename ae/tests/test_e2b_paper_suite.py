@@ -527,8 +527,8 @@ class RuntimeFiles(unittest.TestCase):
 class Deployment(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name);self.path=self.root/'runtime-deployment.json'
-        self.manifest=self.root/'l1-measurement-assets.json'
+        self.root=Path(self.tmp.name);self.path=self.root/'runtime-deployment-156g.json'
+        self.manifest=self.root/'l1-measurement-assets-156g.json'
         self.data={'schema_version':1,'kind':'e2b-paper-runtime-deployment-v1',
             'share_tag':'ae_runtime_v1','l1_manifest':{'path':str(self.manifest),'sha256':'a'*64},
             'oci_manifest':'sha256:9da1d3aecd725a91d879bbc59e9872ed4cab3b98d21b802426a24f877d69ee12',

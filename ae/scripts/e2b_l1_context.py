@@ -8,7 +8,7 @@ CPU28-31 leases, and its systemd unit must have MemorySwapMax=0. This module
 never takes those locks or changes frequency/global swap settings.
 
 The root-owned manifest has schema_version=1, kind='e2b-paper-l1-assets',
-disk_size_gib=80 or128, expected_l1_kernel, base_image{path,sha256}, tools mapping
+disk_size_gib=80,128 or156, expected_l1_kernel, base_image{path,sha256}, tools mapping
 qemu/qemu_img/genisoimage to {path,sha256}, shares [{path,tag,files:[{path,sha256}]}],
 and ssh_port(55000..59999). Share paths must be distinct directories below
 WORK/shares; file paths are relative and their complete tree is hash checked.
@@ -17,7 +17,7 @@ Tools and manifests are root-owned. The private SSH identity is an existing host
 its bytes are never read, hashed, copied, logged or embedded in cloud-init.
 
 All new artifacts remain in a uniquely created workspace, including failures.
-4vCPU/16GiB and the chosen80/128GiB disk are declared reconstruction candidates,
+4vCPU/16GiB and the chosen80/128/156GiB disk are declared reconstruction candidates,
 NOT recovered formal eight-input L1 settings. No arbitrary command is accepted.
 """
 from contextlib import contextmanager
@@ -100,7 +100,7 @@ def read_manifest(config):
         raise ValueError('Unexpected asset manifest fields')
     if type(value['schema_version']) is not int or value['schema_version'] != 1 or value['kind'] != 'e2b-paper-l1-assets':
         raise ValueError('Unsupported asset manifest')
-    if type(value['disk_size_gib']) is not int or value['disk_size_gib'] not in (80, 128):
+    if type(value['disk_size_gib']) is not int or value['disk_size_gib'] not in (80, 128, 156):
         raise ValueError('Unreviewed virtual disk size')
     if (type(value['ssh_port']) is not int or not 55000 <= value['ssh_port'] <= 59999
             or not re.fullmatch(r'[0-9A-Za-z._+-]+', value['expected_l1_kernel'])):
