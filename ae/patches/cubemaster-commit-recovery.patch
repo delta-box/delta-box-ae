@@ -105,7 +105,7 @@
 -
 --- /dev/null
 +++ b/CubeMaster/pkg/templatecenter/snapshot_commit_recovery.go
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,171 @@
 +// Copyright (c) 2026 Tencent Inc.
 +// SPDX-License-Identifier: Apache-2.0
 +
@@ -113,10 +113,13 @@
 +
 +import (
 +	"context"
++	"database/sql/driver"
 +	"errors"
 +	"fmt"
++	mysql "github.com/go-sql-driver/mysql"
 +	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/log"
 +	sandboxtypes "github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/service/sandbox/types"
++	"net"
 +	"reflect"
 +	"time"
 +
@@ -131,7 +134,7 @@
 +// current read waits for the original transaction to commit or roll back; an
 +// ordinary consistent read could incorrectly report its uncommitted row absent.
 +func readSnapshotJobForRecovery(ctx context.Context, jobID string) (*models.TemplateImageJob, error) {
-+	recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
++	recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 +	defer cancel()
 +	var last error
 +	for {
@@ -155,23 +158,49 @@
 +	}
 +}
 +
-+// Confirm only the exact generated job. Never create a second job after an
-+// ambiguous COMMIT, and never infer success from an HTTP status or elapsed time.
++// Retry only transient database failures, never validation/constraint errors.
++func transientSnapshotDBError(err error) bool {
++	var ne net.Error
++	var me *mysql.MySQLError
++	return errors.Is(err, mysql.ErrInvalidConn) || errors.Is(err, driver.ErrBadConn) ||
++		(errors.As(err, &ne) && ne.Timeout()) ||
++		(errors.As(err, &me) && (me.Number == 1205 || me.Number == 1213))
++}
++
++// The closure contains only the definition/job database transaction, no node
++// RPC. Reuse the exact logical IDs only after a locking read proves absence;
++// once COMMIT is visible, return without another write.
 +func persistSnapshotJob(ctx context.Context, expected *models.TemplateImageJob, write func() error) error {
-+	cause := write()
-+	if cause == nil {
++	originalModel := expected.Model
++	for attempt := 0; attempt < 3; attempt++ {
++		cause := write()
++		if cause == nil {
++			return nil
++		}
++		row, err := readSnapshotJobForRecovery(ctx, expected.JobID)
++		if errors.Is(err, gorm.ErrRecordNotFound) && transientSnapshotDBError(cause) &&
++			ctx.Err() == nil && attempt < 2 {
++			// GORM may assign a numeric ID before the transaction rolls back.
++			expected.Model = originalModel
++			log.G(ctx).Warnf("retry snapshot job %s persistence after confirmed rollback: %v", expected.JobID, cause)
++			select {
++			case <-ctx.Done():
++				return errors.Join(cause, ctx.Err())
++			case <-time.After(time.Duration(attempt+1) * 100 * time.Millisecond):
++			}
++			continue
++		}
++		if err != nil {
++			return errors.Join(cause, fmt.Errorf("confirm snapshot job persistence: %w", err))
++		}
++		if row.RequestID != expected.RequestID || row.Operation != expected.Operation ||
++			row.ResourceID != expected.ResourceID || row.SandboxID != expected.SandboxID ||
++			row.RequestJSON != expected.RequestJSON {
++			return errors.Join(cause, errors.New("snapshot persistence confirmation payload mismatch"))
++		}
 +		return nil
 +	}
-+	row, err := readSnapshotJobForRecovery(ctx, expected.JobID)
-+	if err != nil {
-+		return errors.Join(cause, fmt.Errorf("confirm snapshot job persistence: %w", err))
-+	}
-+	if row.RequestID != expected.RequestID || row.Operation != expected.Operation ||
-+		row.ResourceID != expected.ResourceID || row.SandboxID != expected.SandboxID ||
-+		row.RequestJSON != expected.RequestJSON {
-+		return errors.Join(cause, errors.New("snapshot persistence confirmation payload mismatch"))
-+	}
-+	return nil
++	panic("unreachable")
 +}
 +
 +func claimSnapshotJobWithToken(ctx context.Context, jobID, phase string, progress int32, token string) (bool, error) {
@@ -250,13 +279,15 @@
 +}
 --- /dev/null
 +++ b/CubeMaster/pkg/templatecenter/snapshot_commit_recovery_test.go
-@@ -0,0 +1,300 @@
+@@ -0,0 +1,428 @@
 +package templatecenter
 +
 +import (
 +	"context"
++	"database/sql"
 +	"errors"
 +	"fmt"
++	mysql "github.com/go-sql-driver/mysql"
 +	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/constants"
 +	"github.com/tencentcloud/CubeSandbox/CubeMaster/pkg/base/db/models"
 +	gm "gorm.io/driver/mysql"
@@ -550,6 +581,132 @@
 +			t.Fatalf("%+v %v", info, e)
 +		}
 +	})
++	t.Run("transient_rollback_reuses_exact_job", func(t *testing.T) {
++		r := newRow("transient-rollback")
++		writes := 0
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			return db.Transaction(func(tx *gorm.DB) error {
++				if e := tx.Create(r).Error; e != nil {
++					return e
++				}
++				if writes == 1 {
++					return mysql.ErrInvalidConn
++				}
++				return nil
++			})
++		})
++		if e != nil || writes != 2 {
++			t.Fatalf("err=%v writes=%d", e, writes)
++		}
++		row, e := readSnapshotJobForRecovery(context.Background(), r.JobID)
++		if e != nil || row.RequestID != r.RequestID || row.RequestJSON != r.RequestJSON {
++			t.Fatalf("%+v %v", row, e)
++		}
++		var n int64
++		db.Model(r).Where("request_id = ?", r.RequestID).Count(&n)
++		if n != 1 {
++			t.Fatalf("logical jobs=%d", n)
++		}
++	})
++	t.Run("transient_rollback_bounded", func(t *testing.T) {
++		r := newRow("transient-bounded")
++		writes := 0
++		e := persistSnapshotJob(context.Background(), r, func() error { writes++; return mysql.ErrInvalidConn })
++		if !errors.Is(e, mysql.ErrInvalidConn) || writes != 3 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("cancelled_rollback_does_not_retry", func(t *testing.T) {
++		r := newRow("transient-cancelled")
++		writes := 0
++		ctx, cancel := context.WithCancel(context.Background())
++		defer cancel()
++		e := persistSnapshotJob(ctx, r, func() error { writes++; cancel(); return mysql.ErrInvalidConn })
++		if e == nil || writes != 1 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("inflight_insert_commit_is_not_repeated", func(t *testing.T) {
++		r := newRow("inflight-insert")
++		writes := 0
++		done := make(chan error, 1)
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			tx := db.Begin()
++			if e := tx.Create(r).Error; e != nil {
++				tx.Rollback()
++				return e
++			}
++			go func() { time.Sleep(200 * time.Millisecond); done <- tx.Commit().Error }()
++			return mysql.ErrInvalidConn
++		})
++		if ce := <-done; ce != nil {
++			t.Fatal(ce)
++		}
++		if e != nil || writes != 1 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++	t.Run("inflight_insert_rollback_then_retry", func(t *testing.T) {
++		r := newRow("inflight-rollback")
++		writes := 0
++		done := make(chan error, 1)
++		e := persistSnapshotJob(context.Background(), r, func() error {
++			writes++
++			if writes == 2 {
++				return db.Create(r).Error
++			}
++			tx := db.Begin()
++			if e := tx.Create(r).Error; e != nil {
++				tx.Rollback()
++				return e
++			}
++			go func() { time.Sleep(200 * time.Millisecond); done <- tx.Rollback().Error }()
++			return mysql.ErrInvalidConn
++		})
++		if re := <-done; re != nil {
++			t.Fatal(re)
++		}
++		if e != nil || writes != 2 {
++			t.Fatalf("%v writes=%d", e, writes)
++		}
++	})
++
++}
++
++func TestSnapshotDatabaseReadTimeout(t *testing.T) {
++	dsn := os.Getenv("CUBE_RECOVERY_MYSQL_DSN")
++	if dsn == "" {
++		t.Skip("isolated MySQL DSN required")
++	}
++	cfg, e := mysql.ParseDSN(dsn)
++	if e != nil {
++		t.Fatal(e)
++	}
++	for _, secs := range []int{5, 60} {
++		t.Run(fmt.Sprintf("read_timeout_%ds", secs), func(t *testing.T) {
++			c := *cfg
++			c.ReadTimeout = time.Duration(secs) * time.Second
++			conn, e := sql.Open("mysql", c.FormatDSN())
++			if e != nil {
++				t.Fatal(e)
++			}
++			defer conn.Close()
++			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
++			defer cancel()
++			var result int
++			started := time.Now()
++			e = conn.QueryRowContext(ctx, "SELECT SLEEP(6)").Scan(&result)
++			t.Logf("readTimeout=%ds elapsed=%s error=%v", secs, time.Since(started), e)
++			if secs == 5 && e == nil {
++				t.Fatal("expected configured 5s socket timeout")
++			}
++			if secs == 60 && (e != nil || result != 0) {
++				t.Fatalf("6s response rejected: %v result=%d", e, result)
++			}
++		})
++	}
 +}
 --- a/CubeMaster/pkg/base/db/models/template_image.go
 +++ b/CubeMaster/pkg/base/db/models/template_image.go
