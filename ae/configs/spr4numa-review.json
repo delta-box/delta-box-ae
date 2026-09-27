@@ -68,7 +68,8 @@
       },
       "figure-06-adaptive": {
         "checkpoint_profile": "runtime-default",
-        "legacy_timing_policy": "paper-zero"
+        "legacy_timing_policy": "paper-zero",
+        "figure06_adaptive_mem_mib": 16384
       },
       "figure-08-cube": {
         "cube": {
