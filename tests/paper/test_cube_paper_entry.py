@@ -35,7 +35,7 @@ class CubePaperEntryTests(unittest.TestCase):
         variants = [[], ['--group','cube'], ['--experiment','table-02-e2b'],
                     ['--test'], ['--list'], ['--all'], ['--limit','1'],
                     ['--max-events','3'], ['--numa-node','2','--cpus','48-51'],
-                    ['--reuse-completed-from','/old'], ['--resume','/old']]
+                    ['--resume','/old']]
         for flags in variants:
             command = ['--checkout','/repo','--cube-profile','paper-disk']
             if flags: command += ['--experiment','table-02-cube',*flags]

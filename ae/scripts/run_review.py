@@ -434,6 +434,13 @@ def execute_plan(path):
         raise ValueError('workers must be an integer in [1, 16]')
     if workers > 1 and any(j['experiment'] != 'table-02-replay' for j in plan['jobs']):
         raise ValueError('Concurrent trace execution is supported only for paper Replay')
+    for job in plan['jobs']:
+        if job.get('reused_verified') and job.get('execution') == 'copied-completed-measurement':
+            if job['experiment'] == 'table-02-cube':
+                from ae.repro.cube_reuse import verify_imported_job
+            else:
+                from ae.repro.figure09_reuse import verify_imported_job
+            verify_imported_job(job, plan)
     plan.update(status='running', runtime=repository_state(), host=host_state(), release=from_environment())
     write_json(manifest, plan)
     pending = [(i, job) for i, job in enumerate(plan['jobs'], 1) if not job.get('reused_verified')]
@@ -502,8 +509,10 @@ class Review:
                 if value is not None:
                     self.limits += [flag, str(value)]
         if getattr(args, 'reuse_completed_from', None):
-            if 'figure-09' not in self.experiments or args.quick_check or args.available or self.limits:
-                raise ValueError('--reuse-completed-from requires complete selected Figure 9 jobs')
+            cube_reuse = self.experiments == ['table-02-cube'] and getattr(args, 'cube_profile', None) == 'paper-disk'
+            if (not ('figure-09' in self.experiments or cube_reuse)
+                    or args.quick_check or args.available or self.limits):
+                raise ValueError('--reuse-completed-from requires complete Figure 9 or Cube paper-disk jobs')
             source = args.reuse_completed_from.absolute()
             if output.is_relative_to(source) or source.is_relative_to(output):
                 raise ValueError('Reuse source and new output must be disjoint')
@@ -748,8 +757,12 @@ class Review:
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
-        if name == 'figure-09' and getattr(self.args, 'reuse_completed_from', None):
-            from ae.repro.figure09_reuse import prepare_reuse
+        if (name == 'figure-09' or (name == 'table-02-cube' and
+                getattr(self.args, 'cube_profile', None) == 'paper-disk')) and getattr(self.args, 'reuse_completed_from', None):
+            if name == 'table-02-cube':
+                from ae.repro.cube_reuse import prepare_reuse
+            else:
+                from ae.repro.figure09_reuse import prepare_reuse
             from ae.repro.result_storage import active_references
             imported = prepare_reuse(plan, self.args.reuse_completed_from, suite, repo=REPO,
                 verify_images=lambda value: verify_reused_images(value,

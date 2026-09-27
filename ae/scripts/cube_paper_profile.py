@@ -16,7 +16,7 @@ def validate(args):
         raise ValueError('Cube profile placement cannot be overridden by AE_CPUS or AE_NUMA_NODE')
     forbidden = ('all', 'quick_check', 'available', 'list', 'analyze_existing',
                  'execute_plan', 'probe_plan', 'publish_output', 'no_pin',
-                 'reuse_completed_from', 'experiment_config', 'group', 'resume')
+                 'experiment_config', 'group', 'resume')
     if (args.cube_profile != PROFILE or set(args.experiment or []) != {'table-02-cube'}
             or any(getattr(args, key, None) for key in forbidden)
             or any(getattr(args, key, None) is not None for key in
