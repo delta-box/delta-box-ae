@@ -26,6 +26,34 @@ DRIVERS = {'replay': ('replay_copytree', 'real_trace_runner.py'),
            'cube': ('cube_cow_peagle_mcts30_2x_numa12_realrtt', 'scripts/cube_cow_schedule_replay.py')}
 
 
+
+def resolve_experiment(backend, collect_phases=False, explicit_id=None):
+    if backend not in DRIVERS:
+        raise ValueError('Unknown baseline backend')
+    expected = 'table-02-' + backend
+    allowed = {expected}
+    if backend == 'cube':
+        allowed.add('figure-01-cube')
+    selected = explicit_id or ('figure-01-cube' if collect_phases else expected)
+    if selected not in allowed:
+        raise ValueError('Experiment identity does not match baseline backend')
+    if collect_phases and backend != 'cube':
+        raise ValueError('--collect-phases requires Cube')
+    if selected == 'figure-01-cube' and not collect_phases:
+        raise ValueError('Figure 1 requires Cube phase collection')
+    return selected
+
+
+def paper_cube_profile(config, backend, experiment, collect_phases):
+    enabled = config.get('cube', {}).get('profile') == 'paper-disk'
+    if enabled and (backend != 'cube' or experiment != 'table-02-cube'
+                    or not collect_phases or config.get('baseline_storage') != 'disk'):
+        raise ValueError('Cube paper-disk requires Table 2 Cube, phase collection and disk storage')
+    if enabled and os.environ.get('AE_MEMORY_JOB'):
+        raise ValueError('Cube paper-disk cannot run inside a memory-storage job')
+    return enabled
+
+
 def configure_mock_latency(backend, env, replay_policy="zero"):
     """Pin the paper's Replay policy without changing other backends' RTT."""
     if replay_policy not in ('zero', 'recorded'):
@@ -356,10 +384,12 @@ def validate_trace_events(path, backend, trace, limit, schedule=None, policy='st
 def run(args):
     config = load_config(args.config)
     policy = message_policy(config.get('replay_message_policy', 'audit'))
+    experiment = resolve_experiment(args.backend, args.collect_phases, getattr(args, 'experiment_id', None))
+    cube_disk_profile = paper_cube_profile(config, args.backend, experiment, args.collect_phases)
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     trace = args.trace.absolute()  # Keep the logical bundle directory beside ms_trace.jsonl.
-    record = {'schema_version': 1, 'experiment': 'figure-01-cube' if args.collect_phases else 'table-02-' + args.backend,
+    record = {'schema_version': 1, 'experiment': experiment,
               'backend': args.backend, 'instance': args.instance, 'status': 'preparing',
               'run_purpose': run_purpose('quick-check' if args.limit else 'full-trace'),
               'input': file_record(trace), 'config': public_config(config),
@@ -369,19 +399,24 @@ def run(args):
         record['message_policy'] = policy
     record['recorded_search_order'] = bool(config.get('recorded_search_order', False))
     record['measurement_identity'] = json.loads(os.environ.get('AE_MEASUREMENT_IDENTITY', '{}'))
-    if os.environ.get('AE_MEMORY_JOB'):
-        record['memory_backing'] = json.loads(os.environ['AE_MEMORY_JOB'])
-        record['storage_mode'] = 'tmpfs-noswap'
-    elif args.backend == 'cube' and config.get('baseline_storage') == 'tmpfs':
-        from cube_memory import verify as verify_cube_memory
-        record['memory_backing'] = verify_cube_memory(config)
-        record['storage_mode'] = 'tmpfs-noswap'
-        write_json(output / 'cube_memory_before.json', record['memory_backing'])
-    elif config.get('baseline_storage') == 'tmpfs':
-        raise ValueError('Memory baseline must run through the isolated one-click memory wrapper')
     manifest = output / 'run.json'
     write_json(manifest, record)
     try:
+        if cube_disk_profile:
+            from cube_disk import verify as verify_cube_disk
+            record['disk_backing'] = verify_cube_disk(config)
+            record['storage_mode'] = 'disk-backed-xfs'
+            write_json(output / 'cube_disk_before.json', record['disk_backing'])
+        elif os.environ.get('AE_MEMORY_JOB'):
+            record['memory_backing'] = json.loads(os.environ['AE_MEMORY_JOB'])
+            record['storage_mode'] = 'tmpfs-noswap'
+        elif args.backend == 'cube' and config.get('baseline_storage') == 'tmpfs':
+            from cube_memory import verify as verify_cube_memory
+            record['memory_backing'] = verify_cube_memory(config)
+            record['storage_mode'] = 'tmpfs-noswap'
+            write_json(output / 'cube_memory_before.json', record['memory_backing'])
+        elif config.get('baseline_storage') == 'tmpfs':
+            raise ValueError('Memory baseline must run through the isolated one-click memory wrapper')
         phase_start = None
         if args.collect_phases:
             if args.backend != 'cube':
@@ -488,6 +523,9 @@ def run(args):
         if args.dry_run:
             print(json.dumps(record, indent=2)); return 0
         result = execute(command, output / 'process', cwd=base, env=env, timeout=args.timeout)
+        if cube_disk_profile:
+            record['disk_backing_after'] = verify_cube_disk(config)
+            write_json(output / 'cube_disk_after.json', record['disk_backing_after'])
         if args.backend == 'e2b':
             from e2b_environment import verify_snapshot_inputs
             verify_snapshot_inputs(record['e2b_environment'])
@@ -530,9 +568,18 @@ def run(args):
         if phase_start:
             from cube_phases import collect
             phase_log = output / 'cubelet-phases.log'
-            phases = collect(phase_start, paths[0], phase_log)
+            phases = collect(phase_start, paths[0], phase_log, strict=cube_disk_profile)
+            if cube_disk_profile and (len(phases['events']) != sum(counts.values()) or
+                    phases['phase_record_count'] != counts['checkpoints'] * 3 + counts['restores'] * 10):
+                raise ValueError('Cube phase count does not match complete measured event counts')
             write_json(output / 'cube_phases.json', phases)
+            record['phase_evidence'] = {'strict': cube_disk_profile,
+                'events': len(phases['events']), 'raw_phase_records': phases['phase_record_count'],
+                'captured_log': file_record(phase_log),
+                'phase_json': file_record(output / 'cube_phases.json')}
             extra_artifacts += [phase_log, output / 'cube_phases.json']
+        if cube_disk_profile:
+            extra_artifacts += [output / 'cube_disk_before.json', output / 'cube_disk_after.json']
         if args.backend == 'cube' and config.get('baseline_storage') == 'tmpfs':
             write_json(output / 'cube_memory_after.json', verify_cube_memory(config))
             extra_artifacts += [output / 'cube_memory_before.json', output / 'cube_memory_after.json']
@@ -563,7 +610,8 @@ def main():
     parser.add_argument('--limit', type=int)
     parser.add_argument('--timeout', type=int, default=14400)
     parser.add_argument('--dry-run', action='store_true')
-    parser.add_argument('--collect-phases', action='store_true', help='Require fresh instrumented Cubelet log evidence for Figure 1')
+    parser.add_argument('--collect-phases', action='store_true', help='Require fresh instrumented Cubelet log evidence')
+    parser.add_argument('--experiment-id', help='Explicit baseline identity; must match the backend')
     args = parser.parse_args()
     if args.limit is not None and args.limit <= 0:
         parser.error('--limit must be positive')

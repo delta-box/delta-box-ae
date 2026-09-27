@@ -89,6 +89,7 @@ def parser():
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
+    p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
                    help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
@@ -149,6 +150,8 @@ def config_identity(config):
     # A managed daemon receives a fresh PID/mount proof for each attempt.
     # Its full file hash remains in the review; it is not a measurement setting.
     identity = copy.deepcopy(config)
+    if identity.get('cube', {}).get('profile') == 'paper-disk':
+        identity['cube'].pop('disk_manifest', None)
     if identity.get('cube', {}).get('manage_memory_service') is True:
         identity['cube'].pop('memory_manifest', None)
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -304,6 +307,12 @@ def job_unavailable(job, config):
             return path
         except ValueError as error:
             reasons.append(str(error))
+    if name.endswith('-cube') and config.get('cube', {}).get('profile') == 'paper-disk':
+        try:
+            from runners.cube_disk import verify as verify_cube_disk
+            verify_cube_disk(config)
+        except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc:
+            reasons.append('Cube disk service verification failed: ' + str(exc))
     if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs':
         try:
             from runners.cube_memory import verify as verify_cube_memory
@@ -466,6 +475,8 @@ def execute_plan(path):
 class Review:
     def __init__(self, args, config, output):
         validate_gpu_selection(args)
+        from ae.scripts.cube_paper_profile import validate
+        validate(args)
         self.args, self.config, self.output = args, config, output
         self.python = sys.executable
         self.cli = [self.python, str(REPO / 'ae/reproduce.py')]
@@ -512,6 +523,8 @@ class Review:
             lane='quick' if args.quick_check else 'main',
             control_cpus=config.get('review', {}).get('control_cpus'),
             resource_scope='exclusive NUMA and CPU frequency policies during each measurement; exclusive results rotation')
+        self.cube_disk_manifest = None
+        self.record['cube_profile'] = getattr(args, 'cube_profile', None)
         self.cube_memory_manifest = None
         self.cube_placement = None
         self.previous_record = {}
@@ -528,6 +541,8 @@ class Review:
                 raise ValueError('Resume source fingerprint differs; start a new output')
             if previous.get('baseline_inputs', 'all') != self.record['baseline_inputs']:
                 raise ValueError('Resume baseline input set differs; use the original --baseline-inputs choice')
+            if previous.get('cube_profile') != self.record['cube_profile']:
+                raise ValueError('Resume Cube profile differs; start a new output')
             if previous.get('measurement_request') != self.record['measurement_request']:
                 raise ValueError('Resume NUMA/frequency policy differs; start a new output')
             if previous.get('experiments') != self.experiments or previous.get('run_purpose') != self.record['run_purpose']:
@@ -624,6 +639,10 @@ class Review:
         config = load_config(source_config)
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
+        from ae.scripts.cube_paper_profile import effective
+        config = effective(config, getattr(self.args, 'cube_profile', None))
+        if self.cube_disk_manifest is not None:
+            config['cube']['disk_manifest'] = str(self.cube_disk_manifest)
         config.pop('review', None)
         if self.args.quick_check and self.args.numa_node is not None:
             config['measurement'] = dict(pin=True, numa_node=self.args.numa_node, cpus=self.args.cpus)
@@ -638,7 +657,7 @@ class Review:
                     config['e2b'][key] = str(configured_path(config, 'e2b.' + key).resolve())
         # Preserve the original base for relative paths when serializing overrides.
         for key in ('kernel', 'base_xfs', 'images_dir', 'payload', 'moatless_venv', 'nltk_data', 'criu_bin', 'criu_dump_binary', 'deltafs', 'work_dir', 'vm_work_dir',
-                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'cube.memory_manifest', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
+                    'cube.sdk', 'cube.phase_log', 'cube.phase_binary', 'cube.memory_manifest', 'cube.disk_manifest', 'cube.disk_workspace', 'e2b.infra', 'e2b.ssh_key', 'e2b.fanout_python', 'baseline_test_runtime.python'):
             mapping = config
             parts = key.split('.')
             for part in parts[:-1]:
@@ -723,6 +742,9 @@ class Review:
         workers = config.get('replay_workers', 1) if name == 'table-02-replay' else 1
         if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
             raise ValueError('replay_workers must be an integer in [1, 16]')
+        if config.get('cube', {}).get('profile') == 'paper-disk':
+            identity.update(cube_profile='paper-disk', service_cpus=config['cube']['service_cpus'],
+                            frequency_policy_cpus=measurement['policy_cpus'])
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
@@ -757,6 +779,8 @@ class Review:
                        '--node', str(row['measurement']['node']), '--cpus', row['measurement']['cpus'],
                        '--out', str(self.output / 'environment' / self.attempt / name), '--timeout', str(budget),
                        '--stop-grace', '360' if plan.get('memory_measurement') else '30', '--', *command]
+        if pinned and measurement.get('policy_cpus'):
+            command[2:2] = ['--policy-cpus', measurement['policy_cpus']]
         ok = self.step(name + '-run', [*self.privilege, *command], budget + 120,
                        termination_grace=420 if plan.get('memory_measurement') else 30)
         row['status'] = 'partial' if ok and (row['unavailable_jobs'] or row['unavailable_arms']) else 'ok' if ok else 'failed'
@@ -901,6 +925,20 @@ class Review:
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
     def prepare_cube_service(self, contexts, *, validate_only=False):
+        if getattr(self.args, 'cube_profile', None) == 'paper-disk':
+            from ae.scripts.cube_paper_profile import effective
+            config = effective(self.config, self.args.cube_profile)
+            if validate_only:
+                return
+            from ae.scripts.cube_disk_context import disk_service
+            self.cube_disk_manifest = contexts.enter_context(disk_service(
+                self.output / 'environment' / self.attempt / 'cube-disk',
+                workspace=Path(config['cube']['disk_workspace']), node=2,
+                cpus=config['cube']['service_cpus'], reserve_gib=10))
+            self.record['cube_disk_service'] = file_record(self.cube_disk_manifest)
+            self.record['cube_profile_provenance'] = config['cube']['profile_provenance']
+            self.save()
+            return
         selected = [name for name in self.experiments if name.endswith('-cube')]
         if not selected:
             return
@@ -943,6 +981,8 @@ class Review:
         self.save()
         contexts = ExitStack()
         try:
+            from ae.scripts.cube_paper_profile import preparation_lease
+            contexts.enter_context(preparation_lease(REPO / 'ae/work', getattr(self.args, 'cube_profile', None)))
             if self.args.analyze_existing:
                 source = self.args.analyze_existing.resolve()
                 previous = source / 'review.json'
@@ -1026,7 +1066,7 @@ class Review:
                 contexts.close()
             except Exception as error:
                 self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
-                    log='environment/' + self.attempt + '/cube-memory/cleanup-errors.json',
+                    log='environment/' + self.attempt + ('/cube-disk/' if self.cube_disk_manifest else '/cube-memory/') + 'cleanup-errors.json',
                     error=f'{type(error).__name__}: {error}'))
             failures = any(step['status'] not in ('ok', 'unavailable') for step in self.record['steps'])
             coverage = [row for row in self.record['coverage'] if not row.get('optional')]
@@ -1049,6 +1089,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     try:
         validate_gpu_selection(args)
+        from ae.scripts.cube_paper_profile import validate
+        validate(args)
     except ValueError as error:
         p.error(str(error))
     if args.list:

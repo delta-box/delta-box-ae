@@ -265,6 +265,8 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
+                        help='Cube-only documented disk/NUMA reconstruction; full twelve inputs')
     parser.add_argument('--gpu-cases', type=gpu_case_selection, action=Once, metavar='CASE,...',
                         help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
@@ -280,6 +282,12 @@ def parse_arguments(argv):
     parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
     parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
     args = parser.parse_args(argv)
+    if args.cube_profile is not None:
+        if (set(args.experiment or []) != {'table-02-cube'} or args.group or args.all or args.quick_check
+                or args.list or args.limit is not None or args.max_events is not None
+                or args.gpu_cases is not None or args.reuse_completed_from is not None or args.resume is not None
+                or args.numa_node is not None or args.cpus is not None):
+            parser.error('--cube-profile requires complete explicit table-02-cube only; profile controls placement')
     if args.gpu_cases is not None:
         explicit = bool(args.experiment or args.group)
         if (not explicit or set(args.experiment or []) - {'figure-08-gpu'} or set(args.group or []) - {'gpu'}
@@ -397,6 +405,8 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if getattr(args, 'cube_profile', None) is not None:
+        command += ['--cube-profile', args.cube_profile]
     if args.gpu_cases is not None:
         command += ['--gpu-cases', ','.join(args.gpu_cases)]
     if args.baseline_inputs is not None:

@@ -34,6 +34,13 @@ def cpu_set(text):
     return result
 
 
+def frequency_cpu_selection(command_cpus, requested, node_cpus, available_cpus):
+    selected = cpu_set(requested) if requested else set(command_cpus)
+    if not command_cpus <= selected or not selected <= node_cpus or not selected <= available_cpus:
+        raise ValueError('Frequency CPUs must include command CPUs and remain available in the same node')
+    return selected
+
+
 FIELDS = ('scaling_governor', 'scaling_min_freq', 'scaling_max_freq')
 
 
@@ -89,6 +96,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--node', type=int, required=True)
     p.add_argument('--cpus', required=True)
+    p.add_argument('--policy-cpus', help='Frequency policy CPUs for an external daemon; same node, superset of command CPUs')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--timeout', type=float, default=7200)
     p.add_argument('--stop-grace', type=float, default=30, help='Child cleanup grace, including RAM evidence archival')
@@ -103,15 +111,21 @@ def main():
         p.error('Selected CPUs must be available and entirely inside the requested node')
     if not all(shutil.which(name) for name in ('numactl', 'turbostat')):
         p.error('numactl and turbostat are required; effective frequency must be recorded')
-    policies = sorted({(Path(f'/sys/devices/system/cpu/cpu{cpu}')/'cpufreq').resolve() for cpu in cpus})
+    try:
+        policy_cpus = frequency_cpu_selection(cpus, args.policy_cpus,
+                        cpu_set((node/'cpulist').read_text()), os.sched_getaffinity(0))
+    except ValueError as error:
+        p.error(str(error))
+    policies = sorted({(Path(f'/sys/devices/system/cpu/cpu{cpu}')/'cpufreq').resolve() for cpu in policy_cpus})
     for policy in policies:
-        if not cpu_set((policy/'related_cpus').read_text()) <= cpus:
+        if not cpu_set((policy/'related_cpus').read_text()) <= policy_cpus:
             p.error('A shared frequency policy would change CPUs outside this selection')
         if 'performance' not in (policy/'scaling_available_governors').read_text().split():
             p.error('performance governor unavailable')
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     manifest = {'schema_version': 1, 'node': args.node, 'cpus': sorted(cpus),
+                'policy_cpus': sorted(policy_cpus),
                 'command': ['numactl', '--physcpubind='+args.cpus, '--membind='+str(args.node), *command],
                 'status': 'preparing', 'policies': {}, 'started_unix': time.time(),
                 'frequency_note': 'min=max=cpuinfo_max_freq requests highest P-state; see turbostat Bzy_MHz for achieved frequency'}
@@ -156,7 +170,7 @@ def main():
             if path.exists():
                 manifest['intel_pstate'][name] = path.read_text().strip()
         with (output/'turbostat.stderr').open('w') as err, (output/'command.log').open('w') as log, (output/'samples.jsonl').open('w') as samples:
-            monitor_command = ['turbostat','--quiet','--cpu',args.cpus,'--show','CPU,Busy%,Bzy_MHz,TSC_MHz,Avg_MHz',
+            monitor_command = ['turbostat','--quiet','--cpu',args.policy_cpus or args.cpus,'--show','CPU,Busy%,Bzy_MHz,TSC_MHz,Avg_MHz',
                                '--interval','1','--out',str(output/'turbostat.tsv')]
             monitor = subprocess.Popen(monitor_command, stdout=err, stderr=err, start_new_session=True)
             time.sleep(1.2)

@@ -222,6 +222,8 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 if backend=='replay' and row.get('repository_commit'):cmd+=['--repository-commit',row['repository_commit']]
                 if backend=='cube':cmd+=['--schedule',AE_ROOT/row['schedule_local']]
                 if experiment=='figure-01-cube':cmd+=['--collect-phases']
+                elif backend=='cube' and config.get('cube', {}).get('profile') == 'paper-disk':
+                    cmd+=['--collect-phases','--experiment-id','table-02-cube']
                 if max_events:cmd+=['--limit',str(max_events)]
                 add(experiment,key,cmd,[row['local']])
                 if selection:
