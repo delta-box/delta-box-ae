@@ -113,7 +113,8 @@ def main():
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         command=[python,str(payload/'replay_driver.py'),'--manifest-line',args.instance+'__ms','--traces-root',str(traces),
             '--mock-port',str(port),'--repo-base',str(repos),'--index-store-dir',str(payload/'index_store'),
-            '--skip-mock-spawn','--defer-audit','--runtime','configured']
+            '--skip-mock-spawn','--defer-audit','--runtime','configured',
+            '--recorded-boundary','--replay-contract-json',str(output/'replay_contract.json')]
         record.update(command=command,status='planned' if args.dry_run else 'running');write_json(output/'run.json',record)
         if args.dry_run:return 0
         with (output/'mock.log').open('w') as log:
@@ -136,6 +137,17 @@ def main():
                 time.sleep(.5)
         if worker.returncode:raise RuntimeError(f'Replay worker exited with status {worker.returncode}')
         rows=jsonl(output/'step_metrics.jsonl')
+        contract=json.loads((output/'replay_contract.json').read_text())
+        if contract.get('status') != 'complete' or contract.get('structure_and_actions_verified') is not True:
+            raise ValueError('Incomplete recorded structure/action replay')
+        expected=contract['expected']
+        expected_steps={node['node_id']:node['parent_id'] for node in expected['nodes'] if node['parent_id'] is not None}
+        measured_steps={row.get('node_id'):row.get('parent_node_id') for row in rows}
+        if len(rows) != len(expected_steps) or measured_steps != expected_steps:
+            raise ValueError('Step metrics do not cover the complete recorded expansion plan')
+        record['recorded_replay']={'scope':contract['scope'],'configured_max_iterations':contract['configured_max_iterations'],
+            'recorded_node_count':expected['node_count'],'recorded_expansion_count':len(expected_steps),
+            'structure_and_actions_verified':True}
         if not samples:raise ValueError('No process-tree RSS samples')
         for row in rows:
             if row.get('soft_dirty_error') or row.get('soft_dirty_clear_error') or row.get('soft_dirty_skipped_pages',0):raise ValueError('Incomplete soft-dirty scan')
@@ -189,7 +201,7 @@ def main():
             try:stop_owned(mock)
             except BaseException as error:failed(error,'stop_mock')
             try:
-                artifacts=[output/name for name in ('step_metrics.jsonl','tree_rss_samples.json',
+                artifacts=[output/name for name in ('step_metrics.jsonl','tree_rss_samples.json','replay_contract.json',
                            'mock_stats.json','mock_audit.json','mock.log','replay.log') if (output/name).is_file()]
                 if artifacts:record['artifacts']=artifact_records(output,artifacts)
                 write_json(output/'run.json',record)
