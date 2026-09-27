@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import tempfile
 import subprocess
 import sys
 import tarfile
@@ -36,6 +37,8 @@ def load_settings(path):
     for key in ('remote_root', 'python', 'model_path', 'generation_python', 'training_python'):
         if not isinstance(config[key], str) or not Path(config[key]).is_absolute():
             raise ValueError(f'{key} must be an absolute remote path')
+    if 'lock_root' in config and (not isinstance(config['lock_root'], str) or not Path(config['lock_root']).is_absolute()):
+        raise ValueError('lock_root must be an absolute remote path')
     devices = config['devices']
     if not devices or len(set(devices)) != len(devices) or any(type(n) is not int or n not in range(8) for n in devices):
         raise ValueError('devices must be a unique subset of physical GPU indices 0–7')
@@ -53,6 +56,79 @@ def load_settings(path):
         if not isinstance(env, dict) or any(k not in ('LD_LIBRARY_PATH', 'PATH') or not isinstance(v, str) for k, v in env.items()):
             raise ValueError('Phase environment only supports explicit PATH/LD_LIBRARY_PATH strings')
     return config
+
+
+# The writable run may move disks while reservations keep their original inodes.
+# Keep a reserve for JIT caches and collected evidence; never clean another job.
+MIN_FREE_BYTES = 10 * 1024**3
+MIN_FREE_INODES = 4096
+STORAGE_PROBE = r'''
+import json, os, pathlib, sys
+requested = pathlib.Path(sys.argv[1])
+parent = requested
+while not parent.exists():
+    if parent == parent.parent:
+        raise ValueError('No existing storage ancestor')
+    parent = parent.parent
+v = os.statvfs(parent)
+print(json.dumps(dict(requested=str(requested), existing_parent=str(parent.resolve()),
+    available_bytes=v.f_bavail*v.f_frsize, available_inodes=v.f_favail,
+    writable=os.access(parent, os.W_OK | os.X_OK))))
+'''
+
+
+def storage_admission(record):
+    record = dict(record, required_free_bytes=MIN_FREE_BYTES,
+                  required_free_inodes=MIN_FREE_INODES)
+    if (not record['writable'] or record['available_bytes'] < MIN_FREE_BYTES
+            or record['available_inodes'] < MIN_FREE_INODES):
+        raise RuntimeError('GPU workspace lacks writable storage reserve: ' + json.dumps(record))
+    return record
+
+
+def local_storage_admission(root):
+    result = subprocess.run([sys.executable, '-c', STORAGE_PROBE, str(root)],
+                            capture_output=True, text=True, check=True, timeout=15)
+    return storage_admission(json.loads(result.stdout))
+
+
+@contextlib.contextmanager
+def runtime_environment(root):
+    """Bind every framework cache and temporary file to this owned run."""
+    # vLLM appends a slash and a 36-character UUID to its AF_UNIX base.
+    # The configured run path must leave room for that suffix and the NUL.
+    if len(os.fsencode(root.resolve())) + 37 > 107:
+        raise ValueError('GPU runtime path is too long for Unix sockets: ' + str(root))
+    paths = {
+        'TMPDIR': '.', 'VLLM_RPC_BASE_PATH': '.', 'XDG_CACHE_HOME': 'work/cache',
+        'XDG_CONFIG_HOME': 'work/config', 'VLLM_CONFIG_ROOT': 'work/config/vllm',
+        'VLLM_CACHE_ROOT': 'work/cache/vllm', 'HF_HOME': 'work/cache/huggingface',
+        'HF_HUB_CACHE': 'work/cache/huggingface/hub',
+        'TORCH_HOME': 'work/cache/torch', 'TORCH_EXTENSIONS_DIR': 'work/cache/torch_extensions',
+        'TORCHINDUCTOR_CACHE_DIR': 'work/cache/torchinductor',
+        'TRITON_HOME': 'work/cache/triton-home', 'TRITON_CACHE_DIR': 'work/cache/triton',
+        'TRITON_DUMP_DIR': 'work/cache/triton-dump', 'TRITON_OVERRIDE_DIR': 'work/cache/triton-override',
+        'CUDA_CACHE_PATH': 'work/cache/cuda',
+        'FLASHINFER_WORKSPACE_BASE': 'work/cache/flashinfer',
+    }
+    values = {name: str((root / relative).resolve()) for name, relative in paths.items()}
+    directories = list(values.values())
+    values['PYTHONDONTWRITEBYTECODE'] = '1'
+    saved = {name: os.environ.get(name) for name in values}
+    old_tempdir = tempfile.tempdir
+    try:
+        for path in directories:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        os.environ.update(values)
+        tempfile.tempdir = values['TMPDIR']
+        yield values
+    finally:
+        tempfile.tempdir = old_tempdir
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def inventory():
@@ -150,14 +226,18 @@ def remote_run(root, *, probe_only=False):
     report = dict(status='skipped', host=config['host'], reason='', suites=[], selected=[],
                   started_at=datetime.now(timezone.utc).isoformat(), source=json.loads((root / 'source.json').read_text()))
     acquired = []
+    runtime = contextlib.ExitStack()
     try:
+        report['storage'] = local_storage_admission(root)
+        report['runtime_environment'] = runtime.enter_context(runtime_environment(root))
         report['probe'] = probe(config)
         write_json(output / 'admission.json', report['probe'])
         if probe_only:
             report['reason'] = 'Probe only; no GPU measurements requested'
             return report
-        lock_dir = Path(config['remote_root']) / 'locks'
+        lock_dir = Path(config.get('lock_root', str(Path(config['remote_root']) / 'locks')))
         lock_dir.mkdir(parents=True, exist_ok=True)
+        report['lock_root'] = str(lock_dir.resolve())
         for device in report['probe']['idle']:
             lock = (lock_dir / (device['uuid'] + '.lock')).open('a')
             try:
@@ -202,6 +282,7 @@ def remote_run(root, *, probe_only=False):
             def guarded_execute(*args, **kwargs):
                 # The suite also verifies CUDA/NVML identities before loading each worker.
                 current = probe(config)
+                current['storage'] = local_storage_admission(root)
                 write_json(output / f'{name}-admission-{uuid.uuid4().hex}.json', current)
                 idle = {g['uuid'] for g in current['idle']}
                 if not set(settings['devices']) <= idle:
@@ -227,6 +308,7 @@ def remote_run(root, *, probe_only=False):
     finally:
         for lock in acquired:
             lock.close()
+        runtime.close()
         report['finished_at'] = datetime.now(timezone.utc).isoformat()
         write_json(output / 'remote.json', report)
     return report
@@ -352,6 +434,9 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False):
     try:
         config = load_settings(config_path)
         record['host'] = config['host']
+        storage = ssh(config, [config['python'], '-c', STORAGE_PROBE, config['remote_root']],
+                      capture_output=True, text=True)
+        record['storage_admission'] = storage_admission(json.loads(storage.stdout))
         archive = snapshot(output, config)
         remote_root = str(Path(config['remote_root']) / ('run-' + uuid.uuid4().hex))
         record['remote_directory'] = remote_root
