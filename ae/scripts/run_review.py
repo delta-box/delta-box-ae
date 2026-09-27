@@ -31,6 +31,7 @@ from repro.result_storage import (DEFAULT_BACKUP_ROOT, prepare_latest, run_lock,
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
+GPU_CASES = tuple(f'{phase}-B{batch}' for phase in ('generation', 'training') for batch in (1, 4, 16, 64))
 from repro.common import (configured_path, configured_value, file_record, host_state,
                           install_termination_handler, load_config, public_config,
                           repository_state, write_json)
@@ -54,6 +55,31 @@ GROUPS = {
 }
 
 
+def gpu_case_selection(value):
+    cases = value.split(',')
+    if not cases or len(set(cases)) != len(cases) or any(case not in GPU_CASES for case in cases):
+        raise argparse.ArgumentTypeError('--gpu-cases requires unique case IDs from ' + ','.join(GPU_CASES))
+    return [case for case in GPU_CASES if case in cases]
+
+
+class GPUCases(argparse.Action):
+    def __call__(self, parser, namespace, value, option_string=None):
+        if getattr(namespace, self.dest, None) is not None:
+            parser.error('--gpu-cases may be supplied only once')
+        setattr(namespace, self.dest, value)
+
+
+def validate_gpu_selection(args):
+    if getattr(args, 'gpu_cases', None) is None:
+        return
+    explicit = bool(args.experiment or args.group)
+    if (not explicit or set(args.experiment or []) - {GPU} or set(args.group or []) - {'gpu'}
+            or args.all or args.quick_check or args.available or args.list or args.analyze_existing
+            or args.limit is not None or args.max_events is not None
+            or args.execute_plan or args.probe_plan or args.publish_output):
+        raise ValueError('--gpu-cases requires explicit GPU-only selection without quick-check, limits or analysis-only modes')
+
+
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     selection = p.add_mutually_exclusive_group()
@@ -63,6 +89,8 @@ def parser():
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
+    p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
+                   help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
     p.add_argument('--output', type=Path, help='Explicit new output directory; default full run rotates ae/results after verified backup')
@@ -437,6 +465,7 @@ def execute_plan(path):
 
 class Review:
     def __init__(self, args, config, output):
+        validate_gpu_selection(args)
         self.args, self.config, self.output = args, config, output
         self.python = sys.executable
         self.cli = [self.python, str(REPO / 'ae/reproduce.py')]
@@ -475,6 +504,7 @@ class Review:
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
+        self.record['gpu_requested_cases'] = list(args.gpu_cases or GPU_CASES) if GPU in self.experiments else []
         self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
                                   reason='GPU stage not reached or not selected')
         self.record['concurrency_policy'] = dict(
@@ -488,6 +518,10 @@ class Review:
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
             self.previous_record = previous
+            if GPU in self.experiments:
+                prior_cases = previous.get('gpu_requested_cases', previous.get('gpu', {}).get('requested_cases', list(GPU_CASES)))
+                if prior_cases != self.record['gpu_requested_cases']:
+                    raise ValueError('Resume GPU case selection differs; use the original --gpu-cases choice')
             if previous.get('completed_job_reuse'):
                 self.record['completed_job_reuse'] = copy.deepcopy(previous['completed_job_reuse'])
             if previous.get('release', {}).get('source_sha256') != self.record['release']['source_sha256']:
@@ -843,15 +877,26 @@ class Review:
                     config_path = Path(self.config['_config_dir']) / config_path
             else:
                 config_path = DEFAULT_CONFIG
-            self.record['gpu'] = run_auto(self.output / relative, config_path)
+            self.record['gpu'] = run_auto(self.output / relative, config_path,
+                                          requested_case_ids=self.record['gpu_requested_cases'])
         except Exception as error:
             self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
                                       reason=f'{type(error).__name__}: {error}')
         gpu = self.record['gpu']
+        requested = self.record['gpu_requested_cases']
+        gpu.setdefault('expected_cases', len(GPU_CASES))
+        gpu.setdefault('requested_cases', requested)
+        gpu.setdefault('requested_case_count', len(requested))
+        gpu.setdefault('successful_selected_cases', 0)
+        gpu.setdefault('selected_status', 'unavailable')
+        gpu.setdefault('missing_selected_cases', requested)
         self.record['coverage'].append(dict(experiment=GPU, optional=False,
             status={'complete': 'ok', 'skipped': 'unavailable'}.get(gpu['status'], gpu['status']),
-            planned_jobs=8, available_jobs=gpu.get('successful_cases', 0),
-            successful_jobs=gpu.get('successful_cases', 0), reasons=[gpu.get('reason', '')]))
+            planned_jobs=len(GPU_CASES), available_jobs=gpu.get('successful_cases', 0),
+            successful_jobs=gpu.get('successful_cases', 0), reasons=[gpu.get('reason', '')],
+            requested_cases=gpu['requested_cases'], requested_case_count=gpu['requested_case_count'],
+            successful_selected_cases=gpu['successful_selected_cases'], selected_status=gpu['selected_status'],
+            missing_selected_cases=gpu['missing_selected_cases']))
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
@@ -1002,6 +1047,10 @@ class Review:
 def main(argv=None):
     p = parser()
     args = p.parse_args(argv)
+    try:
+        validate_gpu_selection(args)
+    except ValueError as error:
+        p.error(str(error))
     if args.list:
         print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; required when selected, reported in result.md'}}, indent=2))
         return 0
