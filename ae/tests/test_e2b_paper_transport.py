@@ -63,6 +63,27 @@ class Guard(TransportFixture):
     def test_valid_owned_transport(self):
         self.assertEqual(self.transport().port,57785)
 
+    def test_creator_manifest_under_hosted_umask_passes_unchanged_trust_gate(self):
+        old = os.umask(0o002)
+        try:
+            l1.write_lifecycle(self.root, {'status':'ready','ownership':self.identity})
+        finally:
+            os.umask(old)
+        self.assertEqual(self.life.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.transport().identity, self.identity)
+
+    def test_externally_writable_lifecycle_still_denied(self):
+        for mode in (0o664, 0o646):
+            with self.subTest(mode=mode):
+                self.life.chmod(mode)
+                with self.assertRaisesRegex(ValueError, 'root-owned and not externally writable'):
+                    self.transport()
+
+    def test_externally_writable_known_hosts_still_denied(self):
+        self.hosts.chmod(0o664)
+        with self.assertRaisesRegex(ValueError, 'root-owned and not externally writable'):
+            self.transport()
+
     def test_bad_kind_rejected(self):
         self.value['kind']='ordinary-ssh'
         self.write_manifest()

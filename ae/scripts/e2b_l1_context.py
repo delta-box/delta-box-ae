@@ -31,6 +31,7 @@ import re
 import signal
 import stat
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -299,6 +300,23 @@ def owned_listener(pid, port):
     return all('socket:[%s]' % x in links for x in inodes)
 
 
+def write_lifecycle(folder, state):
+    """Publish a private, root-owned manifest independent of caller umask."""
+    folder = trusted(folder, directory=True)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', prefix='lifecycle.json.',
+                                         suffix='.tmp', dir=folder, delete=False) as stream:
+            temp = Path(stream.name)
+            os.fchmod(stream.fileno(), 0o600)
+            json.dump(state, stream, indent=2)
+            stream.write('\n')
+        trusted(temp).replace(folder / 'lifecycle.json')
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+
+
 class L1:
     def __init__(self, config, value, tools, folder, process, identity, pidfd, state, *, preparation=False):
         self.config, self.value, self.tools, self.folder = config, value, tools, folder
@@ -309,9 +327,7 @@ class L1:
         self.manifest_path = folder / 'lifecycle.json'
 
     def save(self):
-        temp = self.folder / 'lifecycle.json.tmp'
-        temp.write_text(json.dumps(self.state, indent=2) + '\n')
-        temp.replace(self.manifest_path)
+        write_lifecycle(self.folder, self.state)
 
     def same_process(self):
         if (self.identity['ppid'] != os.getpid()
@@ -608,7 +624,12 @@ def _owned_l1(config, *, preparation):
         for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             old_signals[signum] = signal.getsignal(signum)
             signal.signal(signum, interrupted)
-        (folder / 'lifecycle.json').write_text(json.dumps(state, indent=2)+'\n')
+        write_lifecycle(folder, state)
+        # OpenSSH otherwise creates known_hosts with the hosted caller's umask.
+        # Create it privately before the first accept-new connection.
+        fd = os.open(folder / 'known_hosts', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            os.fchmod(stream.fileno(), 0o600)
         user = '#cloud-config\nusers:\n  - name: ubuntu\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - ' + json.dumps(key) + '\nssh_pwauth: false\ndisable_root: true\n'
         (folder / 'user-data').write_text(user)
         (folder / 'meta-data').write_text('instance-id: '+folder.name+'\nlocal-hostname: ae-e2b-l1\n')
@@ -683,7 +704,7 @@ def _owned_l1(config, *, preparation):
                 raise
         finally:
             state['finished_unix'] = time.time()
-            (folder/'lifecycle.json').write_text(json.dumps(state, indent=2)+'\n')
+            write_lifecycle(folder, state)
             if pidfd is not None:
                 os.close(pidfd)
             if log is not None:

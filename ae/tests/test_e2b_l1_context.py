@@ -286,6 +286,26 @@ class Lifecycle(AssetsFixture):
         self.assertEqual(self.process.signals, [signal.SIGTERM])
         self.assertEqual(self.last_state()['status'], 'completed')
 
+    def test_hosted_umask_keeps_lifecycle_and_known_hosts_private_through_cleanup(self):
+        self.fake_runtime()
+        old = os.umask(0o002)
+        try:
+            with m.owned_l1(self.config) as vm:
+                folder = vm.folder
+                for name in ('lifecycle.json', 'known_hosts'):
+                    self.assertEqual((folder/name).stat().st_mode & 0o777, 0o600)
+                    self.assertEqual(m.trusted(folder/name), folder/name)
+                (folder/'known_hosts').write_text('verified SSH host key fixture\n')
+                vm.verify()
+                self.assertEqual(m.trusted(vm.manifest_path), vm.manifest_path)
+                self.assertEqual(vm.manifest_path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual((folder/'lifecycle.json').stat().st_mode & 0o777, 0o600)
+            self.assertEqual((folder/'known_hosts').stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads((folder/'lifecycle.json').read_text())['status'], 'completed')
+            self.assertEqual(list(folder.glob('lifecycle.json.*.tmp')), [])
+        finally:
+            os.umask(old)
+
     def test_keyboard_interrupt_stops_reaps_preserves_overlay(self):
         self.fake_runtime()
         with self.assertRaises(KeyboardInterrupt):
@@ -837,6 +857,47 @@ class Resources(unittest.TestCase):
         self.lease_fixture(wrong_cmd=True)
         with self.assertRaisesRegex(ValueError,'pinned measurement controller'):m.held_ancestor_leases()
 
+
+
+class LifecycleWriter(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+
+    def test_private_mode_at_atomic_publication_with_permissive_umask(self):
+        replace = Path.replace
+        seen = []
+        def checked(path, dest):
+            seen.append(path.stat().st_mode & 0o777)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            return replace(path, dest)
+        old = os.umask(0o000)
+        try:
+            with patch.object(Path, 'replace', checked):
+                m.write_lifecycle(self.folder, {'status':'preparing'})
+                m.write_lifecycle(self.folder, {'status':'ready'})
+            self.assertEqual(seen, [0o600, 0o600])
+            self.assertEqual(m.trusted(self.folder/'lifecycle.json'), self.folder/'lifecycle.json')
+            self.assertEqual(json.loads((self.folder/'lifecycle.json').read_text()), {'status':'ready'})
+        finally:
+            os.umask(old)
+
+    def test_serialization_failure_preserves_previous_state_and_cleans_owned_temp(self):
+        m.write_lifecycle(self.folder, {'status':'ready'})
+        before = (self.folder/'lifecycle.json').read_bytes()
+        with patch.object(m.json, 'dump', side_effect=ValueError('serialization fixture')):
+            with self.assertRaisesRegex(ValueError, 'serialization fixture'):
+                m.write_lifecycle(self.folder, {'status':'running'})
+        self.assertEqual((self.folder/'lifecycle.json').read_bytes(), before)
+        self.assertEqual(list(self.folder.glob('lifecycle.json.*.tmp')), [])
+
+    def test_symlink_folder_rejected_without_writing(self):
+        target = self.folder/'target';target.mkdir()
+        alias = self.folder/'alias';alias.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, 'Symlink'):
+            m.write_lifecycle(alias, {'status':'ready'})
+        self.assertEqual(list(target.iterdir()), [])
 
 if __name__ == '__main__':
     unittest.main()
