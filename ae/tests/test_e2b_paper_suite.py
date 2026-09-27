@@ -189,6 +189,21 @@ class Lifecycle(SuiteFixture):
             self.assertEqual(order,sorted(order))
             if idx<8:self.assertLess(order[-1],self.events.index(('create',idx+1)))
 
+    def test_new_runs_parent_is_created_without_precreating_suite(self):
+        self.assertFalse(self.output.exists())
+        self.output.parent.rmdir()
+        self.assertFalse(self.output.parent.exists())
+        self.assertEqual(m.run(self.planpath),0)
+        self.assert_statuses(['ok']*8)
+        self.assertEqual((self.owned_calls,self.exits),(1,1))
+        self.assertEqual(self.producer.call_count,8)
+        self.assertEqual(len(self.base_records),8)
+        self.assertEqual(self.state()['status'],'completed')
+        self.assertTrue((self.evidence/'inputs.json').is_file())
+        self.assertTrue((self.output/'suite.json').is_file())
+        # The existing produce() guard also verifies each producer output is
+        # absent when that producer begins, including this fresh-parent case.
+
     def test_original_effective_config_and_plan_are_not_rewritten(self):
         oldconfig=self.configpath.read_bytes();oldplan=self.planpath.read_bytes()
         m.run(self.planpath)

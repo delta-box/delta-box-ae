@@ -202,7 +202,7 @@ def run(path):
     output = Path(plan['review_output'])
     # Suite output itself is created exactly once by execute_plan.
     evidence = output.parent/'e2b-paper-l1'
-    evidence.mkdir(mode=0o700)
+    evidence.mkdir(parents=True, mode=0o700)
     write(evidence/'inputs.json',inputs)
     write(evidence/'runtime-deployment.json',data)
     cfg = L1Config(l1_manifest, WORK/'l1-work', Path('/home/dyp/.ssh/id_ed25519.pub'),
