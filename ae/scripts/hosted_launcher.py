@@ -32,6 +32,7 @@ EXPERIMENTS = ('table-02-deltabox', 'table-03-slow', 'table-02-replay',
                'figure-08-cube', 'figure-08-e2b', 'figure-09', 'correctness', 'figure-08-gpu')
 GROUPS = ('deltabox', 'baselines', 'table-02', 'table-03', 'figure-02',
           'figure-06', 'figure-08', 'figure-08-cpu', 'gpu', 'cpu', 'figure-09', 'correctness')
+GPU_CASES = tuple(f'{phase}-B{batch}' for phase in ('generation', 'training') for batch in (1, 4, 16, 64))
 API_ENVIRONMENT = {
     'E2B_API_KEY', 'E2B_API_URL', 'E2B_SANDBOX_URL', 'E2B_TEMPLATE', 'E2B_TEMPLATE_ID',
     'CUBE_API_KEY', 'CUBE_API_URL', 'CUBE_TEMPLATE', 'CUBE_TEMPLATE_ID',
@@ -240,6 +241,13 @@ def positive_integer(value):
     return number
 
 
+def gpu_case_selection(value):
+    cases = value.split(',')
+    if not cases or len(set(cases)) != len(cases) or any(case not in GPU_CASES for case in cases):
+        raise argparse.ArgumentTypeError('--gpu-cases requires unique case IDs from ' + ','.join(GPU_CASES))
+    return [case for case in GPU_CASES if case in cases]
+
+
 class Once(argparse.Action):
     def __call__(self, parser, namespace, value, option_string=None):
         if getattr(namespace, self.dest, None) is not None:
@@ -257,6 +265,8 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--gpu-cases', type=gpu_case_selection, action=Once, metavar='CASE,...',
+                        help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
                         help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
@@ -270,6 +280,11 @@ def parse_arguments(argv):
     parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
     parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
     args = parser.parse_args(argv)
+    if args.gpu_cases is not None:
+        explicit = bool(args.experiment or args.group)
+        if (not explicit or set(args.experiment or []) - {'figure-08-gpu'} or set(args.group or []) - {'gpu'}
+                or args.all or args.quick_check or args.list or args.limit is not None or args.max_events is not None):
+            parser.error('--gpu-cases requires explicit GPU-only selection without quick-check or limits')
     if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
         parser.error('--test already selects one DeltaBox instance and three events')
     if args.all and (args.experiment or args.group):
@@ -382,6 +397,8 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if args.gpu_cases is not None:
+        command += ['--gpu-cases', ','.join(args.gpu_cases)]
     if args.baseline_inputs is not None:
         command += ['--baseline-inputs', args.baseline_inputs]
     for key in ('limit', 'max_events', 'numa_node', 'cpus'):

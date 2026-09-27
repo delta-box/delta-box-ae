@@ -213,6 +213,33 @@ class HostedTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     hosted.parse_arguments(['--checkout', str(self.runtime), *flags])
 
+    def test_gpu_case_subset_is_forwarded_canonically_by_public_entry(self):
+        flags = ['--group', 'gpu', '--gpu-cases', 'training-B64,training-B16', '--output', 'gpu-missing']
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), *flags]), 0, stderr.getvalue())
+        command = execute.call_args.args[1]
+        self.assertEqual(command[command.index('--gpu-cases') + 1], 'training-B16,training-B64')
+        self.assertEqual(command[command.index('--group') + 1], 'gpu')
+        self.assertFalse((self.output / 'gpu-missing').exists())
+
+    def test_gpu_subset_rejects_non_gpu_quick_and_ambiguous_scopes(self):
+        modes = [[], ['--all'], ['--test'], ['--smoke'], ['--list'], ['--group', 'cpu'],
+                 ['--group', 'figure-08'], ['--experiment', 'correctness'],
+                 ['--group', 'gpu', '--experiment', 'correctness'],
+                 ['--group', 'gpu', '--limit', '1'], ['--group', 'gpu', '--max-events', '1']]
+        for flags in modes:
+            with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                hosted.parse_arguments(['--checkout', str(self.runtime), *flags, '--gpu-cases', 'training-B16,training-B64'])
+
+    def test_gpu_case_argument_whitelist_and_default(self):
+        self.assertIsNone(hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'gpu']).gpu_cases)
+        for value in ('', 'training-B16,', 'training-B16,training-B16', 'training-B3', 'all', ' training-B16'):
+            with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'gpu', '--gpu-cases', value])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'gpu',
+                                    '--gpu-cases', 'training-B16', '--gpu-cases', 'training-B64'])
+
     def test_figure09_reuse_forwards_trusted_old_result_without_mutation(self):
         old = self.output / 'prior'
         old.mkdir()
