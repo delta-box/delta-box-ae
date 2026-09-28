@@ -439,8 +439,16 @@ def run(path):
     inputs = verify_inputs(config)
     if (plan.get('workers',1) != 1 or len(plan['jobs']) != 8
             or [j.get('key') for j in plan['jobs']] != ['table-02-e2b__'+r[0] for r in COHORT]
-            or any(j.get('reused_verified') for j in plan['jobs'])):
-        raise ValueError('Paper profile requires exactly the ordered original eight fresh jobs')
+            or any(j.get('reused_verified') and j.get('execution') != 'referenced-completed-measurement'
+                   for j in plan['jobs'])):
+        raise ValueError('Paper profile requires the ordered original eight measured or verified-reference inputs')
+    referenced = [j for j in plan['jobs'] if j.get('reused_verified')]
+    if referenced:
+        from ae.repro.e2b_reuse import verify_referenced_job
+        for job in referenced:
+            verify_referenced_job(job, plan)
+    if len(referenced) == len(plan['jobs']):
+        return review.execute_plan(path, paper_context_ready=True)
     data, runtime_sha, l1_manifest = checked_deployment()
     output = Path(plan['review_output'])
     # Suite output itself is created exactly once by execute_plan.
@@ -452,7 +460,9 @@ def run(path):
                    Path('/home/dyp/.ssh/id_ed25519'), readiness_timeout=600,stop_grace=60)
     state = dict(status='starting',purpose='paper-condition-reconstruction',started_unix=time.time(),
                  original_l1_configuration_unknown=True, deployment_sha256=runtime_sha,
-                 measurement_plan=str(path),input_count=8,expected_actions=185)
+                 measurement_plan=str(path),input_count=8,expected_actions=185,
+                 measured_input_count=8-len(referenced),referenced_input_count=len(referenced),
+                 expected_new_actions=sum(COHORT[i][5] for i,j in enumerate(plan['jobs']) if not j.get('reused_verified')))
     items = {}
     def save_state():
         tmp=evidence/'state.json.tmp';tmp.write_text(json.dumps(state,indent=2)+'\n');tmp.replace(evidence/'state.json')
@@ -522,7 +532,8 @@ def run(path):
             failed=json.loads(json.dumps(plan))
             failed.update(status='failed',preparation_error=state['error'])
             for job in failed['jobs']:
-                job.update(status='not-run',reason='Owned L1 preparation failed before measurement')
+                if not job.get('reused_verified'):
+                    job.update(status='not-run',reason='Owned L1 preparation failed before measurement')
             write(output/'suite.json',failed)
         raise
     finally:

@@ -34,14 +34,15 @@ def validate(args):
         return
     forbidden = ('all', 'quick_check', 'available', 'list', 'analyze_existing',
                  'execute_plan', 'probe_plan', 'publish_output', 'no_pin',
-                 'experiment_config', 'group', 'resume', 'reuse_completed_from',
+                 'experiment_config', 'group', 'resume',
                  'cube_profile')
     if (args.e2b_profile != PROFILE or args.experiment != [EXPERIMENT]
             or any(getattr(args, key, None) for key in forbidden)
             or any(getattr(args, key, None) is not None for key in
                    ('limit', 'max_events', 'gpu_cases', 'numa_node', 'cpus'))
+            or (getattr(args, 'reuse_completed_from', None) and not getattr(args, 'output', None))
             or Path(args.config).absolute() != ROOT_CONFIG):
-        raise ValueError('--e2b-profile requires complete explicit table-02-e2b only and fixed hosted configuration; no overrides, resume or reuse')
+        raise ValueError('--e2b-profile requires complete explicit table-02-e2b only and fixed hosted configuration; no overrides or resume; references require a new output')
     if any(os.environ.get(key) for key in ('AE_CPUS', 'AE_NUMA_NODE', 'AE_CONFIG')):
         raise ValueError('E2B paper profile configuration/placement cannot be overridden by environment')
 

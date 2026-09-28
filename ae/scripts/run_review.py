@@ -463,7 +463,10 @@ def execute_plan(path, *, paper_context_ready=False, paper_before_job=None, pape
     if workers > 1 and any(j['experiment'] != 'table-02-replay' for j in plan['jobs']):
         raise ValueError('Concurrent trace execution is supported only for paper Replay')
     for job in plan['jobs']:
-        if job.get('reused_verified') and job.get('execution') == 'copied-completed-measurement':
+        if job.get('reused_verified') and job['experiment'] == 'table-02-e2b':
+            from ae.repro.e2b_reuse import verify_referenced_job
+            verify_referenced_job(job, plan)
+        elif job.get('reused_verified') and job.get('execution') == 'copied-completed-measurement':
             if job['experiment'] == 'table-02-cube':
                 from ae.repro.cube_reuse import verify_imported_job
             else:
@@ -556,9 +559,10 @@ class Review:
                     self.limits += [flag, str(value)]
         if getattr(args, 'reuse_completed_from', None):
             cube_reuse = self.experiments == ['table-02-cube'] and getattr(args, 'cube_profile', None) == 'paper-disk'
-            if (not ('figure-09' in self.experiments or cube_reuse)
+            e2b_reuse = self.experiments == ['table-02-e2b'] and getattr(args, 'e2b_profile', None) == 'paper-nested'
+            if (not ('figure-09' in self.experiments or cube_reuse or e2b_reuse)
                     or args.quick_check or args.available or self.limits):
-                raise ValueError('--reuse-completed-from requires complete Figure 9 or Cube paper-disk jobs')
+                raise ValueError('--reuse-completed-from requires complete Figure 9, Cube paper-disk or E2B paper-nested inputs')
             source = args.reuse_completed_from.absolute()
             if output.is_relative_to(source) or source.is_relative_to(output):
                 raise ValueError('Reuse source and new output must be disjoint')
@@ -813,8 +817,11 @@ class Review:
         plan['workers'] = workers
         plan['measurement_identity'] = identity
         if (name == 'figure-09' or (name == 'table-02-cube' and
-                getattr(self.args, 'cube_profile', None) == 'paper-disk')) and getattr(self.args, 'reuse_completed_from', None):
-            if name == 'table-02-cube':
+                getattr(self.args, 'cube_profile', None) == 'paper-disk') or
+                (name == 'table-02-e2b' and getattr(self.args, 'e2b_profile', None) == 'paper-nested')) and getattr(self.args, 'reuse_completed_from', None):
+            if name == 'table-02-e2b':
+                from ae.repro.e2b_reuse import prepare_reuse
+            elif name == 'table-02-cube':
                 from ae.repro.cube_reuse import prepare_reuse
             else:
                 from ae.repro.figure09_reuse import prepare_reuse

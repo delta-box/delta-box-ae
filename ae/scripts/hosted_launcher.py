@@ -279,7 +279,7 @@ def parse_arguments(argv):
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
     parser.add_argument('--reuse-completed-from', type=Path, action=Once,
-                        help='Verify completed Figure9 or Cube paper-disk jobs from a prior result; retain their original source')
+                        help='Verify completed Figure9, Cube paper-disk or E2B paper-nested inputs; retain their original source')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
     parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
@@ -287,9 +287,10 @@ def parse_arguments(argv):
     if args.e2b_profile is not None:
         if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
-                or args.gpu_cases is not None or args.resume is not None or args.reuse_completed_from
+                or args.gpu_cases is not None or args.resume is not None
+                or (args.reuse_completed_from is not None and args.output is None)
                 or args.cube_profile is not None or args.numa_node is not None or args.cpus is not None):
-            parser.error('--e2b-profile requires complete explicit table-02-e2b only; no overrides, resume or reuse')
+            parser.error('--e2b-profile requires complete explicit table-02-e2b only; no overrides or resume; references require a new output')
     if args.cube_profile is not None:
         if (set(args.experiment or []) != {'table-02-cube'} or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
@@ -311,9 +312,11 @@ def parse_arguments(argv):
         selected_figure09 = 'figure-09' in (args.experiment or []) or 'figure-09' in (args.group or [])
         selected_cube = (args.experiment == ['table-02-cube'] and not args.group
                          and args.cube_profile == 'paper-disk')
-        if (not (selected_figure09 or selected_cube) or args.quick_check or args.all or args.resume or args.list
+        selected_e2b = (args.experiment == ['table-02-e2b'] and not args.group
+                        and args.e2b_profile == 'paper-nested')
+        if (not (selected_figure09 or selected_cube or selected_e2b) or args.quick_check or args.all or args.resume or args.list
                 or args.limit is not None or args.max_events is not None):
-            parser.error('--reuse-completed-from requires explicit Figure9 or Cube paper-disk selection, a new output, and complete inputs')
+            parser.error('--reuse-completed-from requires explicit Figure9, Cube paper-disk or E2B paper-nested selection, a new output, and complete inputs')
     if args.numa_node is not None or args.cpus is not None:
         if not args.quick_check or args.numa_node is None or args.cpus is None:
             parser.error('--numa-node and --cpus must be supplied together with --test')

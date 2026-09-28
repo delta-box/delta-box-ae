@@ -29,6 +29,38 @@ class ProfileTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             profile.validate(self.args())
 
+    def test_explicit_reference_with_new_output_is_accepted(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            profile.validate(self.args(['--reuse-completed-from','/tmp/prior','--output','/tmp/new']))
+
+    def test_hosted_explicit_reference_with_new_output_is_accepted(self):
+        args=hosted.parse_arguments(['--checkout','/repo','--experiment','table-02-e2b',
+            '--e2b-profile',profile.PROFILE,'--reuse-completed-from','/tmp/prior','--output','/tmp/new'])
+        self.assertEqual(args.reuse_completed_from,Path('/tmp/prior'))
+
+    def test_verified_reference_skips_physical_callbacks_and_keeps_source(self):
+        from ae.repro import e2b_reuse
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);path=root/'plan.json'
+            prior={'key':'one','experiment':'table-02-e2b','status':'ok','reused_verified':True,
+                   'execution':e2b_reuse.EXECUTION,'measurement_release':{'source_commit':'old'}}
+            plan={'review_config':'/config','review_output':str(root/'suite'),'import_verified':True,
+                  'jobs':[prior,{'key':'two','experiment':'table-02-e2b'}],'workers':1}
+            path.write_text(json.dumps(plan));before=mock.Mock();after=mock.Mock()
+            with mock.patch.object(review,'load_config',return_value=profile.effective({},profile.PROFILE)), \
+                 mock.patch.object(review,'repository_state',return_value={}), \
+                 mock.patch.object(review,'host_state',return_value={}), \
+                 mock.patch.object(review,'from_environment',return_value={'source_commit':'new'}), \
+                 mock.patch.object(review,'make_output_accessible'), \
+                 mock.patch.object(review,'execute_review_job',return_value={'status':'ok'}) as execute, \
+                 mock.patch.object(e2b_reuse,'verify_referenced_job') as verify:
+                result=review.execute_plan(path,paper_context_ready=True,paper_before_job=before,paper_after_job=after)
+            self.assertEqual(result,0)
+            verify.assert_called_once();execute.assert_called_once();before.assert_called_once();after.assert_called_once()
+            self.assertEqual(before.call_args.args[0],2)
+            saved=json.loads((root/'suite/suite.json').read_text())
+            self.assertEqual(saved['jobs'][0]['measurement_release'],{'source_commit':'old'})
+
     def test_rejects_every_scope_or_placement_override(self):
         variants = [
             ['--all'], ['--test'], ['--available'], ['--list'], ['--group', 'table-02'],

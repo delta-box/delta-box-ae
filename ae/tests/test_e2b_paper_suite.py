@@ -257,6 +257,15 @@ class Lifecycle(SuiteFixture):
         self.producer.assert_not_called()
         self.assertTrue((self.evidence/'runtime-deployment.json').exists())
 
+    def test_setup_failure_keeps_verified_reference_success(self):
+        from ae.repro import e2b_reuse
+        self.plan['jobs'][0].update(status='ok',reused_verified=True,execution=e2b_reuse.EXECUTION)
+        self.save_plan();self.prepare_error=RuntimeError('setup failed before fresh jobs')
+        with patch.object(e2b_reuse,'verify_referenced_job'):
+            with self.assertRaisesRegex(RuntimeError,'setup failed'):m.run(self.planpath)
+        self.assert_statuses(['ok']+['not-run']*7)
+        self.producer.assert_not_called()
+
     def test_install_failure_closes_l1_and_records_all_not_run(self):
         with patch.object(m,'install_runtime',side_effect=RuntimeError('install failed')):
             with self.assertRaisesRegex(RuntimeError,'install failed'):m.run(self.planpath)
