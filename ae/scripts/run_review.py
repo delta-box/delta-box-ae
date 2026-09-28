@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the complete CPU and GPU AE catalog by default, preserving failures and fresh-only plots."""
+"""Run selected AE groups within configured job limits, preserving raw failures and results."""
 from __future__ import annotations
 
 import argparse
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
 from repro.result_storage import (DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp,
-                                 parallel_run_locks, parallel_output, measurement_phase, no_symlink_parents)
+                                 parallel_run_locks, parallel_output, measurement_phase, no_symlink_parents, output_tree_lock)
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -70,6 +70,7 @@ def parser():
     p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
                    help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
     p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
+    p.add_argument('--isolated-validation', action='store_true', help='Selected small VM validation in a separate output with explicit NUMA/CPUs')
     p.add_argument('--max-events', type=int, help='Explicit event prefix; units depend on backend')
     p.add_argument('--no-pin', action='store_true', help='Explicitly opt out of NUMA and frequency controls')
     p.add_argument('--numa-node', type=int, default=None, help='NUMA node for this run; default: shared measurement.numa_node configuration')
@@ -119,6 +120,8 @@ def config_identity(config):
     # A managed daemon receives a fresh PID/mount proof for each attempt.
     # Its full file hash remains in the review; it is not a measurement setting.
     identity = copy.deepcopy(config)
+    # This selects jobs; each job command and original config hash remain checked.
+    identity.pop('figure06_adaptive_arms', None)
     if identity.get('cube', {}).get('manage_memory_service') is True:
         identity['cube'].pop('memory_manifest', None)
     return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -265,6 +268,66 @@ def measurement_placement(args, config):
     return dict(node=node, cpus=cpus)
 
 
+ISOLATED_VALIDATION_EXPERIMENTS = frozenset((
+    'table-02-deltabox', 'table-03-slow', 'figure-02-filesystem',
+    'figure-02-memory', 'figure-06-memory', 'figure-06-adaptive',
+    'figure-09', 'correctness'))
+
+
+def validation_job_limit(config):
+    limit = config.get('review', {}).get('validation_max_jobs')
+    if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
+        raise ValueError('review.validation_max_jobs must be an integer in [1, 10]')
+    return limit
+
+
+def apply_validation_defaults(args, config):
+    limit = validation_job_limit(config)
+    if limit is None or args.quick_check or args.analyze_existing:
+        return
+    selected = set(args.experiment or [])
+    for group in args.group or []:
+        selected.update(GROUPS[group])
+    # GPU case lists are already bounded and --limit refers to CPU inputs.
+    # Do not turn a valid selected-GPU request into an invalid prefix request.
+    if args.limit is None and (selected == {GPU} or getattr(args, 'e2b_profile', None)):
+        return
+    if args.limit is None:
+        args.limit = limit
+    elif args.limit > limit:
+        raise ValueError(f'--limit exceeds the configured validation cap of {limit}')
+
+
+def bounded_plan_limits(name, config, flags, maximum):
+    result = list(flags)
+    if maximum is None or '--limit' not in result:
+        return result
+    arms = (len(config.get('figure06_adaptive_arms', ['standard', 'adaptive'])) if name == 'figure-06-adaptive' else 3 if name == 'figure-09'
+            else len(config.get('figure06_memory_policies', ['none', 'skip', 'gc', 'warm']))
+            if name == 'figure-06-memory' else 1)
+    if maximum < arms:
+        raise ValueError('Validation cap cannot cover one complete set of experiment arms')
+    offset = result.index('--limit') + 1
+    result[offset] = str(min(int(result[offset]), maximum // arms))
+    return result
+
+
+def isolated_validation_output(args, config):
+    if (validation_job_limit(config) is None
+            or len(args.experiment or []) != 1 or args.experiment[0] not in ISOLATED_VALIDATION_EXPERIMENTS
+            or args.group or args.all or args.quick_check or args.available or args.analyze_existing
+            or args.experiment_config or getattr(args, 'reuse_completed_from', None) or args.no_pin
+            or args.limit is None or not 1 <= args.limit <= 10
+            or args.numa_node is None or not args.cpus or not (args.output or args.resume)):
+        raise ValueError('Isolated validation requires one supported VM experiment, at most10 inputs, an explicit output/resume and NUMA/CPU binding')
+    output = no_symlink_parents((args.resume or args.output).absolute()).resolve()
+    root = (REPO / 'ae/results').resolve()
+    if output == root or not output.is_relative_to(root):
+        raise ValueError('Isolated validation output must be a child of this repository ae/results')
+    parallel_output(root, output, quick=False)
+    return output
+
+
 def check_timeout(config):
     timeout = float(config.get('timeout', 14400))
     if not math.isfinite(timeout) or timeout <= 0:
@@ -319,7 +382,7 @@ def job_unavailable(job, config):
                         reasons.append('Table3 lazy restore requires exact-parent-lazy-v1 for the pinned dump/restore binary')
                 except (OSError, subprocess.SubprocessError) as error:
                     reasons.append('Table3 lazy restore capability probe failed: ' + str(error))
-    if name.startswith('figure-06') and config.get('checkpoint_profile') in ('async-incremental', 'async-incremental-lazy'):
+    if name == 'figure-06-memory' and config.get('checkpoint_profile') in ('async-incremental', 'async-incremental-lazy'):
         reasons.append('async-incremental supports standard replay only; supply a runtime-default config for Figure 6')
     if name in ('figure-08-deltabox', 'figure-09', 'correctness'):
         images = path_setting('images_dir', 'directory')
@@ -471,6 +534,7 @@ def execute_plan(path):
 
 class Review:
     def __init__(self, args, config, output):
+        apply_validation_defaults(args, config)
         self.args, self.config, self.output = args, config, output
         self.python = sys.executable
         self.cli = [self.python, str(REPO / 'ae/reproduce.py')]
@@ -510,6 +574,11 @@ class Review:
             lane='quick' if args.quick_check else 'main',
             control_cpus=config.get('review', {}).get('control_cpus'),
             resource_scope='exclusive NUMA and CPU frequency policies during each measurement; exclusive results rotation')
+        self.record['validation_max_jobs'] = validation_job_limit(config)
+        if getattr(args, 'isolated_validation', False):
+            self.record['concurrency_policy'].update(
+                enabled=True, lane='isolated-bounded-validation',
+                resource_scope='Separate output; shared rotation barrier; exclusive selected NUMA/frequency lease')
         self.cube_memory_manifest = None
         self.cube_placement = None
         self.previous_record = {}
@@ -668,10 +737,15 @@ class Review:
             self.save()
             return
         suite = self.output / 'runs' / name
-        if not self.step(name + '-plan', [*self.cli, 'plan', *select, '--output', str(suite), *self.limits], 600):
+        plan_limits = bounded_plan_limits(name, config, self.limits, validation_job_limit(self.config))
+        if not self.step(name + '-plan', [*self.cli, 'plan', *select, '--output', str(suite), *plan_limits], 600):
             row.update(status='failed', reasons=['Cannot build the cohort plan; see plan log'])
             return
         plan = self.read_step(name + '-plan')
+        maximum = validation_job_limit(self.config)
+        if maximum is not None and len(plan['jobs']) > maximum:
+            raise ValueError('Planner exceeded the configured validation job cap')
+        row['validation_limits'] = dict(max_jobs=maximum, plan_flags=plan_limits)
         plan.update(review_config=str(config_path), review_output=str(suite), review_timeout=timeout,
                     effective_config_sha256=config_identity(config), attempt=self.attempt)
         plan_path = self.output / 'plans' / self.attempt / (name + '.json')
@@ -1019,6 +1093,11 @@ def main(argv=None):
         p.error('--resume cannot be combined with --output/--analyze-existing')
     try:
         config = {} if args.analyze_existing else load_config(args.config.resolve())
+        apply_validation_defaults(args, config)
+        if args.isolated_validation:
+            isolated_validation_output(args, config)
+            with run_lock(REPO / 'ae/work/.results.lock', shared=True):
+                return run_selected(args, p)
         parallel = config.get('review', {}).get('parallel_quick_check', False)
         if type(parallel) is not bool:
             raise ValueError('review.parallel_quick_check must be a boolean')
@@ -1068,6 +1147,13 @@ def run_selected(args, p, *, gate=None):
     output = no_symlink_parents(selected_output).resolve()
     if args.analyze_existing and not args.analyze_existing.is_dir():
         p.error('--analyze-existing must point to an existing directory')
+    # Acquire before Review loads resume state or any attempt history is written.
+    with output_tree_lock(REPO / 'ae/work', REPO / 'ae/results', output,
+                          quick=args.quick_check):
+        return run_locked_selection(args, p, config, output, gate=gate)
+
+
+def run_locked_selection(args, p, config, output, *, gate=None):
     runner = Review(args, config, output)
     latest = output == (REPO / 'ae/results').resolve() and not args.resume
     if latest and not complete_selection(args):

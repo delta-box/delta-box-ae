@@ -67,8 +67,9 @@
         ]
       },
       "figure-06-adaptive": {
-        "checkpoint_profile": "runtime-default",
-        "legacy_timing_policy": "paper-zero"
+        "checkpoint_profile": "async-incremental",
+        "legacy_timing_policy": "paper-zero",
+        "mem_mib": 16384
       },
       "figure-08-cube": {
         "cube": {
@@ -95,7 +96,8 @@
     },
     "declared_unavailable": [],
     "results_backup_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae",
-    "parallel_quick_check": false
+    "parallel_quick_check": false,
+    "validation_max_jobs": 10
   },
   "repository_fallback": "same-project-commit",
   "vm_storage": "tmpfs",

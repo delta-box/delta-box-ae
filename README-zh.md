@@ -6,7 +6,7 @@
 
 DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
-建议先完成约 **5 分钟的快速检查**，再运行全部实验。Replay、CRIU 和 Firecracker Diff 默认使用固定的 **44 条完整轨迹**；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
+建议先完成约 **5 分钟的快速检查**，再逐项验证。现有配置将每组限制为**最多 10 个完整作业（含所有实验臂）**，默认不启动全量 cohort。Replay、CRIU 和 Firecracker Diff 默认从固定的 **44 条完整轨迹输入池**取样；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [自建环境](#self-hosting) · [运行问题](#troubleshooting)
 
@@ -33,7 +33,7 @@ bash ae/run_test.sh
 ok: <结果目录>/SUMMARY.md
 ```
 
-打开这个 `SUMMARY.md`，各步骤应为 `ok`。快速检查确认运行链路可用；论文结论由下面的完整实验评估。
+打开这个 `SUMMARY.md`，各步骤应为 `ok`。快速检查确认运行链路可用；论文结论需要结合各项实验的实际覆盖和结果评估。
 
 快速检查的结果单独保存在 `ae/results/checks/quick-check-<时间戳>/`。托管入口按串行方式运行测评和快速检查。CPU 与内存绑定统一来自公共 `measurement` 配置，所有选中的 CPU 实验继承同一组运行绑定。
 
@@ -45,7 +45,7 @@ bash ae/run_test.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 
 CPU 必须属于所选节点。内存准入检查与 CPU 频率恢复仍然生效。
 
-### 运行完整实验
+### 运行小规模验证
 
 <a id="一键运行"></a>
 
@@ -53,25 +53,35 @@ CPU 必须属于所选节点。内存准入检查与 CPU 频率恢复仍然生�
 bash ae/run_all.sh
 ```
 
-全部 CPU 实验按顺序执行，统一使用一个 NUMA 节点。完整测评同样支持上述运行参数：
+小规模 CPU 验证按顺序执行，统一使用一个 NUMA 节点。可在启动时指定绑定：
 
 ```bash
 bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-该命令运行[索引](#experiments)中的全部 CPU 实验，并自动分析、绘图和生成论文对比页。Replay、CRIU 和 Firecracker Diff 使用同一份 44 条实例名单，每条轨迹执行到底，其余实验使用各自的输入集。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
+该命令按[索引](#experiments)顺序逐组验证，每组最多执行 10 个完整作业，再分析样本结果并生成对比页。Replay、CRIU 和 Firecracker Diff 从固定 44 条输入池中取样，选中的轨迹执行到底。上限包含所有实验臂：Figure 6(b) 最多 5 条输入 × 2 模式，Figure 9 最多 3 条输入 × 3 文件系统。报告保留实际子集范围，不冒充全量覆盖。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
 
-如需使用原始完整 baseline 输入集（Replay/CRIU 各 244 条，Firecracker Diff 238 条），运行：
+如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
 
 ```bash
 bash ae/run_all.sh --baseline-inputs all
 ```
 
-`--baseline-inputs` 同样适用于单项运行；默认值为 `44`。
+`--baseline-inputs` 只选择输入池，默认值为 `44`；不会绕过 `review.validation_max_jobs=10` 上限。先用 `--limit 1` 做小样本，检查后再在上限内扩大。脚本不自动截断轨迹事件。
 
-运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。默认完整运行的状态应为 `ok`，失败步骤会保留日志并返回非零退出码。
+运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。样本运行成功时状态为 `ok`，失败步骤会保留日志并返回非零退出码。
 
-最新完整运行直接写入 `ae/results/`。再次启动完整运行前，脚本将旧结果复制到 `/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae/` 下带时间戳的目录，逐文件校验内容和元数据后再清空工作结果。备份空间不足或仍有活动任务时，启动会停止并保留原结果。快速检查与单项实验使用独立子目录；通过 `--output` 指定的其他目录不会被覆盖。新运行记录实际源码，无需更新源码锁。续跑方法见[故障排查](#troubleshooting)。
+小规模验证写入新的 `ae/results/selected/` 子目录，既有完整结果保留原目录。当前受限配置不走旧的全量结果备份与轮换路径。备份空间不足或仍有活动任务时，启动会停止并保留原结果。快速检查与单项实验使用独立子目录；通过 `--output` 指定的其他目录不会被覆盖。新运行记录实际源码，无需更新源码锁。续跑方法见[故障排查](#troubleshooting)。
+
+其他 NUMA 节点已有任务时，可为少量 VM 修复验证显式指定独立输出和绑定：
+
+```bash
+bash ae/run_all.sh --experiment figure-06-adaptive --limit 1 \
+  --isolated-validation --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS" \
+  --output "$PWD/ae/results/selected/figure06-pilot"
+```
+
+这个显式模式只接受已支持的 VM 实验，保留结果轮换屏障，并独占所选 NUMA 节点；不接受会改共享 Cube/E2B 服务的实验。扩大样本时，用相同绑定、受限的较大 `--limit` 和 `--resume` 校验并复用已完成作业。成功与失败原始记录均保留身份。所有入口在读取续跑状态前先锁定输出，同一目录及父子目录不能并发写入；`checks/` 子树保留给快速检查。
 
 ## 2. 实验索引与单项运行
 
@@ -81,7 +91,7 @@ bash ae/run_all.sh --baseline-inputs all
 <a id="逐项实验"></a>
 <a id="5-逐项实验"></a>
 
-完整实验命令已经包含下表中的 CPU 与 GPU 项目。单独评估某个结论时，按对应章节运行即可，无需先执行整套实验。
+一键命令按每组作业上限运行下表中的 CPU 与 GPU 项目。单独评估某个结论时，按对应章节运行即可，无需先执行整套实验。
 
 | 论文项 | 评估问题 | 单项选择 | 资源 |
 | --- | --- | --- | --- |

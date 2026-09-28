@@ -20,12 +20,12 @@ from typing import Optional, List
 import sandbox_controller as core
 from sandbox_controller import SandboxController, _read_rss_mb, InstructionSemanticParser, classify_vmas
 
-_EXPECTED_CHECKPOINT_ACTION = '78c508d8d660148485d0ef7dbade155ce6046cf160cb9240223c1600c58090ca'
+_EXPECTED_CHECKPOINT_ACTION = '76cc086f5caa0efc89ba7cd91e519d2507ba288bc8416aebb030678ba3d0dfca'
 
 
 def verify_runtime_compatibility() -> None:
     """Fail before acquiring guest resources if the remaining copy drifted."""
-    name = "checkpoint_action"
+    name = "_checkpoint_legacy"
     source = textwrap.dedent(inspect.getsource(getattr(core.SandboxController, name)))
     node = ast.parse(source).body[0]
     actual = hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()

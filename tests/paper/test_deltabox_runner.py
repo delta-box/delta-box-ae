@@ -211,6 +211,20 @@ class DeltaBoxRunnerTests(unittest.TestCase):
             self.assertFalse(warm.config['incremental_dump_enabled'])
             self.assertNotEqual(fresh_labels(warm.config)['cohort'], fresh_labels(disabled.config)['cohort'])
 
+    def test_async_adaptive_prepare_preserves_real_worker_and_both_strategies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = options(root, ('--adaptive', '--checkpoint-profile', 'async-incremental', '--criu-dump-binary', str(root / 'kernel')))
+            args.criu_dump_binary = root / 'kernel'
+            spec = run_instance.prepare_single_run(args)
+            events = [json.loads(line) for line in spec.schedule_path.read_text().splitlines()]
+            self.assertEqual({event['strategy'] for event in events if event['type']=='ckpt'},
+                             {'standard', 'lightweight'})
+            self.assertEqual(spec.config['guest_env']['DELTABOX_ASYNC_INCREMENTAL_DUMP'], '1')
+            self.assertIn('--require-real-agent', spec.config['guest_flags'])
+            self.assertIn('--worker-exec', spec.config['guest_flags'])
+            self.assertIn('--enable-adaptive', spec.config['guest_flags'])
+
     def test_cooperative_warm_rejects_async_and_disable_override(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

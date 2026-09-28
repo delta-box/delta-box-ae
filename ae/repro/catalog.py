@@ -145,7 +145,13 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 if (not isinstance(arms,list) or not arms or any(not isinstance(a,str) or a not in ('none','skip','gc','warm') for a in arms)
                         or len(arms)!=len(set(arms))):
                     raise ValueError('figure06_memory_policies must be a nonempty unique list of none/skip/gc/warm')
-            elif experiment=='figure-06-adaptive':source='paper/figure-06/cohort-adaptive.csv';arms=['standard','adaptive']
+            elif experiment=='figure-06-adaptive':
+                source='paper/figure-06/cohort-adaptive.csv'
+                arms=config.get('figure06_adaptive_arms',['standard','adaptive'])
+                if (not isinstance(arms,list) or not arms
+                        or any(not isinstance(arm,str) or arm not in ('standard','adaptive') for arm in arms)
+                        or len(set(arms))!=len(arms)):
+                    raise ValueError('figure06_adaptive_arms must select unique standard/adaptive arms')
             else:source='paper/table-02/cohort-deltabox.csv';arms=['slow' if experiment=='table-03-slow' else 'fast']
             rows=cohort(source)
             if limit:rows=rows[:limit]
