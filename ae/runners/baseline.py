@@ -599,6 +599,15 @@ def run(args):
             config, trace, args.instance, output,
             restore_history_order=args.backend in ('replay', 'criu', 'fc-diff'),
             repository_commit=getattr(args, 'repository_commit', None))
+        if paper_e2b:
+            from ae.scripts.e2b_paper_search import stage_historical_search
+            search_proof = stage_historical_search(payload)
+            search_proof_path = output / 'paper-search-protocol.json'
+            write_json(search_proof_path, search_proof)
+            record['paper_search_protocol'] = file_record(search_proof_path)
+            records.extend([file_record(AE_ROOT / 'scripts/e2b_paper_search.py'),
+                            file_record(Path(search_proof['staged_path'])),
+                            file_record(search_proof_path)])
         if args.backend in ('replay', 'fc-diff', 'criu'):
             record['history_serialization'] = file_record(output / 'history-serialization.json')
         dirname, entry = DRIVERS[args.backend]
