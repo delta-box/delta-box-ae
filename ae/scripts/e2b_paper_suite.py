@@ -17,6 +17,7 @@ import uuid
 
 from ae.scripts.e2b_l1_context import L1Config, owned_l1, trusted, digest, file_asset
 from ae.scripts.e2b_paper_profile import verify_inputs, validate_effective, COHORT
+from ae.scripts.e2b_paper_guest_probe import content_identity
 
 REPO = Path('/home/atc-ae/delta-box-ae')
 WORK = REPO / 'ae/work/e2b-paper-reproduction'
@@ -346,7 +347,7 @@ def validate_snapshot_closure(raw, storage, roots):
                 raise ValueError('Snapshot closure mapped bytes exceed logical size')
     if visited != set(builds):
         raise ValueError('Snapshot closure contains an unreferenced build')
-    return files
+    return {path: content_identity(row) for path, row in files.items()}
 
 
 def completed_build_ids(output, fresh_ids, expected_actions, base):
@@ -504,10 +505,13 @@ def run(path):
             def after(index,job,active_plan,suite):
                 vm.verify()
                 item=items[index]
+                # Flush completed snapshots outside C/R timers before a probe can fail.
+                ssh(vm,'sudo -n sync',log=item['row']/'sync')
                 # Prove the old base did not change, including all six files.
                 raw=capture(vm,item['root'],[item['build']],item['row']/'base-after.json')
-                validate_snapshot_closure(raw, item['root']+'/storage', [item['build']])
-                if raw['files'] != item['base']['files'] or raw['builds'] != item['base']['builds']:
+                repeated = validate_snapshot_closure(raw, item['root']+'/storage', [item['build']])
+                initial = validate_snapshot_closure(item['base'], item['root']+'/storage', [item['build']])
+                if repeated != initial or raw['builds'] != item['base']['builds']:
                     raise ValueError('Fresh base changed during input execution')
                 listing=guest_json(vm,"import json,pathlib\np=pathlib.Path("+repr(item['root']+'/storage/templates')+")\nprint(json.dumps(sorted(x.name for x in p.iterdir() if x.is_dir())))\n",log=item['row']/'list-builds')
                 all_builds=capture(vm,item['root'],listing,item['row']/'all-builds-after.json')
@@ -516,7 +520,6 @@ def run(path):
                 identities = validate_post_closure(item['base'], raw, all_builds,
                     item['root']+'/storage', item['build'], created)
                 verify_runtime(vm,data,item['row']/'runtime-after.json')
-                ssh(vm,'sudo -n sync',log=item['row']/'sync')
                 job['paper_post_validation']=dict(status='verified',base_unchanged=True,
                     all_builds_manifest=str(item['row']/'all-builds-after.json'),
                     sha256=digest(item['row']/'all-builds-after.json'),build_count=all_builds['build_count'],

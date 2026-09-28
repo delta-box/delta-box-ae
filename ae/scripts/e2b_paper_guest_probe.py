@@ -39,6 +39,15 @@ def file_record(path):
             'mtime_ns': st.st_mtime_ns, 'ctime_ns': st.st_ctime_ns}
 
 
+def content_identity(record):
+    """Retain allocation observations, but exclude block accounting from identity.
+
+    Delayed allocation can settle without changing contents, size, inode or
+    timestamps. Every other observed field continues to compare exactly.
+    """
+    return {key: value for key, value in record.items() if key != 'allocated_bytes'}
+
+
 def parse_header(raw, build):
     if len(raw) < 64 or (len(raw) - 64) % 40:
         raise ValueError('Invalid V3 header length')
@@ -114,7 +123,7 @@ def capture(storage, builds):
     # Bind the parsed header/metadata semantics to the originally hashed files,
     # including changes and reversions during traversal of the parent closure.
     for prior in records:
-        if file_record(Path(prior['path'])) != prior:
+        if content_identity(file_record(Path(prior['path']))) != content_identity(prior):
             raise ValueError('Snapshot closure changed during verification')
     fs = subprocess.run(['findmnt', '-J', '-T', str(storage), '-o', 'TARGET,SOURCE,FSTYPE,OPTIONS'],
                         check=True, capture_output=True, text=True)
