@@ -96,18 +96,33 @@ class ParallelQuickTests(unittest.TestCase):
             pinned.acquire_node_lock(2, timeout=.1, root=self.root)
         self.assertEqual(target.read_text(), 'keep')
 
-    def test_launcher_allows_only_paired_quick_placement(self):
+    def test_launcher_accepts_paired_placement_for_full_and_quick_runs(self):
         base = ['--checkout', '/repo']
-        args = launcher.parse_arguments(base + ['--test', '--numa-node', '3', '--cpus', '88-91'])
-        command = launcher.command_line(dict(python=Path('/python'), runtime_root=Path('/repo'),
-                                             config=Path('/config')), args, Path('/results/checks/q'))
-        self.assertIn('--numa-node', command)
-        self.assertIn('88-91', command)
-        for flags in [['--numa-node', '3', '--cpus', '88-91'], ['--test', '--numa-node', '3'],
+        for mode in ([], ['--all'], ['--test']):
+            args = launcher.parse_arguments(base + mode + ['--numa-node', '3', '--cpus', '88-91'])
+            command = launcher.command_line(dict(python=Path('/python'), runtime_root=Path('/repo'),
+                                                 config=Path('/config')), args, Path('/results/selected/example'))
+            self.assertIn('--numa-node', command)
+            self.assertIn('88-91', command)
+        for flags in [['--numa-node', '3'], ['--test', '--numa-node', '3'],
                       ['--test', '--numa-node', '-1', '--cpus', '88-91'],
                       ['--test', '--numa-node', '3', '--cpus', '../x']]:
             with self.subTest(flags=flags), self.assertRaises(SystemExit):
                 launcher.parse_arguments(base + flags)
+
+    def test_official_profile_keeps_full_and_quick_runs_on_serial_admission(self):
+        import json
+        profile = json.loads((Path(review.__file__).resolve().parents[1]/'configs/spr4numa-review.json').read_text())
+        for mode in ([], ['--test']):
+            with patch.object(review, 'REPO', self.root), patch.object(review, 'load_config', return_value=profile), \
+                    patch.object(review, 'parallel_run_locks', side_effect=AssertionError('Official entry is serial')), \
+                    patch.object(review, 'run_lock', return_value=contextlib.nullcontext()) as lease, \
+                    patch.object(review, 'run_selected', return_value=0) as run:
+                self.assertEqual(review.main(mode), 0)
+                lease.assert_called_once_with(self.root / 'ae/work/.results.lock')
+                run.assert_called_once()
+                self.assertIsNone(run.call_args.args[0].numa_node)
+                self.assertIsNone(run.call_args.args[0].cpus)
 
     def test_configured_quick_placement_and_cube_conflict(self):
         config = {'review': {'parallel_quick_check': True,

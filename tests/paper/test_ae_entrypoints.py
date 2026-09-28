@@ -208,7 +208,7 @@ class ReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             config = base / 'config.json'
-            config.write_text(json.dumps({'timeout': 1, **(config_extra or {})}))
+            config.write_text(json.dumps(review.deep_merge({'timeout': 1, 'measurement': {'pin': True, 'numa_node': 2, 'cpus': '52-55'}}, config_extra or {})))
             out = base / 'result'
             out.mkdir()
             args = review.parser().parse_args(['--config', str(config), *flags])
@@ -337,7 +337,7 @@ class ReviewTests(unittest.TestCase):
                 row = next(row for row in record['coverage'] if row['experiment'] == 'table-02-replay')
                 self.assertEqual((row['status'], row['planned_jobs'], row['successful_jobs']), ('partial', 2, 1))
 
-    def test_quick_check_stays_small_and_defaults_to_requested_numa_frequency_controls(self):
+    def test_quick_check_stays_small_and_uses_shared_configured_placement(self):
         code, record, commands, _ = self.exercise(['--test'])
         self.assertEqual(code, 0)
         self.assertEqual(record['experiments'], ['table-02-deltabox'])
@@ -347,6 +347,19 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(command[command.index('--node') + 1], '2')
         self.assertEqual(command[command.index('--cpus') + 1], '52-55')
         self.assertIn(str(ROOT / 'ae/scripts/run_pinned_measurement.py'), command)
+
+    def test_full_run_placement_flags_reach_wrappers_and_child_configs(self):
+        _, record, commands, files = self.exercise(
+            ['--group', 'deltabox', '--numa-node', '5', '--cpus', '100-103'])
+        for name in ('table-02-deltabox', 'table-03-slow'):
+            command = commands[name + '-run']
+            self.assertEqual(command[command.index('--node') + 1], '5')
+            self.assertEqual(command[command.index('--cpus') + 1], '100-103')
+            config = json.loads(files[f'configs/attempt-001/{name}.json'])
+            self.assertEqual(config['measurement']['numa_node'], 5)
+            self.assertEqual(config['measurement']['cpus'], '100-103')
+        starts = [name for name in commands if name.endswith('-run')]
+        self.assertEqual(starts, ['table-02-deltabox-run', 'table-03-slow-run'])
 
     def test_no_pin_requires_explicit_flag(self):
         _, record, commands, _ = self.exercise(['--test', '--no-pin'])

@@ -72,8 +72,8 @@ def parser():
     p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
     p.add_argument('--max-events', type=int, help='Explicit event prefix; units depend on backend')
     p.add_argument('--no-pin', action='store_true', help='Explicitly opt out of NUMA and frequency controls')
-    p.add_argument('--numa-node', type=int, default=None, help='Default: config measurement.numa_node, or 2')
-    p.add_argument('--cpus', help='Default: config measurement.cpus, or 52-55')
+    p.add_argument('--numa-node', type=int, default=None, help='NUMA node for this run; default: shared measurement.numa_node configuration')
+    p.add_argument('--cpus', help='CPU list within the selected node; default: shared measurement.cpus configuration')
     p.add_argument('--analyze-existing', type=Path, metavar='RUN_DIR', help='Analyze existing fresh runs into a new output; executes no experiments')
     p.add_argument('--list', action='store_true', help='List experiment/group names without running')
     p.add_argument('--execute-plan', type=Path, help=argparse.SUPPRESS)
@@ -245,6 +245,26 @@ def pin_requested(args, config):
     return chosen
 
 
+def measurement_placement(args, config):
+    """Resolve runtime placement from the caller/configuration, without host constants."""
+    settings = config.get('measurement', {})
+    if not isinstance(settings, dict):
+        raise ValueError('measurement must be a JSON object')
+    node = args.numa_node if args.numa_node is not None else os.environ.get('AE_NUMA_NODE', settings.get('numa_node'))
+    cpus = args.cpus or os.environ.get('AE_CPUS', settings.get('cpus'))
+    if node is not None:
+        if type(node) is not int and not (isinstance(node, str) and re.fullmatch(r'[0-9]+', node)):
+            raise ValueError('measurement.numa_node must be a nonnegative integer')
+        node = int(node)
+        if node < 0:
+            raise ValueError('measurement.numa_node must be a nonnegative integer')
+    if cpus is not None and (not isinstance(cpus, str) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', cpus)):
+        raise ValueError('measurement.cpus must be a CPU list within the selected node')
+    if pin_requested(args, config) and (node is None or not cpus):
+        raise ValueError('Set measurement.numa_node and measurement.cpus in the shared configuration, or supply --numa-node and --cpus')
+    return dict(node=node, cpus=cpus)
+
+
 def check_timeout(config):
     timeout = float(config.get('timeout', 14400))
     if not math.isfinite(timeout) or timeout <= 0:
@@ -283,6 +303,22 @@ def job_unavailable(job, config):
     for flag in ('--kernel', '--base-xfs', '--data-xfs', '--criu-dump-binary'):
         if option(command, flag):
             require(option(command, flag))
+    if name == 'table-03-slow':
+        planned_profile = option(command, '--checkpoint-profile')
+        if config.get('checkpoint_profile') == 'async-incremental-lazy' and planned_profile != 'async-incremental-lazy':
+            reasons.append('Table3 lazy restore plan does not match the selected checkpoint profile')
+        if planned_profile == 'async-incremental-lazy':
+            pinned = option(command, '--criu-dump-binary')
+            if not pinned:
+                reasons.append('Table3 lazy restore requires a pinned CRIU dump/restore binary')
+            elif Path(pinned).is_file():
+                try:
+                    capabilities = subprocess.check_output([pinned, '--version'],
+                        env={**os.environ, 'DELTABOX_CRIU_CAPABILITIES': '1'}, text=True, timeout=10)
+                    if not {'exact-parent-v1', 'exact-parent-lazy-v1'} <= set(capabilities.split()):
+                        reasons.append('Table3 lazy restore requires exact-parent-lazy-v1 for the pinned dump/restore binary')
+                except (OSError, subprocess.SubprocessError) as error:
+                    reasons.append('Table3 lazy restore capability probe failed: ' + str(error))
     if name.startswith('figure-06') and config.get('checkpoint_profile') in ('async-incremental', 'async-incremental-lazy'):
         reasons.append('async-incremental supports standard replay only; supply a runtime-default config for Figure 6')
     if name in ('figure-08-deltabox', 'figure-09', 'correctness'):
@@ -574,8 +610,10 @@ class Review:
         if name not in self.overrides:
             config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
         config.pop('review', None)
-        if self.args.quick_check and self.args.numa_node is not None:
-            config['measurement'] = dict(pin=True, numa_node=self.args.numa_node, cpus=self.args.cpus)
+        if pin_requested(self.args, config):
+            placement = measurement_placement(self.args, config)
+            config['measurement'] = {**config.get('measurement', {}), 'pin': True,
+                                     'numa_node': placement['node'], 'cpus': placement['cpus']}
         if name.endswith('-cube') and self.cube_memory_manifest is not None:
             config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
             config['measurement'] = {**config.get('measurement', {}), **self.cube_placement}
@@ -663,8 +701,7 @@ class Review:
         write_json(plan_path, plan)
         measurement = config.get('measurement', {})
         pinned = pin_requested(self.args, config)
-        row['measurement'] = dict(pinned=pinned, node=self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', measurement.get('numa_node', 2))),
-                                  cpus=self.args.cpus or os.environ.get('AE_CPUS', measurement.get('cpus', '52-55')))
+        row['measurement'] = dict(pinned=pinned, **measurement_placement(self.args, config))
         identity = dict(node=row['measurement']['node'], cpus=row['measurement']['cpus'],
                         frequency_policy='maximum-pstate' if pinned else 'uncontrolled',
                         storage_mode=config.get('vm_storage', 'disk') if name in ('table-02-deltabox', 'table-03-slow', 'figure-06-memory', 'figure-06-adaptive') else
@@ -826,8 +863,8 @@ class Review:
         if any(type(value) is not bool for value in managed) or len(set(managed)) != 1:
             raise ValueError('Cube experiments must share one explicit memory service policy')
         if managed[0]:
-            placements = {(self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', c.get('measurement', {}).get('numa_node', 2))),
-                           self.args.cpus or os.environ.get('AE_CPUS', c.get('measurement', {}).get('cpus', '52-55'))) for c in configs}
+            placements = {(placement['node'], placement['cpus'])
+                          for c in configs for placement in [measurement_placement(self.args, c)]}
             sizes = {c.get('cube', {}).get('memory_size_gib', 16) for c in configs}
             if len(placements) != 1 or len(sizes) != 1 or any(not pin_requested(self.args, c) for c in configs):
                 raise ValueError('Managed Cube requires the same pinned NUMA/CPU placement for every experiment')
