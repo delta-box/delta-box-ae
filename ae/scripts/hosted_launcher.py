@@ -265,8 +265,8 @@ def parse_arguments(argv):
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
     parser.add_argument('--list', action='store_true')
-    parser.add_argument('--numa-node', type=int, action=Once, help='Quick-check NUMA node')
-    parser.add_argument('--cpus', action=Once, help='Quick-check CPU list inside that node')
+    parser.add_argument('--numa-node', type=int, action=Once, help='NUMA node for this run; inherited by all selected CPU experiments')
+    parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
     if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
         parser.error('--test already selects one DeltaBox instance and three events')
@@ -275,10 +275,10 @@ def parse_arguments(argv):
     if args.list and (args.output or args.resume):
         parser.error('--list does not create or resume results')
     if args.numa_node is not None or args.cpus is not None:
-        if not args.quick_check or args.numa_node is None or args.cpus is None:
-            parser.error('--numa-node and --cpus must be supplied together with --test')
+        if args.numa_node is None or args.cpus is None:
+            parser.error('--numa-node and --cpus must be supplied together')
         if args.numa_node < 0 or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', args.cpus):
-            parser.error('Invalid quick-check NUMA/CPU placement')
+            parser.error('Invalid NUMA/CPU placement')
     return args
 
 
@@ -419,8 +419,8 @@ def main(argv=None):
                 raise ValueError('Temporary files must stay inside runtime ae/work')
             trusted_path(temporary, directory=True, trust=trust, root_leaf=True)
         environment = fixed_environment(policy, caller)
-        # Keep the maintenance gate held through cleanup. The trusted runner
-        # separately admits one main lane and one isolated quick-check lane.
+        # Keep the maintenance gate held through cleanup. The runner uses
+        # exclusive run admission with the official serial configuration.
         lock_fd = acquire_lock(policy['lock_file'], shared=True)
         venv = policy['python'].parent.parent
         environments = (venv,) if (venv / 'pyvenv.cfg').is_file() else ()

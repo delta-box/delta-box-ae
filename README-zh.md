@@ -35,13 +35,15 @@ ok: <结果目录>/SUMMARY.md
 
 打开这个 `SUMMARY.md`，各步骤应为 `ok`。快速检查确认运行链路可用；论文结论由下面的完整实验评估。
 
-托管机器上的快速检查使用 **NUMA 3、CPU 88–91**，结果单独保存在 `ae/results/checks/quick-check-<时间戳>/`。它可以与另一 NUMA 节点上的一轮完整测评并行。如果所选节点正被另一项 AE 测量占用（例如全量的 Replay 阶段使用 NUMA 3），快速检查会先等待再测量。结果备份与轮换仍保持独占。也可明确指定快速检查的位置：
+快速检查的结果单独保存在 `ae/results/checks/quick-check-<时间戳>/`。托管入口按串行方式运行测评和快速检查。CPU 与内存绑定统一来自公共 `measurement` 配置，所有选中的 CPU 实验继承同一组运行绑定。
+
+如需为某次运行选择节点，在终端将 `AE_NUMA_NODE` 和 `AE_CPUS` 设为所需节点和 CPU 列表，再同时传入这两个参数：
 
 ```bash
-bash ae/run_test.sh --numa-node 3 --cpus 88-91
+bash ae/run_test.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-两个参数必须同时提供，CPU 必须属于该 NUMA 节点。内存准入检查和 CPU 频率恢复仍然生效。并行运行仍共享整台主机，解读性能时应结合记录的绑定位置和重叠时段。
+CPU 必须属于所选节点。内存准入检查与 CPU 频率恢复仍然生效。
 
 ### 运行完整实验
 
@@ -49,6 +51,12 @@ bash ae/run_test.sh --numa-node 3 --cpus 88-91
 
 ```bash
 bash ae/run_all.sh
+```
+
+全部 CPU 实验按顺序执行，统一使用一个 NUMA 节点。完整测评同样支持上述运行参数：
+
+```bash
+bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
 该命令运行[索引](#experiments)中的全部 CPU 实验，并自动分析、绘图和生成论文对比页。Replay、CRIU 和 Firecracker Diff 使用同一份 44 条实例名单，每条轨迹执行到底，其余实验使用各自的输入集。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
@@ -95,7 +103,7 @@ Table 1、Figure 1,3–5 是设计说明和问题引入，无独立测量任务�
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-无需预先创建各实验输出目录。托管入口使用作者提供的配置，管理 CPU/NUMA 绑定与频率采样；完整测评和单项实验仍应顺序运行；上面的隔离快速检查支持与它们并行。实验驱动负责选择输入，命令中的 `--limit` 只用于缩小检查范围。
+无需预先创建各实验输出目录。托管入口使用作者提供的配置，管理 CPU/NUMA 绑定与频率采样；完整测评、单项实验和快速检查均按顺序运行，各 CPU 实验使用统一的运行级 NUMA 绑定。实验驱动负责选择输入，命令中的 `--limit` 只用于缩小检查范围。
 
 下面按论文实验逐项给出验证目标、运行方式和判断依据。并排图片展示**一键脚本的输出示例**，用于说明生成图表的形式。评估时请查看自己运行生成的对比页。
 
