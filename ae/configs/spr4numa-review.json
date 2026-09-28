@@ -92,6 +92,10 @@
         "checkpoint_profile": "async-incremental-lazy",
         "criu_bin": "../work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu",
         "criu_dump_binary": "../work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu"
+      },
+      "figure-02-memory": {
+        "baseline_storage": "tmpfs",
+        "memory_job_size_gib": 4
       }
     },
     "declared_unavailable": [],

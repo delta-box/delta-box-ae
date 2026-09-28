@@ -786,9 +786,9 @@ class Review:
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
-        if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
+        if (name == 'figure-02-memory' or (name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube'))) and config.get('baseline_storage') == 'tmpfs':
             if not pinned:
-                raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
+                raise ValueError('Memory-backed measurement requires NUMA/frequency pinning')
             plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
