@@ -135,6 +135,51 @@ class AsyncCheckpointTests(unittest.TestCase):
         self.assertEqual((staging / prior).resolve(), Path(parent['mem_path']).resolve())
         self.assertEqual(parent['state'], 'DURABLE_READY')
 
+    def test_lightweight_reuses_pending_parent_without_another_dump_or_fork(self):
+        parent = self.checkpoint()
+        self.assertTrue(self.started.wait(1))
+        forks_before = self.controller.template_pool.request_stash_template.call_count
+        lightweight = {'id': 'logical', 'strategy': 'lightweight',
+                       'effective_restore_id': parent['id']}
+        self.controller._checkpoint_legacy = Mock(return_value=lightweight)
+        operations = [{'type': 'read_context', 'path': 'example.py'}]
+        result = self.pipeline.checkpoint(parent['id'], 'read', 'lightweight', operations)
+        self.assertIs(result, lightweight)
+        self.controller._checkpoint_legacy.assert_called_once_with(
+            parent['id'], 'read', 'lightweight', operations)
+        self.assertFalse(parent['dump_future'].done())
+        self.assertEqual(self.controller.template_pool.request_stash_template.call_count, forks_before)
+        self.assertEqual(len(self.calls), 1)
+        self.release.set()
+        parent['dump_future'].result(2)
+
+    def test_lightweight_requires_a_physical_parent(self):
+        self.controller._checkpoint_legacy = Mock()
+        with self.assertRaisesRegex(ValueError, 'physical parent'):
+            self.pipeline.checkpoint(None, 'read', 'lightweight')
+        self.controller._checkpoint_legacy.assert_not_called()
+        self.controller.template_pool.request_stash_template.assert_not_called()
+
+    def test_standard_child_uses_logical_layers_and_physical_memory_parent(self):
+        self.release.set()
+        parent = self.checkpoint()
+        parent['dump_future'].result(2)
+        logical_layer = str(Path(self.temp.name) / 'logical-layer')
+        Path(logical_layer).mkdir()
+        layers = [logical_layer, *parent['layers']]
+        self.controller.registry['logical'] = {
+            'id': 'logical', 'parent_id': parent['id'], 'strategy': 'lightweight',
+            'effective_restore_id': parent['id'], 'layers': layers}
+        child = self.checkpoint('logical')
+        child['dump_future'].result(2)
+        self.assertEqual(child['parent_id'], 'logical')
+        self.assertEqual(child['prev_ckpt_id'], parent['id'])
+        self.assertEqual(child['layers'], layers)
+        command = self.calls[-1][0]
+        staging = Path(command[command.index('-D') + 1])
+        prior = command[command.index('--prev-images-dir') + 1]
+        self.assertEqual((staging / prior).resolve(), Path(parent['mem_path']).resolve())
+
     def test_failed_parent_prevents_child_dump_and_releases_both_owned_tasks(self):
         failure = RuntimeError('parent CRIU failure')
 

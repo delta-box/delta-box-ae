@@ -1469,6 +1469,11 @@ class SandboxController:
         if getattr(self, "_async_incremental", None) is not None:
             return self._async_incremental.checkpoint(
                 parent_ckpt_id, tag, raw_command, replay_worker_ops)
+        return self._checkpoint_legacy(parent_ckpt_id, tag, raw_command, replay_worker_ops)
+
+    def _checkpoint_legacy(self, parent_ckpt_id: str, tag: str,
+                           raw_command: str = "",
+                           replay_worker_ops: Optional[List[dict]] = None) -> dict:
         checkpoint_wall_t0 = time.time()
         if not self.async_template_full_dump:
             self._drain_pending_template_cleanup()

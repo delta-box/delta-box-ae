@@ -260,6 +260,7 @@ def parse_arguments(argv):
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
                         help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
+    parser.add_argument('--isolated-validation', action='store_true', help='Small selected VM validation with separate output and explicit placement')
     parser.add_argument('--max-events', type=positive_integer, action=Once)
     output = parser.add_mutually_exclusive_group()
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
@@ -279,6 +280,16 @@ def parse_arguments(argv):
             parser.error('--numa-node and --cpus must be supplied together')
         if args.numa_node < 0 or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', args.cpus):
             parser.error('Invalid NUMA/CPU placement')
+    if args.isolated_validation:
+        supported = {'table-02-deltabox', 'table-03-slow', 'figure-02-filesystem',
+                     'figure-02-memory', 'figure-06-memory', 'figure-06-adaptive',
+                     'figure-09', 'correctness'}
+        if (len(args.experiment or []) != 1 or args.experiment[0] not in supported
+                or args.group or args.all or args.quick_check or args.list
+                or getattr(args, 'reuse_completed_from', None) or not (args.output or args.resume)
+                or args.limit is None or args.limit > 10
+                or args.numa_node is None or args.cpus is None):
+            parser.error('--isolated-validation requires one supported VM experiment, --limit 1..10, output/resume and paired NUMA/CPUs')
     return args
 
 
@@ -361,7 +372,10 @@ def default_result(policy, args, *, trust=None):
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
     if args.quick_check:
         return Path('checks') / ('quick-check-' + stamp)
-    if args.max_events is not None or args.limit is not None or args.experiment or args.group:
+    configured_cap = None
+    if policy.get('config'):
+        configured_cap = json.loads(Path(policy['config']).read_text()).get('review', {}).get('validation_max_jobs')
+    if configured_cap or args.max_events is not None or args.limit is not None or args.experiment or args.group:
         return Path('selected') / stamp
     return Path('.')
 
@@ -369,7 +383,7 @@ def default_result(policy, args, *, trust=None):
 def command_line(policy, args, output):
     command = [str(policy['python']), '-I', str(policy['runtime_root'] / 'ae/scripts/run_review.py'),
                '--config', str(policy['config'])]
-    for key, flag in (('all', '--all'), ('quick_check', '--test'), ('list', '--list')):
+    for key, flag in (('all', '--all'), ('quick_check', '--test'), ('list', '--list'), ('isolated_validation', '--isolated-validation')):
         if getattr(args, key):
             command.append(flag)
     for key in ('experiment', 'group'):

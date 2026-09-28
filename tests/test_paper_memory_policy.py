@@ -166,7 +166,7 @@ class PaperMemoryPolicyTests(unittest.TestCase):
 
     def test_checkpoint_drift_guard_reports_exact_hashes(self):
         with patch.object(policy, '_EXPECTED_CHECKPOINT_ACTION', 'not-the-current-hash'):
-            with self.assertRaisesRegex(RuntimeError, 'checkpoint_action; expected=.*actual='):
+            with self.assertRaisesRegex(RuntimeError, '_checkpoint_legacy; expected=.*actual='):
                 policy.verify_runtime_compatibility()
 
     def test_old_core_without_explicit_fallback_policy_is_rejected(self):
