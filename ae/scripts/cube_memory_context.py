@@ -27,6 +27,14 @@ def sandboxes():
     if not isinstance(value,list): raise ValueError('Unknown Cube inventory format')
     return value
 
+def wait_loop_release(image, *, timeout=10):
+    """losetup -d requests lazy destruction; wait before releasing its backing FS."""
+    deadline = time.monotonic() + timeout
+    while output('losetup', '-j', image, '-O', 'NAME', '--noheadings'):
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f'Cube RAM loop still attached to {image}; storage retained')
+        time.sleep(0.05)
+
 @contextmanager
 def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recovery_guard=None):
     """Hold a verified private service for the caller, restoring it on every exit."""
@@ -196,6 +204,8 @@ def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recove
                 owned=step('recover interrupted loop attachment',lambda:output('losetup','-j',image,'-O','NAME','--noheadings'))
                 for owned_device in (owned or '').splitlines():
                     if owned_device.strip():step('detach recovered RAM loop',lambda owned_device=owned_device:run('losetup','-d',owned_device.strip()))
+            if image is not None and image.exists():
+                step('wait for RAM loop release',lambda:wait_loop_release(image))
             if mounted and os.path.ismount(ram):step('unmount RAM',lambda:run('umount',ram))
             cleanup_guard.unlink()
         except BaseException as exc:

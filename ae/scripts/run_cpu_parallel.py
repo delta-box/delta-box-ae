@@ -190,7 +190,8 @@ def run(args, parser, config, lease_fd, review):
                     runner.record.setdefault('lane_reviews', {})[str(node)] = review.file_record(path)
             if any(row.get('successful_jobs', 0) for row in runner.record['coverage']):
                 try:
-                    runner.analyze(output / 'lanes')
+                    runner.analyze(output / 'lanes', run_subdirs=[f'numa{node}/runs' for node in assignments
+                                   if (output / 'lanes' / f'numa{node}' / 'runs').is_dir()])
                 except BaseException as error:
                     failure = failure or error
                     runner.record['analysis_error'] = f'{type(error).__name__}: {error}'

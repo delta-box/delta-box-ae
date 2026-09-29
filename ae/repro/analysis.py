@@ -1339,7 +1339,7 @@ def fresh_e2b_derived(runs):
         'Only served controller build_action RTT is added to action elapsed time; execution LLM waits already inside action elapsed time are not added again. This corrects the archived all-RTT-plus-action formula.'])
 
 
-def analyze_fresh(input_root, output=None):
+def analyze_fresh(input_root, output=None, *, run_subdirs=None):
     """Accept only complete, successful, hash-bound fresh measurements.
 
     Different experiments, checkpoint profiles, policy/adaptive arms and run
@@ -1349,11 +1349,29 @@ def analyze_fresh(input_root, output=None):
     from ae.repro.e2b_paper_analysis import discover, analyze as analyze_paper_e2b
     paper_source = discover(input_root)
     if paper_source is not None:
+        if run_subdirs is not None:
+            raise ValueError("Paper E2B analysis does not accept run subdirectories")
         return analyze_paper_e2b(paper_source, output)
     ev = Evidence(input_root, "fresh")
+    roots = [ev.root]
+    if run_subdirs is not None:
+        if not run_subdirs:
+            raise ValueError("Run subdirectories must not be empty")
+        roots = []
+        for relative in run_subdirs:
+            relative = Path(relative)
+            directory = ev.root / relative
+            if (relative.is_absolute() or '..' in relative.parts or relative == Path('.')
+                    or not directory.is_dir() or directory.resolve() != directory):
+                raise ValueError(f"Invalid run subdirectory: {relative}")
+            if any(directory.is_relative_to(old) or old.is_relative_to(directory) for old in roots):
+                raise ValueError("Run subdirectories overlap or repeat")
+            roots.append(directory)
+    def run_paths(pattern):
+        return sorted(path for root in roots for path in root.glob(pattern))
     claimed, excluded_roots = set(), set()
     runs, excluded_runs = [], []
-    for path in ev.glob("**/run.json"):
+    for path in run_paths("**/run.json"):
         config = ev.json(path)
         if config.get("analysis_mode") != "fresh-measurement":
             raise ValueError(f"Run manifest is not fresh-measurement: {path}")
@@ -1374,7 +1392,7 @@ def analyze_fresh(input_root, output=None):
     # Detect loose evidence instead of accepting an archive/raw-results directory.
     for pattern in ("**/*.results.jsonl", "**/pilot_result.json", "**/restores.csv", "**/fanout.json", "**/step_metrics.jsonl",
                     "**/measurements/*.jsonl", "**/correctness.json", "**/tree_rss_samples.json"):
-        for path in ev.glob(pattern):
+        for path in run_paths(pattern):
             resolved = path.resolve()
             if resolved not in claimed and not any(resolved.is_relative_to(root) for root in excluded_roots):
                 raise ValueError(f"Orphan raw measurement has no successful run manifest: {path}")
@@ -1506,6 +1524,8 @@ def analyze_fresh(input_root, output=None):
     summary["selection"] = dict(actual_run_count=len(runs), actual_instance_count=len(actual_instances),
                                 actual_instances=actual_instances, excluded_run_count=len(excluded_runs),
                                 paper_cohort_verified=False, populations=population_counts, reason=coverage_note)
+    if run_subdirs is not None:
+        summary["selection"]["run_subdirs"] = [str(root.relative_to(ev.root)) for root in roots]
     for result in results.values():
         result["limitations"].append(coverage_note)
     return export_summary(summary, output) if output is not None else summary
@@ -1515,11 +1535,14 @@ def main(argv=None):
     parser.add_argument("--source", choices=("archived", "fresh"), default="archived")
     parser.add_argument("--input", type=Path, help="Archive paper directory or fresh run directory")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--run-subdir", action="append", help="Fresh measurement directory relative to --input; repeat for parallel lanes")
     args = parser.parse_args(argv)
     if args.source == "fresh" and args.input is None:
         parser.error("--source fresh requires --input")
+    if args.run_subdir is not None and args.source != "fresh":
+        parser.error("--run-subdir requires --source fresh")
     try:
-        result = analyze(args.input, args.output) if args.source == "archived" else analyze_fresh(args.input, args.output)
+        result = analyze(args.input, args.output) if args.source == "archived" else analyze_fresh(args.input, args.output, run_subdirs=args.run_subdir)
     except (ValueError, KeyError, OSError, TypeError) as exc:
         parser.exit(2, f"Analysis failed: {exc}\n")
     print(f"{result['analysis_mode']}: {len(result['experiments'])} experiments; {args.output / 'summary.json'}")

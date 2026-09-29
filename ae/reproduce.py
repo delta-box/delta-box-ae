@@ -144,7 +144,9 @@ def main():
         if name=='run':p.add_argument('--keep-going',action='store_true',help='Continue independent jobs after failure; final exit stays nonzero')
     for name in ('analyze','plot'):
         p=sub.add_parser(name);p.add_argument('--output',type=Path,required=True);p.add_argument('--input',type=Path)
-        if name=='analyze':p.add_argument('--source',choices=['archived','fresh'],required=True)
+        if name=='analyze':
+            p.add_argument('--source',choices=['archived','fresh'],required=True)
+            p.add_argument('--run-subdir',action='append',help='Fresh measurement directory relative to --input')
     args=parser.parse_args()
     if args.command=='prepare':
         return prepare_inputs()
@@ -152,6 +154,7 @@ def main():
     if args.command=='analyze':
         cmd=[sys.executable,str(AE_ROOT/'repro/analysis.py'),'--source',args.source,'--output',str(args.output)]
         if args.input:cmd+=['--input',str(args.input)]
+        for relative in args.run_subdir or []:cmd+=['--run-subdir',relative]
         return subprocess.call(cmd)
     if args.command=='plot':
         if not args.input:parser.error('plot requires --input summary.json')

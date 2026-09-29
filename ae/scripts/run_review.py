@@ -1109,12 +1109,15 @@ class Review:
         plan['resume_verified'] = True
         row['reused_jobs'] = reused
 
-    def analyze(self, source):
+    def analyze(self, source, *, run_subdirs=None):
         analysis_dir = self.output / 'analysis' / self.attempt
         plot_dir = self.output / 'plots' / self.attempt
         has_cpu = any(name in CPU_EXPERIMENTS for name in self.record['experiments'])
-        analyzed = self.step('analyze', [*self.cli, 'analyze', '--source', 'fresh', '--input', str(source),
-                                         '--output', str(analysis_dir)]) if has_cpu else False
+        analysis_command = [*self.cli, 'analyze', '--source', 'fresh', '--input', str(source),
+                            '--output', str(analysis_dir)]
+        for relative in run_subdirs or []:
+            analysis_command += ['--run-subdir', str(relative)]
+        analyzed = self.step('analyze', analysis_command) if has_cpu else False
         if analyzed:
             if self.step('plot-dependencies', [self.python, '-c', 'import matplotlib']):
                 self.step('plot', [*self.cli, 'plot', '--input', str(analysis_dir / 'summary.json'), '--output', str(plot_dir)])
