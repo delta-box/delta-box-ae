@@ -61,6 +61,14 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 
 该命令按[索引](#experiments)顺序逐组验证，每组最多执行 10 个完整作业，再分析样本结果并生成对比页。Replay、CRIU 和 Firecracker Diff 从固定 44 条输入池中取样，选中的轨迹执行到底。上限包含所有实验臂：Figure 6(b) 最多 5 条输入 × 2 模式，Figure 9 最多 3 条输入 × 3 文件系统。报告保留实际子集范围，不冒充全量覆盖。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
 
+若要运行相同的 CPU 验证，并完全跳过 GPU 探测和测量，使用：
+
+```bash
+bash ae/run_all_no_gpu.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+```
+
+此入口调用原来的 `run_all.sh --group cpu`，沿用共享配置、串行执行、作业上限和报告流程。保留 Figure 8(a)，跳过 Figure 8(b) 及依赖 GPU 数据的 Figure 8(c)。输出、续跑和运行绑定参数照常传入；支持的参数见 `--help`，实验范围固定为 CPU。
+
 如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
 
 ```bash

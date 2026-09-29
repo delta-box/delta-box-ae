@@ -63,6 +63,14 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 
 This command visits the experiment groups in the [index](#experiments) sequentially, runs at most 10 complete jobs per group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. The cap covers all arms together: Figure 6(b) uses at most five inputs × two arms, and Figure 9 at most three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
 
+To run the same CPU validation without any GPU probing or measurements, use:
+
+```bash
+bash ae/run_all_no_gpu.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+```
+
+This entry delegates to `run_all.sh --group cpu`: it preserves the shared configuration, sequential execution, job caps and reporting. It includes Figure 8(a), skips Figure 8(b) and the GPU-dependent Figure 8(c), and accepts the usual output/resume and placement options. Use `--help` for its supported options; experiment selection stays fixed to CPU.
+
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
 ```bash
