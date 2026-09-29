@@ -73,8 +73,15 @@
       },
       "figure-08-cube": {
         "cube": {
-          "template": "cube-official-fork-bench-20260605_210553"
-        }
+          "template": "cube-official-fork-bench-20260605_210553",
+          "manage_metadata_memory": true,
+          "memory_size_gib": 12,
+          "fanout_forks": [
+            1,
+            16
+          ]
+        },
+        "baseline_storage": "tmpfs"
       },
       "table-02-replay": {
         "replay_workers": 16,

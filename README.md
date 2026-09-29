@@ -452,3 +452,5 @@ Self-hosting requires Linux x86-64, KVM, a DeltaBox guest kernel and disks, work
 
 - [Experiment inputs and file manifests](ae/paper/README.md)
 - [Image builds and template preparation](ae/images/README.md)
+
+The Figure 8 Cube profile selects **N=1 and N=16**. Within the selected NUMA lease it creates private noswap RAM copies of Cube data and MySQL metadata, preserving database durability settings and verifying every copied file. It checks inherited bytes, checksum and token in every child, then restores services and storage. An unresolved resource or restoration failure retains the private environment with `RECOVERY_REQUIRED.json` for inspection. Setup and teardown are outside the official clone and verification timers.

@@ -357,7 +357,9 @@ def job_unavailable(job, config):
             return path
         except ValueError as error:
             reasons.append(str(error))
-    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs':
+    from ae.scripts.cube_control_context import metadata_enabled
+    deferred_cube = name == 'figure-08-cube' and metadata_enabled(config)
+    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs' and not deferred_cube:
         try:
             from runners.cube_memory import verify as verify_cube_memory
             verify_cube_memory(config)
@@ -463,7 +465,7 @@ def execute_review_job(index, job, plan, output, stop_event=None):
                      timeout=budget,
                      env=dict(os.environ, AE_RUN_PURPOSE=job['run_purpose'],
                               AE_MEASUREMENT_IDENTITY=json.dumps(identity)), stop_event=stop_event,
-                     termination_grace=300 if memory else 30)
+                     termination_grace=300 if memory or plan.get('cube_managed_metadata') else 30)
     job.update(status=result['status'], process_manifest=str(output / 'logs' / plan.get('attempt', 'attempt-001') / job['key'] / 'process.json'))
     if result['status'] == 'ok':
         # The producer and its owned processes have fully exited. Keep
@@ -790,6 +792,8 @@ class Review:
             if not pinned:
                 raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
             plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
+        from ae.scripts.cube_control_context import metadata_enabled
+        plan['cube_managed_metadata'] = name == 'figure-08-cube' and metadata_enabled(config)
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
         pending = [job for job in jobs if not job.get('reused_verified')]
@@ -800,9 +804,9 @@ class Review:
             command = [self.python, str(REPO / 'ae/scripts/run_pinned_measurement.py'),
                        '--node', str(row['measurement']['node']), '--cpus', row['measurement']['cpus'],
                        '--out', str(self.output / 'environment' / self.attempt / name), '--timeout', str(budget),
-                       '--stop-grace', '360' if plan.get('memory_measurement') else '30', '--', *command]
+                       '--stop-grace', '360' if plan.get('memory_measurement') or plan.get('cube_managed_metadata') else '30', '--', *command]
         ok = self.step(name + '-run', [*self.privilege, *command], budget + 120,
-                       termination_grace=420 if plan.get('memory_measurement') else 30)
+                       termination_grace=420 if plan.get('memory_measurement') or plan.get('cube_managed_metadata') else 30)
         row['status'] = 'partial' if ok and (row['unavailable_jobs'] or row['unavailable_arms']) else 'ok' if ok else 'failed'
         row['reasons'] += [str(item.get('arm', 'panel')) + ': ' + item['reason'] for item in row['unavailable_arms']]
         if (suite / 'suite.json').is_file():
@@ -923,8 +927,12 @@ class Review:
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
-    def prepare_cube_service(self, contexts, *, validate_only=False):
-        selected = [name for name in self.experiments if name.endswith('-cube')]
+    def prepare_cube_service(self, contexts, *, validate_only=False, selected=None):
+        selected = selected if selected is not None else [name for name in self.experiments if name.endswith('-cube')]
+        if len(selected) > 1:
+            for name in selected:
+                self.prepare_cube_service(contexts, validate_only=validate_only, selected=[name])
+            return
         if not selected:
             return
         configs = []
@@ -933,6 +941,16 @@ class Review:
             if name not in self.overrides:
                 config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
             configs.append(config)
+        from ae.scripts.cube_control_context import metadata_enabled
+        if metadata_enabled(configs[0]):
+            if selected != ['figure-08-cube'] or not pin_requested(self.args, configs[0]):
+                raise ValueError('Managed metadata is supported only for pinned Figure 8 Cube')
+            size = configs[0]['cube'].get('memory_size_gib', 12)
+            if type(size) is not int or size < 12:
+                raise ValueError('Cube RAM workspace must be at least 12 GiB')
+            # Preparation must execute inside the runner, after its NUMA lease.
+            measurement_placement(self.args, configs[0])
+            return
         managed = [c.get('cube', {}).get('manage_memory_service', False) for c in configs]
         if any(type(value) is not bool for value in managed) or len(set(managed)) != 1:
             raise ValueError('Cube experiments must share one explicit memory service policy')
@@ -950,7 +968,7 @@ class Review:
                 return
             from ae.scripts.cube_memory_context import memory_service
             self.cube_memory_manifest = contexts.enter_context(memory_service(
-                self.output / 'environment' / self.attempt / 'cube-memory',
+                self.output / 'environment' / self.attempt / selected[0] / 'cube-memory',
                 node=node, cpus=cpus, size_gib=sizes.pop()))
             self.record['cube_memory_service'] = file_record(self.cube_memory_manifest)
         from runners.cube_memory import verify
@@ -1018,13 +1036,28 @@ class Review:
                         return 1
                     if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
                         return 1
-                cube_prepared = False
                 for name in self.experiments:
                     try:
-                        if name.endswith('-cube') and not cube_prepared:
-                            self.prepare_cube_service(contexts)
-                            cube_prepared = True
-                        self.run_experiment(name)
+                        if name.endswith('-cube'):
+                            cube_contexts = ExitStack()
+                            try:
+                                self.prepare_cube_service(cube_contexts, selected=[name])
+                                self.run_experiment(name)
+                            finally:
+                                try:
+                                    cube_contexts.close()
+                                except Exception as error:
+                                    log = Path('environment') / self.attempt / name / 'cube-cleanup-error.json'
+                                    write_json(self.output / log, {'error': f'{type(error).__name__}: {error}'})
+                                    self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
+                                        experiment=name, log=str(log), error=f'{type(error).__name__}: {error}'))
+                                    raise
+                                finally:
+                                    self.cube_memory_manifest = None
+                                    self.cube_disk_manifest = None
+                                    self.cube_placement = None
+                        else:
+                            self.run_experiment(name)
                     except Exception as error:
                         row = next((row for row in self.record['coverage'] if row['experiment'] == name), None)
                         if row is None:
