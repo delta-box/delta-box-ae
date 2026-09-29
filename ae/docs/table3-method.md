@@ -49,7 +49,7 @@ VM runner 在自身私有 mount namespace 中，把 rootfs 和 data image 放到
 
 RAM 中经过 SHA-256 验证的私有 base image 在启动前重命名为新建 rootfs 路径，不重复分配第二份镜像；共享原始镜像不修改。
 
-原工具在执行测试前会拒绝纯目录参数。本轮只对原轨迹明确记录的同类错误重做目录存在性检查；匹配时记录 `invalid-test-selection`、`test_subprocess_started=false` 和 `test_passed=false`，文件状态不匹配则失败。不会把目录扩大为整个项目测试集。
+原工具在执行测试前会拒绝纯目录参数。发表的回放仍执行 `python3 -m pytest -q <directory>`，解释器是 `/opt/miniconda3/envs/testbed`（没有 asgiref），这次进程时间计入 floor。回放先核对记录的路径仍是目录，再执行同一条命令；路径不存在或不再是目录时不启动 pytest，并记为失败。
 
 旧 `async-incremental` 配置继续保留 eager 恢复以兼容已有二进制与历史运行；Table 3 一键入口默认选用新增的 `async-incremental-lazy`。lazy 模式要求 dump 和 restore 均提供 `exact-parent-lazy-v1` 能力，旧二进制被明确拒绝。
 

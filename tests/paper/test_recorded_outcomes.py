@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -50,28 +51,37 @@ class RecordedOutcomeTests(unittest.TestCase):
         self.assertFalse(reply["results"][0]["test_passed"])
         self.assertEqual(reply["results"][0]["rc"], 4)
 
-    def test_recorded_directory_rejection_rechecks_tree_without_starting_tests(self):
+    def test_recorded_directory_selection_runs_published_pytest(self):
         node = recorded_node()
         step = node["action_steps"][0]
         step["action"]["test_files"] = ["tests/"]
         step["observation"]["message"] = "Unable to run tests: Directories provided instead of files: tests/"
         op = node_worker_ops(node)[0]
         self.assertEqual(op["expected_outcome"]["kind"], "test_directories")
-        with tempfile.TemporaryDirectory() as tmp, patch.object(worker.subprocess, "run") as run:
+        result = subprocess.CompletedProcess([], 2, "ERROR collecting tests/", "")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(worker.subprocess, "run", return_value=result) as run:
             directory = Path(tmp) / "tests"
             directory.mkdir()
             row = worker._worker_exec_one(op, tmp)
             self.assertTrue(row["ok"])
             self.assertTrue(row["expected_failure_matched"])
             self.assertFalse(row["test_passed"])
-            self.assertFalse(row["test_subprocess_started"])
-            self.assertEqual(row["test_outcome"], "invalid-test-selection")
-            self.assertIsNone(row["rc"])
-            run.assert_not_called()
+            self.assertTrue(row["test_subprocess_started"])
+            self.assertEqual(row["test_outcome"], "completed")
+            self.assertEqual(row["rc"], 2)
+            self.assertEqual(row["command"], "python3 -m pytest -q tests/")
+            self.assertEqual(row["timeout"], 180.0)
+            run.assert_called_once()
+            self.assertEqual(run.call_args.args[0], "python3 -m pytest -q tests/")
+            self.assertEqual(run.call_args.kwargs["cwd"], tmp)
+            self.assertTrue(run.call_args.kwargs["env"]["PATH"].startswith("/opt/miniconda3/envs/testbed/bin" + os.pathsep))
             directory.rmdir()
+            run.reset_mock()
             self.assertFalse(worker._worker_exec_one(op, tmp)["ok"])
+            run.assert_not_called()
             directory.write_text("a file is no longer the recorded directory")
             self.assertFalse(worker._worker_exec_one(op, tmp)["ok"])
+            run.assert_not_called()
         for change in ({"command": "true"}, {"test_files": ["other/"]}, {"expected_outcome": {"kind": "test_directories"}}):
             candidate = copy.deepcopy(op)
             candidate.update(change)
