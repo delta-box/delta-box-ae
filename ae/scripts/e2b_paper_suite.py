@@ -438,7 +438,7 @@ def run(path):
     plan = json.loads(path.read_text())
     config = json.loads(Path(plan['review_config']).read_text())
     inputs = verify_inputs(config)
-    if (plan.get('workers',1) != 1 or len(plan['jobs']) != 8
+    if (plan.get('workers',1) != 1 or len(plan['jobs']) != len(COHORT)
             or [j.get('key') for j in plan['jobs']] != ['table-02-e2b__'+r[0] for r in COHORT]
             or any(j.get('reused_verified') and j.get('execution') != 'referenced-completed-measurement'
                    for j in plan['jobs'])):
@@ -457,7 +457,10 @@ def run(path):
     evidence.mkdir(parents=True, mode=0o700)
     write(evidence/'inputs.json',inputs)
     write(evidence/'runtime-deployment.json',data)
-    cfg = L1Config(l1_manifest, WORK/'l1-work', Path('/home/dyp/.ssh/id_ed25519.pub'),
+    workspace = config.get('e2b', {}).get('l1_workspace', 'l1-work')
+    if workspace not in ('l1-work', 'l1-work-nvme'):
+        raise ValueError('Unknown L1 workspace')
+    cfg = L1Config(l1_manifest, WORK/workspace, Path('/home/dyp/.ssh/id_ed25519.pub'),
                    Path('/home/dyp/.ssh/id_ed25519'), readiness_timeout=600,stop_grace=60)
     state = dict(status='starting',purpose='paper-condition-reconstruction',started_unix=time.time(),
                  original_l1_configuration_unknown=True, deployment_sha256=runtime_sha,

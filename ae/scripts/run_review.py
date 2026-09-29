@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the complete CPU and GPU AE catalog by default, preserving failures and fresh-only plots."""
+"""Run selected AE groups within configured job limits, preserving raw failures and results."""
 from __future__ import annotations
 
 import argparse
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO / 'ae'))
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
 from repro.result_storage import (DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp,
-                                 parallel_run_locks, parallel_output, measurement_phase, no_symlink_parents)
+                                 parallel_run_locks, parallel_output, measurement_phase, no_symlink_parents, output_tree_lock)
 
 EXPERIMENTS = {**CPU_EXPERIMENTS, GPU: 'Figure 8(b) GPU generation and training'}
 SKIPPED = []
@@ -96,16 +96,17 @@ def parser():
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
     p.add_argument('--experiment-config', action='append', default=[], metavar='EXPERIMENT=PATH', help='Use a separate JSON config for this experiment')
     p.add_argument('--output', type=Path, help='Explicit new output directory; default full run rotates ae/results after verified backup')
-    p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify source/config/artifact hashes; retain failed attempts')
+    p.add_argument('--resume', type=Path, metavar='RUN_DIR', help='Resume in place: verify configuration and result artifacts; record the current source')
     p.add_argument('--reuse-completed-from', type=Path, metavar='RUN_DIR',
                    help='Explicit Figure 9 completed-job import into a new output; retains original source identities')
     p.add_argument('--baseline-inputs', choices=('44', 'all'), default='44',
                    help='Replay/CRIU/FC-diff input set: fixed 44 complete trajectories (default), or all original inputs')
     p.add_argument('--limit', type=int, help='First N inputs per experiment; explicitly marked quick-check')
+    p.add_argument('--isolated-validation', action='store_true', help='Selected small VM validation in a separate output with explicit NUMA/CPUs')
     p.add_argument('--max-events', type=int, help='Explicit event prefix; units depend on backend')
     p.add_argument('--no-pin', action='store_true', help='Explicitly opt out of NUMA and frequency controls')
-    p.add_argument('--numa-node', type=int, default=None, help='Default: config measurement.numa_node, or 2')
-    p.add_argument('--cpus', help='Default: config measurement.cpus, or 52-55')
+    p.add_argument('--numa-node', type=int, default=None, help='NUMA node for this run; default: shared measurement.numa_node configuration')
+    p.add_argument('--cpus', help='CPU list within the selected node; default: shared measurement.cpus configuration')
     p.add_argument('--analyze-existing', type=Path, metavar='RUN_DIR', help='Analyze existing fresh runs into a new output; executes no experiments')
     p.add_argument('--list', action='store_true', help='List experiment/group names without running')
     p.add_argument('--execute-plan', type=Path, help=argparse.SUPPRESS)
@@ -151,6 +152,9 @@ def config_identity(config):
     # A managed daemon receives a fresh PID/mount proof for each attempt.
     # Its full file hash remains in the review; it is not a measurement setting.
     identity = copy.deepcopy(config)
+    # This chooses which complete jobs to run; each job's mode/command is still
+    # checked on resume, and the original configuration file hash is retained.
+    identity.pop('figure06_adaptive_arms', None)
     if identity.get('cube', {}).get('profile') == 'paper-disk':
         identity['cube'].pop('disk_manifest', None)
     if identity.get('cube', {}).get('manage_memory_service') is True:
@@ -279,6 +283,103 @@ def pin_requested(args, config):
     return chosen
 
 
+def nvme_work_root(config):
+    """Optional absolute work directory on the host NVMe for a disk baseline."""
+    root = config.get('nvme_work_root')
+    if root is None:
+        return None
+    if config.get('baseline_storage') != 'disk':
+        raise ValueError('nvme_work_root requires baseline_storage disk')
+    path = Path(root)
+    if not path.is_absolute() or any(parent.is_symlink() for parent in (path, *path.parents)):
+        raise ValueError('nvme_work_root must be an absolute path without symlinks')
+    disk = Path('/mnt/disk2')
+    anchor = path if path.exists() else path.parent
+    if not anchor.exists() or anchor.stat().st_dev != disk.stat().st_dev:
+        raise ValueError('nvme_work_root must be on /mnt/disk2')
+    return path
+
+
+def measurement_placement(args, config):
+    """Resolve runtime placement from the caller/configuration, without host constants."""
+    settings = config.get('measurement', {})
+    if not isinstance(settings, dict):
+        raise ValueError('measurement must be a JSON object')
+    node = args.numa_node if args.numa_node is not None else os.environ.get('AE_NUMA_NODE', settings.get('numa_node'))
+    cpus = args.cpus or os.environ.get('AE_CPUS', settings.get('cpus'))
+    if node is not None:
+        if type(node) is not int and not (isinstance(node, str) and re.fullmatch(r'[0-9]+', node)):
+            raise ValueError('measurement.numa_node must be a nonnegative integer')
+        node = int(node)
+        if node < 0:
+            raise ValueError('measurement.numa_node must be a nonnegative integer')
+    if cpus is not None and (not isinstance(cpus, str) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', cpus)):
+        raise ValueError('measurement.cpus must be a CPU list within the selected node')
+    if pin_requested(args, config) and (node is None or not cpus):
+        raise ValueError('Set measurement.numa_node and measurement.cpus in the shared configuration, or supply --numa-node and --cpus')
+    return dict(node=node, cpus=cpus)
+
+
+ISOLATED_VALIDATION_EXPERIMENTS = frozenset((
+    'table-02-deltabox', 'table-03-slow', 'figure-02-filesystem',
+    'figure-02-memory', 'figure-06-memory', 'figure-06-adaptive',
+    'figure-09', 'correctness'))
+
+
+def validation_job_limit(config):
+    limit = config.get('review', {}).get('validation_max_jobs')
+    if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
+        raise ValueError('review.validation_max_jobs must be an integer in [1, 10]')
+    return limit
+
+
+def apply_validation_defaults(args, config):
+    limit = validation_job_limit(config)
+    if limit is None or args.quick_check or args.analyze_existing:
+        return
+    selected = set(args.experiment or [])
+    for group in args.group or []:
+        selected.update(GROUPS[group])
+    # GPU case lists are already bounded and --limit refers to CPU inputs.
+    # Do not turn a valid selected-GPU request into an invalid prefix request.
+    if args.limit is None and (selected == {GPU} or getattr(args, 'e2b_profile', None)):
+        return
+    if args.limit is None:
+        args.limit = limit
+    elif args.limit > limit:
+        raise ValueError(f'--limit exceeds the configured validation cap of {limit}')
+
+
+def bounded_plan_limits(name, config, flags, maximum):
+    result = list(flags)
+    if maximum is None or '--limit' not in result:
+        return result
+    arms = (len(config.get('figure06_adaptive_arms', ['standard', 'adaptive'])) if name == 'figure-06-adaptive' else 3 if name == 'figure-09'
+            else len(config.get('figure06_memory_policies', ['none', 'skip', 'gc', 'warm']))
+            if name == 'figure-06-memory' else 1)
+    if maximum < arms:
+        raise ValueError('Validation cap cannot cover one complete set of experiment arms')
+    offset = result.index('--limit') + 1
+    result[offset] = str(min(int(result[offset]), maximum // arms))
+    return result
+
+
+def isolated_validation_output(args, config):
+    if (validation_job_limit(config) is None
+            or len(args.experiment or []) != 1 or args.experiment[0] not in ISOLATED_VALIDATION_EXPERIMENTS
+            or args.group or args.all or args.quick_check or args.available or args.analyze_existing
+            or args.experiment_config or getattr(args, 'reuse_completed_from', None) or args.no_pin
+            or args.limit is None or not 1 <= args.limit <= 10
+            or args.numa_node is None or not args.cpus or not (args.output or args.resume)):
+        raise ValueError('Isolated validation requires one supported VM experiment, at most10 inputs, an explicit output/resume and NUMA/CPU binding')
+    output = no_symlink_parents((args.resume or args.output).absolute()).resolve()
+    root = (REPO / 'ae/results').resolve()
+    if output == root or not output.is_relative_to(root):
+        raise ValueError('Isolated validation output must be a child of this repository ae/results')
+    parallel_output(root, output, quick=False)
+    return output
+
+
 def check_timeout(config):
     timeout = float(config.get('timeout', 14400))
     if not math.isfinite(timeout) or timeout <= 0:
@@ -326,7 +427,9 @@ def job_unavailable(job, config):
             verify_cube_disk(config)
         except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc:
             reasons.append('Cube disk service verification failed: ' + str(exc))
-    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs':
+    from ae.scripts.cube_control_context import metadata_enabled
+    deferred_cube = name == 'figure-08-cube' and metadata_enabled(config)
+    if name.endswith('-cube') and config.get('baseline_storage') == 'tmpfs' and not deferred_cube:
         try:
             from runners.cube_memory import verify as verify_cube_memory
             verify_cube_memory(config)
@@ -335,7 +438,23 @@ def job_unavailable(job, config):
     for flag in ('--kernel', '--base-xfs', '--data-xfs', '--criu-dump-binary'):
         if option(command, flag):
             require(option(command, flag))
-    if name.startswith('figure-06') and config.get('checkpoint_profile') in ('async-incremental', 'async-incremental-lazy'):
+    if name == 'table-03-slow':
+        planned_profile = option(command, '--checkpoint-profile')
+        if config.get('checkpoint_profile') == 'async-incremental-lazy' and planned_profile != 'async-incremental-lazy':
+            reasons.append('Table3 lazy restore plan does not match the selected checkpoint profile')
+        if planned_profile == 'async-incremental-lazy':
+            pinned = option(command, '--criu-dump-binary')
+            if not pinned:
+                reasons.append('Table3 lazy restore requires a pinned CRIU dump/restore binary')
+            elif Path(pinned).is_file():
+                try:
+                    capabilities = subprocess.check_output([pinned, '--version'],
+                        env={**os.environ, 'DELTABOX_CRIU_CAPABILITIES': '1'}, text=True, timeout=10)
+                    if not {'exact-parent-v1', 'exact-parent-lazy-v1'} <= set(capabilities.split()):
+                        reasons.append('Table3 lazy restore requires exact-parent-lazy-v1 for the pinned dump/restore binary')
+                except (OSError, subprocess.SubprocessError) as error:
+                    reasons.append('Table3 lazy restore capability probe failed: ' + str(error))
+    if name == 'figure-06-memory' and config.get('checkpoint_profile') in ('async-incremental', 'async-incremental-lazy'):
         reasons.append('async-incremental supports standard replay only; supply a runtime-default config for Figure 6')
     if name in ('figure-08-deltabox', 'figure-09', 'correctness'):
         images = path_setting('images_dir', 'directory')
@@ -405,18 +524,25 @@ def execute_review_job(index, job, plan, output, stop_event=None):
     print(f'[{index}/{len(plan["jobs"])}] {job["key"]}{estimate}; timeout={budget / 60:.2f} min', flush=True)
     command = job['command']
     memory = plan.get('memory_measurement')
+    nvme = plan.get('nvme_measurement')
+    if memory and nvme:
+        raise ValueError('A job cannot use both tmpfs and NVMe work directories')
     if memory:
         command = ['unshare', '--mount', '--propagation', 'private', sys.executable,
             str(REPO / 'ae/scripts/run_memory_job.py'), '--suite', str(output),
             '--key', job['key'], '--experiment', job['experiment'],
             '--config', plan['review_config'], '--node', str(memory['node']),
             '--size-gib', str(memory['size_gib']), '--', *command]
+    elif nvme:
+        command = ['unshare', '--mount', '--propagation', 'private', sys.executable,
+            str(REPO / 'ae/scripts/run_nvme_job.py'), '--suite', str(output),
+            '--key', job['key'], '--work-root', nvme['root'], '--', *command]
     identity = plan.get('measurement_identity', {})
     result = execute(command, output / 'logs' / plan.get('attempt', 'attempt-001') / job['key'], cwd=REPO,
                      timeout=budget,
                      env=dict(os.environ, AE_RUN_PURPOSE=job['run_purpose'],
                               AE_MEASUREMENT_IDENTITY=json.dumps(identity)), stop_event=stop_event,
-                     termination_grace=300 if memory else 30)
+                     termination_grace=300 if memory or nvme or plan.get('cube_managed_metadata') else 30)
     job.update(status=result['status'], process_manifest=str(output / 'logs' / plan.get('attempt', 'attempt-001') / job['key'] / 'process.json'))
     if result['status'] == 'ok':
         # The producer and its owned processes have fully exited. Keep
@@ -429,7 +555,7 @@ def execute_review_job(index, job, plan, output, stop_event=None):
                 job['staging_cleanup'] = {
                     'status': 'retained', 'reason': 'source-dependent-paper-reconstruction',
                     'retained': 'Complete real requests, responses, transport receipts, logs and staged source are required for reproduction and paired validation'}
-            elif memory:
+            elif memory or nvme:
                 report = output / job['key'] / 'staging-cleanup.json'
                 job['staging_cleanup'] = json.loads(report.read_text()) if report.exists() else {'status': 'not-applicable'}
             else:
@@ -528,6 +654,7 @@ def execute_plan(path, *, paper_context_ready=False, paper_before_job=None, pape
 
 class Review:
     def __init__(self, args, config, output):
+        apply_validation_defaults(args, config)
         validate_gpu_selection(args)
         from ae.scripts.cube_paper_profile import validate
         validate(args)
@@ -582,11 +709,17 @@ class Review:
             lane='quick' if args.quick_check else 'main',
             control_cpus=config.get('review', {}).get('control_cpus'),
             resource_scope='exclusive NUMA and CPU frequency policies during each measurement; exclusive results rotation')
+        self.record['validation_max_jobs'] = validation_job_limit(config)
+        if getattr(args, 'isolated_validation', False):
+            self.record['concurrency_policy'].update(
+                enabled=True, lane='isolated-bounded-validation',
+                resource_scope='Separate output; shared rotation barrier; exclusive selected NUMA/frequency lease')
         self.cube_disk_manifest = None
         self.record['cube_profile'] = getattr(args, 'cube_profile', None)
         self.record['e2b_profile'] = getattr(args, 'e2b_profile', None)
         self.cube_memory_manifest = None
         self.cube_placement = None
+        self.record['source_policy'] = 'record-only; source edits do not block execution or reporting'
         self.previous_record = {}
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
@@ -597,8 +730,6 @@ class Review:
                     raise ValueError('Resume GPU case selection differs; use the original --gpu-cases choice')
             if previous.get('completed_job_reuse'):
                 self.record['completed_job_reuse'] = copy.deepcopy(previous['completed_job_reuse'])
-            if previous.get('release', {}).get('source_sha256') != self.record['release']['source_sha256']:
-                raise ValueError('Resume source fingerprint differs; start a new output')
             if previous.get('baseline_inputs', 'all') != self.record['baseline_inputs']:
                 raise ValueError('Resume baseline input set differs; use the original --baseline-inputs choice')
             if previous.get('cube_profile') != self.record['cube_profile']:
@@ -665,6 +796,14 @@ class Review:
         if control_cpus and not name.endswith('-run'):
             if not isinstance(control_cpus, str) or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', control_cpus):
                 raise ValueError('Invalid control CPU list')
+            requested = set()
+            for item in control_cpus.split(','):
+                low, _, high = item.partition('-')
+                requested.update(range(int(low), int(high or low) + 1))
+            allowed = os.sched_getaffinity(0)
+            if not requested <= allowed:
+                # A caller confined to other CPUs keeps control work off CPUs reserved elsewhere.
+                control_cpus = ','.join(map(str, sorted(allowed)[:4]))
             command = ['taskset', '-c', control_cpus, *command]
         log_dir = self.output / 'logs' / self.attempt / name
         item = dict(name=name, status='running', command=list(map(str, command)),
@@ -706,8 +845,10 @@ class Review:
         if self.cube_disk_manifest is not None:
             config['cube']['disk_manifest'] = str(self.cube_disk_manifest)
         config.pop('review', None)
-        if self.args.quick_check and self.args.numa_node is not None:
-            config['measurement'] = dict(pin=True, numa_node=self.args.numa_node, cpus=self.args.cpus)
+        if pin_requested(self.args, config):
+            placement = measurement_placement(self.args, config)
+            config['measurement'] = {**config.get('measurement', {}), 'pin': True,
+                                     'numa_node': placement['node'], 'cpus': placement['cpus']}
         if name.endswith('-cube') and self.cube_memory_manifest is not None:
             config.setdefault('cube', {})['memory_manifest'] = str(self.cube_memory_manifest)
             config['measurement'] = {**config.get('measurement', {}), **self.cube_placement}
@@ -762,10 +903,15 @@ class Review:
             self.save()
             return
         suite = self.output / 'runs' / name
-        if not self.step(name + '-plan', [*self.cli, 'plan', *select, '--output', str(suite), *self.limits], 600):
+        plan_limits = bounded_plan_limits(name, config, self.limits, validation_job_limit(self.config))
+        if not self.step(name + '-plan', [*self.cli, 'plan', *select, '--output', str(suite), *plan_limits], 600):
             row.update(status='failed', reasons=['Cannot build the cohort plan; see plan log'])
             return
         plan = self.read_step(name + '-plan')
+        maximum = validation_job_limit(self.config)
+        if maximum is not None and len(plan['jobs']) > maximum:
+            raise ValueError('Planner exceeded the configured validation job cap')
+        row['validation_limits'] = dict(max_jobs=maximum, plan_flags=plan_limits)
         plan.update(review_config=str(config_path), review_output=str(suite), review_timeout=timeout,
                     effective_config_sha256=config_identity(config), attempt=self.attempt)
         plan_path = self.output / 'plans' / self.attempt / (name + '.json')
@@ -795,12 +941,19 @@ class Review:
         write_json(plan_path, plan)
         measurement = config.get('measurement', {})
         pinned = pin_requested(self.args, config)
-        row['measurement'] = dict(pinned=pinned, node=self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', measurement.get('numa_node', 2))),
-                                  cpus=self.args.cpus or os.environ.get('AE_CPUS', measurement.get('cpus', '52-55')))
+        row['measurement'] = dict(pinned=pinned, **measurement_placement(self.args, config))
+        frequency_khz = measurement.get('frequency_khz')
+        if frequency_khz is not None and (type(frequency_khz) is not int or frequency_khz <= 0):
+            raise ValueError('measurement.frequency_khz must be a positive integer')
+        if frequency_khz is not None:
+            row['measurement']['frequency_khz'] = frequency_khz
+        nvme_root = nvme_work_root(config)
         identity = dict(node=row['measurement']['node'], cpus=row['measurement']['cpus'],
-                        frequency_policy='maximum-pstate' if pinned else 'uncontrolled',
-                        storage_mode=config.get('vm_storage', 'disk') if name in ('table-02-deltabox', 'table-03-slow', 'figure-06-memory', 'figure-06-adaptive') else
-                            config.get('baseline_storage', 'disk'))
+                        frequency_policy=(f'locked-{frequency_khz}-khz' if frequency_khz is not None
+                                          else 'maximum-pstate' if pinned else 'uncontrolled'),
+                        storage_mode='nvme' if nvme_root else (
+                            config.get('vm_storage', 'disk') if name in ('table-02-deltabox', 'table-03-slow', 'figure-06-memory', 'figure-06-adaptive') else
+                            config.get('baseline_storage', 'disk')))
         workers = config.get('replay_workers', 1) if name == 'table-02-replay' else 1
         if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 16:
             raise ValueError('replay_workers must be an integer in [1, 16]')
@@ -839,10 +992,16 @@ class Review:
                 manifest=plan['reuse_manifest'],
                 analysis_policy=imported['analysis_policy'])
             self.save()
-        if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
+        if nvme_root:
             if not pinned:
-                raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
+                raise ValueError('NVMe Table 2 measurement requires NUMA/frequency pinning')
+            plan['nvme_measurement'] = dict(root=str(nvme_root), node=identity['node'])
+        elif (name == 'figure-02-memory' or (name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube'))) and config.get('baseline_storage') == 'tmpfs':
+            if not pinned:
+                raise ValueError('Memory-backed measurement requires NUMA/frequency pinning')
             plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
+        from ae.scripts.cube_control_context import metadata_enabled
+        plan['cube_managed_metadata'] = name == 'figure-08-cube' and metadata_enabled(config)
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
         pending = [job for job in jobs if not job.get('reused_verified')]
@@ -853,11 +1012,13 @@ class Review:
             command = [self.python, str(REPO / 'ae/scripts/run_pinned_measurement.py'),
                        '--node', str(row['measurement']['node']), '--cpus', row['measurement']['cpus'],
                        '--out', str(self.output / 'environment' / self.attempt / name), '--timeout', str(budget),
-                       '--stop-grace', '360' if plan.get('memory_measurement') or getattr(self.args, 'e2b_profile', None) else '30', '--', *command]
+                       '--stop-grace', '360' if plan.get('memory_measurement') or plan.get('nvme_measurement') or plan.get('cube_managed_metadata') or getattr(self.args, 'e2b_profile', None) else '30', '--', *command]
         if pinned and measurement.get('policy_cpus'):
             command[2:2] = ['--policy-cpus', measurement['policy_cpus']]
+        if pinned and frequency_khz is not None:
+            command[2:2] = ['--frequency-khz', str(frequency_khz)]
         ok = self.step(name + '-run', [*self.privilege, *command], budget + 120,
-                       termination_grace=420 if plan.get('memory_measurement') or getattr(self.args, 'e2b_profile', None) else 30)
+                       termination_grace=420 if plan.get('memory_measurement') or plan.get('nvme_measurement') or plan.get('cube_managed_metadata') or getattr(self.args, 'e2b_profile', None) else 30)
         row['status'] = 'partial' if ok and (row['unavailable_jobs'] or row['unavailable_arms']) else 'ok' if ok else 'failed'
         row['reasons'] += [str(item.get('arm', 'panel')) + ': ' + item['reason'] for item in row['unavailable_arms']]
         if (suite / 'suite.json').is_file():
@@ -906,7 +1067,8 @@ class Review:
                     # separated by uid, rather than opening root-owned ae/work.
                     verify_reused_images(validated.config,
                         cache=self.output / f'.resume-image-hashes-{os.geteuid()}.json')
-                job.update(status='ok', reused_verified=True, process_manifest=prior.get('process_manifest'))
+                job.update(status='ok', reused_verified=True, process_manifest=prior.get('process_manifest'),
+                           measurement_release=copy.deepcopy(prior.get('measurement_release') or old.get('release', {})))
                 for field in ('execution', 'measurement_release', 'original_run', 'reuse_origin'):
                     if field in prior:
                         job[field] = copy.deepcopy(prior[field])
@@ -922,6 +1084,12 @@ class Review:
             if field in old:
                 plan[field] = copy.deepcopy(old[field])
                 row[field] = copy.deepcopy(old[field])
+        sources = []
+        for identity in [*old.get('measurement_sources', []), old.get('release'), plan.get('release')]:
+            if identity and identity not in sources:
+                sources.append(identity)
+        plan['measurement_sources'] = sources
+        row['measurement_sources'] = copy.deepcopy(sources)
         plan['resume_verified'] = True
         row['reused_jobs'] = reused
 
@@ -999,7 +1167,7 @@ class Review:
         self.save()
         print('[figure-08-gpu] ' + self.record['gpu']['status'], flush=True)
 
-    def prepare_cube_service(self, contexts, *, validate_only=False):
+    def prepare_cube_service(self, contexts, *, validate_only=False, selected=None):
         if getattr(self.args, 'cube_profile', None) == 'paper-disk':
             from ae.scripts.cube_paper_profile import effective
             config = effective(self.config, self.args.cube_profile)
@@ -1014,7 +1182,11 @@ class Review:
             self.record['cube_profile_provenance'] = config['cube']['profile_provenance']
             self.save()
             return
-        selected = [name for name in self.experiments if name.endswith('-cube')]
+        selected = selected if selected is not None else [name for name in self.experiments if name.endswith('-cube')]
+        if len(selected) > 1:
+            for name in selected:
+                self.prepare_cube_service(contexts, validate_only=validate_only, selected=[name])
+            return
         if not selected:
             return
         configs = []
@@ -1023,12 +1195,22 @@ class Review:
             if name not in self.overrides:
                 config = deep_merge(config, config.get('review', {}).get('experiment_overrides', {}).get(name, {}))
             configs.append(config)
+        from ae.scripts.cube_control_context import metadata_enabled
+        if metadata_enabled(configs[0]):
+            if selected != ['figure-08-cube'] or not pin_requested(self.args, configs[0]):
+                raise ValueError('Managed metadata is supported only for pinned Figure 8 Cube')
+            size = configs[0]['cube'].get('memory_size_gib', 12)
+            if type(size) is not int or size < 12:
+                raise ValueError('Cube RAM workspace must be at least 12 GiB')
+            # Preparation must execute inside the runner, after its NUMA lease.
+            measurement_placement(self.args, configs[0])
+            return
         managed = [c.get('cube', {}).get('manage_memory_service', False) for c in configs]
         if any(type(value) is not bool for value in managed) or len(set(managed)) != 1:
             raise ValueError('Cube experiments must share one explicit memory service policy')
         if managed[0]:
-            placements = {(self.args.numa_node if self.args.numa_node is not None else int(os.environ.get('AE_NUMA_NODE', c.get('measurement', {}).get('numa_node', 2))),
-                           self.args.cpus or os.environ.get('AE_CPUS', c.get('measurement', {}).get('cpus', '52-55'))) for c in configs}
+            placements = {(placement['node'], placement['cpus'])
+                          for c in configs for placement in [measurement_placement(self.args, c)]}
             sizes = {c.get('cube', {}).get('memory_size_gib', 16) for c in configs}
             if len(placements) != 1 or len(sizes) != 1 or any(not pin_requested(self.args, c) for c in configs):
                 raise ValueError('Managed Cube requires the same pinned NUMA/CPU placement for every experiment')
@@ -1040,7 +1222,7 @@ class Review:
                 return
             from ae.scripts.cube_memory_context import memory_service
             self.cube_memory_manifest = contexts.enter_context(memory_service(
-                self.output / 'environment' / self.attempt / 'cube-memory',
+                self.output / 'environment' / self.attempt / selected[0] / 'cube-memory',
                 node=node, cpus=cpus, size_gib=sizes.pop()))
             self.record['cube_memory_service'] = file_record(self.cube_memory_manifest)
         from runners.cube_memory import verify
@@ -1111,13 +1293,28 @@ class Review:
                         return 1
                     if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
                         return 1
-                cube_prepared = False
                 for name in self.experiments:
                     try:
-                        if name.endswith('-cube') and not cube_prepared:
-                            self.prepare_cube_service(contexts)
-                            cube_prepared = True
-                        self.run_experiment(name)
+                        if name.endswith('-cube'):
+                            cube_contexts = ExitStack()
+                            try:
+                                self.prepare_cube_service(cube_contexts, selected=[name])
+                                self.run_experiment(name)
+                            finally:
+                                try:
+                                    cube_contexts.close()
+                                except Exception as error:
+                                    log = Path('environment') / self.attempt / name / 'cube-cleanup-error.json'
+                                    write_json(self.output / log, {'error': f'{type(error).__name__}: {error}'})
+                                    self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
+                                        experiment=name, log=str(log), error=f'{type(error).__name__}: {error}'))
+                                    raise
+                                finally:
+                                    self.cube_memory_manifest = None
+                                    self.cube_disk_manifest = None
+                                    self.cube_placement = None
+                        else:
+                            self.run_experiment(name)
                     except Exception as error:
                         row = next((row for row in self.record['coverage'] if row['experiment'] == name), None)
                         if row is None:
@@ -1197,6 +1394,11 @@ def main(argv=None):
         p.error('--resume cannot be combined with --output/--analyze-existing')
     try:
         config = {} if args.analyze_existing else load_config(args.config.resolve())
+        apply_validation_defaults(args, config)
+        if args.isolated_validation:
+            isolated_validation_output(args, config)
+            with run_lock(REPO / 'ae/work/.results.lock', shared=True):
+                return run_selected(args, p)
         parallel = config.get('review', {}).get('parallel_quick_check', False)
         if type(parallel) is not bool:
             raise ValueError('review.parallel_quick_check must be a boolean')
@@ -1246,6 +1448,13 @@ def run_selected(args, p, *, gate=None):
     output = no_symlink_parents(selected_output).resolve()
     if args.analyze_existing and not args.analyze_existing.is_dir():
         p.error('--analyze-existing must point to an existing directory')
+    # Acquire before Review loads resume state or any attempt history is written.
+    with output_tree_lock(REPO / 'ae/work', REPO / 'ae/results', output,
+                          quick=args.quick_check):
+        return run_locked_selection(args, p, config, output, gate=gate)
+
+
+def run_locked_selection(args, p, config, output, *, gate=None):
     runner = Review(args, config, output)
     latest = output == (REPO / 'ae/results').resolve() and not args.resume
     if latest and not complete_selection(args):

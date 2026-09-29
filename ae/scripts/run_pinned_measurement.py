@@ -42,6 +42,33 @@ def frequency_cpu_selection(command_cpus, requested, node_cpus, available_cpus):
 
 
 FIELDS = ('scaling_governor', 'scaling_min_freq', 'scaling_max_freq')
+FREQUENCY_OVERRIDE = Path(__file__).resolve().parents[1] / 'work/frequency-override.json'
+
+
+def load_frequency_override(node, path=FREQUENCY_OVERRIDE):
+    """Return an explicit per-node P-state request, or None for the highest P-state."""
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    override = json.loads(raw)
+    nodes, khz = override.get('nodes'), override.get('khz')
+    if (override.get('schema_version') != 1 or not isinstance(nodes, list)
+            or any(type(item) is not int for item in nodes) or type(khz) is not int):
+        raise ValueError('Invalid frequency override: ' + str(path))
+    if node not in nodes:
+        return None
+    import hashlib
+    return {'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest(), 'nodes': nodes,
+            'khz': khz, 'reason': override.get('reason')}
+
+
+def requested_frequency(policy, override):
+    maximum = (policy/'cpuinfo_max_freq').read_text().strip()
+    if override is None:
+        return maximum
+    if not int((policy/'cpuinfo_min_freq').read_text()) <= override['khz'] <= int(maximum):
+        raise ValueError('Frequency override outside cpuinfo range: ' + str(policy))
+    return str(override['khz'])
 
 
 def state(policy):
@@ -97,6 +124,7 @@ def main():
     p.add_argument('--node', type=int, required=True)
     p.add_argument('--cpus', required=True)
     p.add_argument('--policy-cpus', help='Frequency policy CPUs for an external daemon; same node, superset of command CPUs')
+    p.add_argument('--frequency-khz', type=int, help='Lock the selected CPUs to this P-state; overrides ae/work/frequency-override.json')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--timeout', type=float, default=7200)
     p.add_argument('--stop-grace', type=float, default=30, help='Child cleanup grace, including RAM evidence archival')
@@ -122,6 +150,16 @@ def main():
             p.error('A shared frequency policy would change CPUs outside this selection')
         if 'performance' not in (policy/'scaling_available_governors').read_text().split():
             p.error('performance governor unavailable')
+    try:
+        if args.frequency_khz is not None and args.frequency_khz <= 0:
+            raise ValueError('frequency-khz must be positive')
+        override = ({'khz': args.frequency_khz, 'nodes': [args.node],
+                     'reason': 'measurement.frequency_khz'}
+                    if args.frequency_khz is not None else load_frequency_override(args.node))
+        for policy in policies:
+            requested_frequency(policy, override)
+    except ValueError as error:
+        p.error(str(error))
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=False)
     manifest = {'schema_version': 1, 'node': args.node, 'cpus': sorted(cpus),
@@ -129,6 +167,10 @@ def main():
                 'command': ['numactl', '--physcpubind='+args.cpus, '--membind='+str(args.node), *command],
                 'status': 'preparing', 'policies': {}, 'started_unix': time.time(),
                 'frequency_note': 'min=max=cpuinfo_max_freq requests highest P-state; see turbostat Bzy_MHz for achieved frequency'}
+    if override is not None:
+        manifest['frequency_override'] = override
+        manifest['frequency_note'] = (f"min=max={override['khz']} kHz from an explicit frequency override; "
+                                      'see turbostat Bzy_MHz for achieved frequency')
     def save():
         temp = output/'environment.json.tmp'
         temp.write_text(json.dumps(manifest, indent=2)+'\n')
@@ -153,7 +195,7 @@ def main():
             locks.append(lock)
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             old = state(policy)
-            maximum = (policy/'cpuinfo_max_freq').read_text().strip()
+            maximum = requested_frequency(policy, override)
             manifest['policies'][str(policy)] = {'original': old, 'requested_khz': maximum}
             save()  # Recovery information is durable before the first write.
             changed.append((policy, old))
