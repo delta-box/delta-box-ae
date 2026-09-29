@@ -119,6 +119,23 @@ def acquire_node_lock(node, *, timeout, root=Path('/run/lock')):
         raise
 
 
+def prepare_output(output):
+    """Create the measurement directory.
+
+    Cube memory setup creates ``cube-memory`` before this process starts, so
+    that parent may already exist. A directory with an environment record or
+    any other contents is still a conflict.
+    """
+    output = Path(output)
+    if output.exists():
+        names = {path.name for path in output.iterdir()}
+        if names - {'cube-memory'} or (output / 'environment.json').exists():
+            raise FileExistsError(f'Pinned measurement output already exists: {output}')
+        return output
+    output.mkdir(parents=True, exist_ok=False)
+    return output
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--node', type=int, required=True)
@@ -160,8 +177,7 @@ def main():
             requested_frequency(policy, override)
     except ValueError as error:
         p.error(str(error))
-    output = args.out.resolve()
-    output.mkdir(parents=True, exist_ok=False)
+    output = prepare_output(args.out.resolve())
     manifest = {'schema_version': 1, 'node': args.node, 'cpus': sorted(cpus),
                 'policy_cpus': sorted(policy_cpus),
                 'command': ['numactl', '--physcpubind='+args.cpus, '--membind='+str(args.node), *command],
