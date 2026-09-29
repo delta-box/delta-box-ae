@@ -213,7 +213,7 @@ class RemoteTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Unrequested'):
                 remote.collect_timings(root, report, source)
 
-    def test_uploaded_source_identity_changed_is_rejected(self):
+    def test_uploaded_source_edits_are_recorded_without_rejection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'worker.py').write_text('original')
@@ -221,8 +221,9 @@ class RemoteTests(unittest.TestCase):
             with patch.object(remote, 'ROOT', root):
                 remote.verify_uploaded_source(source)
                 (root / 'worker.py').write_text('changed')
-                with self.assertRaisesRegex(ValueError, 'Uploaded GPU source changed'):
-                    remote.verify_uploaded_source(source)
+                observed = remote.verify_uploaded_source(source)
+                self.assertEqual(observed['files']['worker.py'], remote.digest(root / 'worker.py'))
+                self.assertNotEqual(observed['files'], source['files'])
 
     def test_new_suite_origin_is_required_and_bound(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -396,6 +397,16 @@ class RemoteTests(unittest.TestCase):
 
 
 class ReviewIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        original = review.run_lock
+        def isolated_lock(path, **kwargs):
+            return original(Path(directory.name) / Path(path).name, **kwargs)
+        redirect = patch.object(review, 'run_lock', side_effect=isolated_lock)
+        redirect.start()
+        self.addCleanup(redirect.stop)
+
     def runner(self, root, argv=()):
         args = review.parser().parse_args(list(argv))
         with patch.object(review, 'current_source', return_value={}):

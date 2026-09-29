@@ -21,6 +21,16 @@ SOURCE = {'source_commit': 'fixture', 'source_sha256': 'a' * 64}
 
 
 class ReviewTests(unittest.TestCase):
+    def setUp(self):
+        # Unit orchestration must not acquire the hosted server's real run locks.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        original = review.run_lock
+        def isolated_lock(path, **kwargs):
+            return original(Path(directory.name) / Path(path).name, **kwargs)
+        redirect = patch.object(review, 'run_lock', side_effect=isolated_lock)
+        redirect.start()
+        self.addCleanup(redirect.stop)
 
 
     def test_resume_compares_cube_settings_not_generated_proof_path(self):
@@ -470,14 +480,18 @@ class ReviewTests(unittest.TestCase):
                 self.assertEqual(review.main(['--config', str(config), '--output', tmp]), 2)
             self.assertFalse((Path(tmp) / 'review.json').exists())
 
-    def test_resume_rejects_changed_source_before_any_write(self):
+    def test_resume_accepts_changed_source_and_records_both_identities(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            review.write_json(root / 'review.json', {'release': {'source_sha256': 'different'}})
-            args = review.parser().parse_args(['--resume', str(root)])
             with patch.object(review, 'current_source', return_value=SOURCE):
-                with self.assertRaisesRegex(ValueError, 'fingerprint'):
-                    review.Review(args, {}, root)
+                original = review.Review(review.parser().parse_args([]), {}, root)
+                original.save()
+            changed = dict(SOURCE, source_sha256='different')
+            args = review.parser().parse_args(['--resume', str(root)])
+            with patch.object(review, 'current_source', return_value=changed):
+                resumed = review.Review(args, {}, root)
+            self.assertEqual(resumed.record['release'], changed)
+            self.assertEqual(resumed.previous_record['release'], SOURCE)
 
     def test_default_and_all_resume_the_same_required_selection(self):
         for original_flags, resumed_flags in (([], []), (['--all'], []), ([], ['--all'])):

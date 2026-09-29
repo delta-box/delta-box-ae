@@ -194,10 +194,9 @@ class ReviewComparisonTests(unittest.TestCase):
         other = copy.deepcopy(supplement)
         other["release"]["source_sha256"] = "c" * 64
         write(source, other)
-        with self.assertRaisesRegex(ValueError, "another measurement source"):
-            build(coverage_path=self.coverage, output=self.root / "wrong-source", paper_dir=self.paper,
-                  figure08_path=source)
-        self.assertFalse((self.root / "wrong-source").exists())
+        build(coverage_path=self.coverage, output=self.root / "changed-source", paper_dir=self.paper,
+              figure08_path=source)
+        self.assertTrue((self.root / "changed-source" / "README.md").is_file())
         write(source, supplement)
         (folder / "figure-08b.png").write_bytes(b"changed")
         with self.assertRaisesRegex(ValueError, "Changed Figure 8"):

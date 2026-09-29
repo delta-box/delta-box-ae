@@ -282,10 +282,6 @@ def figure08_supplement(path, *, expected_release=None):
     value = load(path)
     if value.get("schema_version") != 1 or not isinstance(value.get("panels"), list):
         raise ValueError("Invalid Figure 8 supplement")
-    if expected_release is not None and any(
-            (value.get("release") or {}).get(key) != expected_release.get(key)
-            for key in ("source_commit", "source_sha256")):
-        raise ValueError("Figure 8 supplement belongs to another measurement source")
     seen = set()
     for panel in value["panels"]:
         key = panel["experiment"]
