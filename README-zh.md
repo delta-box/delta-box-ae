@@ -67,6 +67,9 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 bash ae/run_all_no_gpu.sh
 ```
 
+Cube 内存盘实验会临时关闭其受控服务进程树的透明大页，避免匿名页快照分类期间发生页迁移。源实例和子实例均执行内存 checksum 校验，实验结束后恢复原服务策略。
+
+
 此入口在NUMA1/CPU28–31与NUMA2/CPU48–51上使用共享实验队列：空闲节点立即领取下一组，Replay较慢时另一节点可继续执行独立baseline。每组内部输入保持串行，Cube/E2B涉及共享服务的实验互斥。配置、作业上限、真实测量身份和统一报告保留。同一次运行续跑会核验已完成产物，保留原节点与源码身份，未完成组仍留在原节点；支持从之前NUMA1/2静态分组切换，不导入其他运行的数据。保留Figure8(a)，排除GPU探测及Figure8(b)(c)。使用`--output`或`--resume`，不接受绑定覆盖。
 
 如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
