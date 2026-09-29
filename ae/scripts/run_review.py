@@ -89,7 +89,7 @@ def parser():
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
-    p.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA0 and NUMA1')
+    p.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA1 and NUMA2')
     p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
     p.add_argument('--e2b-profile', choices=('paper-nested',), action=GPUCases, help='E2B-only documented nested reconstruction; original eight complete inputs')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',

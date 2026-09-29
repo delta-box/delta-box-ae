@@ -17,12 +17,12 @@ from ae.scripts import run_cpu_parallel as parallel
 class TwoLaneTests(unittest.TestCase):
     def test_partition_is_exhaustive_disjoint_and_services_share_one_lane(self):
         groups = parallel.partition(review.CPU_EXPERIMENTS)
-        self.assertEqual(set(groups), {0, 1})
-        self.assertFalse(set(groups[0]) & set(groups[1]))
-        self.assertEqual(set(groups[0] + groups[1]), set(review.CPU_EXPERIMENTS))
+        self.assertEqual(set(groups), {1, 2})
+        self.assertFalse(set(groups[1]) & set(groups[2]))
+        self.assertEqual(set(groups[1] + groups[2]), set(review.CPU_EXPERIMENTS))
         for name in parallel.BASELINES:
-            self.assertIn(name, groups[1])
-        self.assertNotIn(review.GPU, groups[0] + groups[1])
+            self.assertIn(name, groups[2])
+        self.assertNotIn(review.GPU, groups[1] + groups[2])
 
     def test_parallel_refuses_placement_gpu_and_internal_overrides(self):
         parallel.validate(review.parser().parse_args(['--group', 'cpu']))
@@ -77,13 +77,13 @@ from pathlib import Path
 root=Path(sys.argv[1]);n=int(sys.argv[2]);os.fstat(int(sys.argv[3]))
 (root/(str(n)+'.txt')).write_text('started')
 deadline=time.monotonic()+5
-while not (root/(str(1-n)+'.txt')).exists():
+while not (root/(str(3-n)+'.txt')).exists():
  if time.monotonic()>deadline: raise SystemExit(5)
  time.sleep(.01)
 """
-        rows, updates, files = self.run_processes({0: source, 1: source})
+        rows, updates, files = self.run_processes({1: source, 2: source})
         self.assertTrue(all(r['status'] == 'ok' for r in rows.values()))
-        self.assertEqual(set(files), {'0.txt', '1.txt'})
+        self.assertEqual(set(files), {'1.txt', '2.txt'})
         self.assertTrue(any(all(r['status'] == 'running' for r in snapshot.values()) for snapshot in updates))
 
     def test_failed_lane_cancels_owned_peer_and_waits_for_cleanup(self):
@@ -104,9 +104,9 @@ signal.signal(signal.SIGTERM,stop)
 (r/'ready.txt').write_text('ready')
 while True:time.sleep(.01)
 """
-        rows, _, files = self.run_processes({0: failure, 1: peer})
-        self.assertEqual(rows[0]['returncode'], 3)
-        self.assertEqual(rows[1]['status'], 'cancelled')
+        rows, _, files = self.run_processes({1: failure, 2: peer})
+        self.assertEqual(rows[1]['returncode'], 3)
+        self.assertEqual(rows[2]['status'], 'cancelled')
         self.assertEqual(files['cleaned.txt'], 'cleanup completed')
         self.assertFalse(any(r.get('cleanup_timeout') for r in rows.values()))
 

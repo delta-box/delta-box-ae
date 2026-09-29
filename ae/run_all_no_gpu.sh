@@ -10,8 +10,8 @@ while (($#)); do
 Usage: bash ae/run_all_no_gpu.sh [options]
 
 Run the normal bounded CPU experiments in two concurrent lanes:
-  NUMA0, CPU0-3: DeltaBox, profiling, Figure 9 and correctness
-  NUMA1, CPU28-31: baselines, including Cube and E2B
+  NUMA1, CPU28-31: DeltaBox, profiling, Figure 9 and correctness
+  NUMA2, CPU48-51: baselines, including Cube and E2B
 Input jobs within each lane run sequentially. Results feed one combined report.
 Figure 8(a) remains included. GPU probing and Figure 8(b)(c) are skipped.
 
@@ -41,9 +41,9 @@ HELP
             shift
             ;;
         *)
-            echo "Unsupported option: $1. This entry fixes CPU selection and NUMA0/1; see --help." >&2
+            echo "Unsupported option: $1. This entry fixes CPU selection and NUMA1/2; see --help." >&2
             exit 2
             ;;
     esac
 done
-exec numactl --all --physcpubind=8-11 --membind=0 bash "$script_dir/run_all.sh" "${args[@]}"
+exec numactl --all --physcpubind=32-35 --membind=1 bash "$script_dir/run_all.sh" "${args[@]}"
