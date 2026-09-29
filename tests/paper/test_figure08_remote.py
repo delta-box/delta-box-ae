@@ -14,6 +14,12 @@ from ae.runners import gpu_timing
 
 
 class RemoteTests(unittest.TestCase):
+    def setUp(self):
+        storage = patch.object(remote, 'local_storage_admission',
+                               return_value=dict(available_bytes=100*1024**3, available_inodes=100000))
+        storage.start()
+        self.addCleanup(storage.stop)
+
     def settings(self):
         config = remote.load_settings(remote.DEFAULT_CONFIG)
         config['sample_interval_s'] = 0
@@ -61,6 +67,7 @@ class RemoteTests(unittest.TestCase):
     def remote_root(self, root):
         config = self.settings()
         config['remote_root'] = str(root / 'shared')
+        config['lock_root'] = str(root / 'shared/locks')
         remote.write_json(root / 'remote-config.json', config)
         remote.write_json(root / 'source.json', {'files': {}})
         return config
@@ -148,6 +155,125 @@ class RemoteTests(unittest.TestCase):
                 self.assertEqual(sum(len(b) for _, b, _ in calls), 6 if count == 1 else 8)
                 if count == 4:
                     self.assertEqual(calls[-1], (['training'], [16, 64], ['GPU-0', 'GPU-1', 'GPU-2', 'GPU-3']))
+
+    def test_selected_training_requires_four_gpus_and_never_runs_completed_cases(self):
+        wanted = ['training-B16', 'training-B64']
+        for count in (0, 1, 3, 4):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                config = self.remote_root(root)
+                config['requested_cases'] = wanted
+                remote.write_json(root / 'remote-config.json', config)
+                admission = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(count)], observations=[])
+                calls = []
+                def run(settings, output, **kwargs):
+                    calls.append((settings['phases'], settings['batches'], settings['devices']))
+                    return dict(status='ok')
+                with patch.object(remote, 'probe', return_value=admission), \
+                        patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={})) as check, \
+                        patch.object(gpu_timing, 'run_suite', side_effect=run):
+                    result = remote.remote_run(root)
+                if count < 4:
+                    self.assertEqual(calls, [])
+                    check.assert_not_called()
+                    self.assertEqual(result['status'], 'skipped')
+                else:
+                    self.assertEqual(calls, [(['training'], [16, 64], ['GPU-0', 'GPU-1', 'GPU-2', 'GPU-3'])])
+                    self.assertEqual(result['status'], 'measured')
+                    self.assertEqual(result['reason'], '')
+                    suite = json.loads((root / 'results/01-training/summary.json').read_text())
+                    self.assertEqual(suite['source_origin'], {'files': {}})
+                self.assertEqual(result['requested_cases'], wanted)
+                for lockpath in (Path(config['lock_root'])).glob('*.lock'):
+                    with lockpath.open('a') as lock:
+                        remote.fcntl.flock(lock, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
+
+    def test_case_subset_validation_before_any_output_or_ssh(self):
+        for bad in ([], ['training-B16', 'training-B16'], ['training-B2'], 'training-B16', [None]):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(remote, 'ssh') as ssh:
+                output = Path(directory) / 'run'
+                with self.assertRaises(ValueError):
+                    remote.run_auto(output, requested_case_ids=bad)
+                self.assertFalse(output.exists())
+                ssh.assert_not_called()
+        self.assertEqual(len(remote.requested_cases()), 8)
+
+    def test_selected_collection_keeps_global_missing_and_rejects_extra(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, report, raw = self.evidence(root)
+            report['requested_cases'] = ['generation-B1']
+            combined = remote.collect_timings(root, report, source)
+            self.assertEqual(combined['selected_status'], 'complete')
+            self.assertEqual(combined['missing_selected_cases'], [])
+            self.assertEqual(combined['coverage_status'], 'partial')
+            self.assertEqual(len(combined['missing_cases']), 7)
+            report['requested_cases'] = ['training-B16']
+            with self.assertRaisesRegex(ValueError, 'Unrequested'):
+                remote.collect_timings(root, report, source)
+
+    def test_uploaded_source_identity_changed_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'worker.py').write_text('original')
+            source = dict(files={'worker.py': remote.digest(root / 'worker.py')})
+            with patch.object(remote, 'ROOT', root):
+                remote.verify_uploaded_source(source)
+                (root / 'worker.py').write_text('changed')
+                with self.assertRaisesRegex(ValueError, 'Uploaded GPU source changed'):
+                    remote.verify_uploaded_source(source)
+
+    def test_new_suite_origin_is_required_and_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, report, raw = self.evidence(root)
+            report['source_origin_schema'] = 1
+            with self.assertRaisesRegex(ValueError, 'source origin'):
+                remote.collect_timings(root, report, source)
+            suite_path = root / report['suites'][0]['path']
+            suite = json.loads(suite_path.read_text())
+            suite['source_origin'] = source
+            remote.write_json(suite_path, suite)
+            report['suites'][0]['sha256'] = remote.digest(suite_path)
+            self.assertEqual(len(remote.collect_timings(root, report, source)['cases']), 1)
+            suite['source_origin'] = {'files': {}}
+            remote.write_json(suite_path, suite)
+            report['suites'][0]['sha256'] = remote.digest(suite_path)
+            with self.assertRaisesRegex(ValueError, 'source origin'):
+                remote.collect_timings(root, report, source)
+
+    def test_config_only_selection_is_preserved_and_cli_takes_precedence(self):
+        wanted = ['training-B16', 'training-B64']
+        for override in (None, ['generation-B1']):
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                config = self.settings()
+                config['requested_cases'] = wanted
+                path = root / 'settings.json'
+                remote.write_json(path, config)
+                with patch.object(remote, 'ssh', side_effect=OSError('probe fixture')):
+                    result = remote.run_auto(root / 'out', path, requested_case_ids=override)
+                self.assertEqual(result['requested_cases'], override or wanted)
+                self.assertEqual(result['requested_case_count'], len(override or wanted))
+
+    def test_failed_later_suite_without_origin_preserves_verified_earlier_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, report, raw = self.evidence(root)
+            first = root / report['suites'][0]['path']
+            suite = json.loads(first.read_text())
+            suite['source_origin'] = source
+            remote.write_json(first, suite)
+            report['suites'][0]['sha256'] = remote.digest(first)
+            report['source_origin_schema'] = 1
+            later = root / '02-training/summary.json'
+            remote.write_json(later, {'status': 'failed', 'cases': []})
+            report['suites'].append(dict(path='02-training/summary.json', status='failed',
+                                        sha256=remote.digest(later)))
+            combined = remote.collect_timings(root, report, source)
+            self.assertEqual([c['case_id'] for c in combined['cases']], ['generation-B1'])
+            self.assertEqual(combined['coverage_status'], 'partial')
 
     def test_environment_is_restored(self):
         config = self.settings()

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import tempfile
 import subprocess
 import sys
 import tarfile
@@ -29,6 +30,25 @@ DEFAULT_CONFIG = ROOT / 'ae/configs/figure08-remote.json'
 EXPECTED = {f'{phase}-B{batch}' for phase in protocol.PHASES for batch in protocol.BATCHES}
 
 
+def requested_cases(values=None):
+    """Validate an explicit subset without changing the default eight-case matrix."""
+    if values is None:
+        return [f'{phase}-B{batch}' for phase in protocol.PHASES for batch in protocol.BATCHES]
+    if not isinstance(values, (list, tuple)) or not values or any(not isinstance(v, str) for v in values):
+        raise ValueError('GPU requested cases must be a nonempty list')
+    if len(set(values)) != len(values) or not set(values) <= EXPECTED:
+        raise ValueError('Unknown or duplicate requested GPU case')
+    return [case for case in requested_cases() if case in values]
+
+
+def verify_uploaded_source(source):
+    """An uploaded subset has an independent Git identity; verify its original bytes."""
+    for name, expected in source['files'].items():
+        path = checked_path(ROOT, name)
+        if digest(path) != expected:
+            raise ValueError('Uploaded GPU source changed: ' + name)
+
+
 def load_settings(path):
     config = json.loads(Path(path).read_text())
     if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.@-]*', config['host']):
@@ -36,6 +56,8 @@ def load_settings(path):
     for key in ('remote_root', 'python', 'model_path', 'generation_python', 'training_python'):
         if not isinstance(config[key], str) or not Path(config[key]).is_absolute():
             raise ValueError(f'{key} must be an absolute remote path')
+    if 'lock_root' in config and (not isinstance(config['lock_root'], str) or not Path(config['lock_root']).is_absolute()):
+        raise ValueError('lock_root must be an absolute remote path')
     devices = config['devices']
     if not devices or len(set(devices)) != len(devices) or any(type(n) is not int or n not in range(8) for n in devices):
         raise ValueError('devices must be a unique subset of physical GPU indices 0–7')
@@ -52,7 +74,82 @@ def load_settings(path):
         env = config.get(phase + '_env', {})
         if not isinstance(env, dict) or any(k not in ('LD_LIBRARY_PATH', 'PATH') or not isinstance(v, str) for k, v in env.items()):
             raise ValueError('Phase environment only supports explicit PATH/LD_LIBRARY_PATH strings')
+    if 'requested_cases' in config:
+        config['requested_cases'] = requested_cases(config['requested_cases'])
     return config
+
+
+# The writable run may move disks while reservations keep their original inodes.
+# Keep a reserve for JIT caches and collected evidence; never clean another job.
+MIN_FREE_BYTES = 10 * 1024**3
+MIN_FREE_INODES = 4096
+STORAGE_PROBE = r'''
+import json, os, pathlib, sys
+requested = pathlib.Path(sys.argv[1])
+parent = requested
+while not parent.exists():
+    if parent == parent.parent:
+        raise ValueError('No existing storage ancestor')
+    parent = parent.parent
+v = os.statvfs(parent)
+print(json.dumps(dict(requested=str(requested), existing_parent=str(parent.resolve()),
+    available_bytes=v.f_bavail*v.f_frsize, available_inodes=v.f_favail,
+    writable=os.access(parent, os.W_OK | os.X_OK))))
+'''
+
+
+def storage_admission(record):
+    record = dict(record, required_free_bytes=MIN_FREE_BYTES,
+                  required_free_inodes=MIN_FREE_INODES)
+    if (not record['writable'] or record['available_bytes'] < MIN_FREE_BYTES
+            or record['available_inodes'] < MIN_FREE_INODES):
+        raise RuntimeError('GPU workspace lacks writable storage reserve: ' + json.dumps(record))
+    return record
+
+
+def local_storage_admission(root):
+    result = subprocess.run([sys.executable, '-c', STORAGE_PROBE, str(root)],
+                            capture_output=True, text=True, check=True, timeout=15)
+    return storage_admission(json.loads(result.stdout))
+
+
+@contextlib.contextmanager
+def runtime_environment(root):
+    """Bind every framework cache and temporary file to this owned run."""
+    # vLLM appends a slash and a 36-character UUID to its AF_UNIX base.
+    # The configured run path must leave room for that suffix and the NUL.
+    if len(os.fsencode(root.resolve())) + 37 > 107:
+        raise ValueError('GPU runtime path is too long for Unix sockets: ' + str(root))
+    paths = {
+        'TMPDIR': '.', 'VLLM_RPC_BASE_PATH': '.', 'XDG_CACHE_HOME': 'work/cache',
+        'XDG_CONFIG_HOME': 'work/config', 'VLLM_CONFIG_ROOT': 'work/config/vllm',
+        'VLLM_CACHE_ROOT': 'work/cache/vllm', 'HF_HOME': 'work/cache/huggingface',
+        'HF_HUB_CACHE': 'work/cache/huggingface/hub',
+        'TORCH_HOME': 'work/cache/torch', 'TORCH_EXTENSIONS_DIR': 'work/cache/torch_extensions',
+        'TORCHINDUCTOR_CACHE_DIR': 'work/cache/torchinductor',
+        'TRITON_HOME': 'work/cache/triton-home', 'TRITON_CACHE_DIR': 'work/cache/triton',
+        'TRITON_DUMP_DIR': 'work/cache/triton-dump', 'TRITON_OVERRIDE_DIR': 'work/cache/triton-override',
+        'CUDA_CACHE_PATH': 'work/cache/cuda',
+        'FLASHINFER_WORKSPACE_BASE': 'work/cache/flashinfer',
+    }
+    values = {name: str((root / relative).resolve()) for name, relative in paths.items()}
+    directories = list(values.values())
+    values['PYTHONDONTWRITEBYTECODE'] = '1'
+    saved = {name: os.environ.get(name) for name in values}
+    old_tempdir = tempfile.tempdir
+    try:
+        for path in directories:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        os.environ.update(values)
+        tempfile.tempdir = values['TMPDIR']
+        yield values
+    finally:
+        tempfile.tempdir = old_tempdir
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def inventory():
@@ -94,12 +191,16 @@ def probe(config):
     return dict(observations=observations, idle=idle_devices(observations, config))
 
 
-def suites_for(devices):
+def suites_for(devices, requested_case_ids=None):
+    wanted = set(requested_cases(requested_case_ids))
     if not devices:
         return []
-    suites = [('generation', [1, 4, 16, 64], devices[:1]), ('training', [1, 4], devices[:1])]
-    if len(devices) >= 4:
-        suites.append(('training', [16, 64], devices[:4]))
+    suites = []
+    for phase, batches, count in [('generation', [1, 4, 16, 64], 1),
+                                   ('training', [1, 4], 1), ('training', [16, 64], 4)]:
+        selected = [batch for batch in batches if f'{phase}-B{batch}' in wanted]
+        if selected and len(devices) >= count:
+            suites.append((phase, selected, devices[:count]))
     return suites
 
 
@@ -148,16 +249,21 @@ def remote_run(root, *, probe_only=False):
     output = root / 'results'
     output.mkdir(exist_ok=False)
     report = dict(status='skipped', host=config['host'], reason='', suites=[], selected=[],
-                  started_at=datetime.now(timezone.utc).isoformat(), source=json.loads((root / 'source.json').read_text()))
+                  started_at=datetime.now(timezone.utc).isoformat(), source=json.loads((root / 'source.json').read_text()),
+                  requested_cases=requested_cases(config.get('requested_cases')), source_origin_schema=1)
     acquired = []
+    runtime = contextlib.ExitStack()
     try:
+        report['storage'] = local_storage_admission(root)
+        report['runtime_environment'] = runtime.enter_context(runtime_environment(root))
         report['probe'] = probe(config)
         write_json(output / 'admission.json', report['probe'])
         if probe_only:
             report['reason'] = 'Probe only; no GPU measurements requested'
             return report
-        lock_dir = Path(config['remote_root']) / 'locks'
+        lock_dir = Path(config.get('lock_root', str(Path(config['remote_root']) / 'locks')))
         lock_dir.mkdir(parents=True, exist_ok=True)
+        report['lock_root'] = str(lock_dir.resolve())
         for device in report['probe']['idle']:
             lock = (lock_dir / (device['uuid'] + '.lock')).open('a')
             try:
@@ -178,7 +284,13 @@ def remote_run(root, *, probe_only=False):
             report['reason'] = 'GPU occupancy changed after admission; measurement skipped'
             return report
         selected = [g['uuid'] for g in report['selected']]
-        planned = suites_for(selected)
+        planned = suites_for(selected, report['requested_cases'])
+        report['unavailable_requested_cases'] = sorted(set(report['requested_cases']) -
+            {f'{phase}-B{batch}' for phase, batches, _ in planned for batch in batches})
+        if not planned:
+            report['reason'] = 'Requested GPU cases require more idle/reserved GPUs; no worker started'
+            return report
+        verify_uploaded_source(report['source'])
         configs = []
         # Check every selected phase before loading any model.
         for index, (phase, batches, devices) in enumerate(planned):
@@ -202,6 +314,7 @@ def remote_run(root, *, probe_only=False):
             def guarded_execute(*args, **kwargs):
                 # The suite also verifies CUDA/NVML identities before loading each worker.
                 current = probe(config)
+                current['storage'] = local_storage_admission(root)
                 write_json(output / f'{name}-admission-{uuid.uuid4().hex}.json', current)
                 idle = {g['uuid'] for g in current['idle']}
                 if not set(settings['devices']) <= idle:
@@ -210,6 +323,10 @@ def remote_run(root, *, probe_only=False):
             try:
                 with phase_environment(config, phase):
                     suite = gpu_timing.run_suite(settings, output / name, executor=guarded_execute)
+                verify_uploaded_source(report['source'])
+                suite['source_origin'] = report['source']
+                # Keep the subset runtime/release identity as produced; do not rewrite it.
+                write_json(output / name / 'summary.json', suite)
                 row['status'] = suite['status']
             except Exception as error:
                 row.update(status='failed', error=f'{type(error).__name__}: {error}')
@@ -220,13 +337,15 @@ def remote_run(root, *, probe_only=False):
             if row['status'] != 'ok':
                 break
         report['status'] = 'measured'
-        report['reason'] = '' if len(selected) >= 4 else 'Fewer than four idle GPUs; training B16/B64 not executed'
+        report['reason'] = ('Requested cases unavailable: ' + ', '.join(report['unavailable_requested_cases'])
+                            if report['unavailable_requested_cases'] else '')
     except Exception as error:
         report.update(status='failed' if report['status'] == 'running' else 'skipped',
                       reason=f'{type(error).__name__}: {error}')
     finally:
         for lock in acquired:
             lock.close()
+        runtime.close()
         report['finished_at'] = datetime.now(timezone.utc).isoformat()
         write_json(output / 'remote.json', report)
     return report
@@ -305,6 +424,8 @@ def collect_timings(output, remote, source):
         # Keep its evidence, but do not publish timings from it.
         if suite.get('status') != 'ok' or entry.get('status') != 'ok':
             continue
+        if remote.get('source_origin_schema') == 1 and suite.get('source_origin') != source:
+            raise ValueError('Suite uploaded-source origin differs')
         config_path = path.parent / 'config.json'
         if digest(config_path) != suite['config_sha256']:
             raise ValueError('Collected configuration hash mismatch')
@@ -319,6 +440,8 @@ def collect_timings(output, remote, source):
             if row['status'] != 'ok':
                 continue
             case = protocol.case_by_id(config, row['case_id'])
+            if case['case_id'] not in requested_cases(remote.get('requested_cases')):
+                raise ValueError('Unrequested GPU case in collected evidence')
             if case['case_id'] in seen:
                 raise ValueError('Duplicate GPU case')
             raw_path = checked_path(path.parent, row['result']['path'])
@@ -334,6 +457,10 @@ def collect_timings(output, remote, source):
             combined['cases'].append(dict(row, timing_s=timing,
                 result=dict(row['result'], path=raw_path.relative_to(output).as_posix()),
                 source_suite=dict(path=path.relative_to(output).as_posix(), sha256=digest(path))))
+    combined['requested_cases'] = requested_cases(remote.get('requested_cases'))
+    combined['missing_selected_cases'] = sorted(set(combined['requested_cases']) - seen)
+    combined['selected_status'] = ('complete' if not combined['missing_selected_cases'] else
+                                   'partial' if seen else 'unavailable')
     combined['missing_cases'] = sorted(EXPECTED - seen)
     combined['status'] = 'ok' if seen else 'failed'
     combined['coverage_status'] = 'complete' if seen == EXPECTED else 'partial'
@@ -342,16 +469,27 @@ def collect_timings(output, remote, source):
     return combined
 
 
-def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False):
+def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_case_ids=None):
+    wanted = requested_cases(requested_case_ids)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     (output / 'ssh.log').touch()
     record = dict(mode='auto', status='skipped', reason='', successful_cases=0, expected_cases=8,
-                  started_at=datetime.now(timezone.utc).isoformat())
+                  started_at=datetime.now(timezone.utc).isoformat(), requested_cases=wanted,
+                  requested_case_count=len(wanted), successful_selected_cases=0,
+                  selected_status='unavailable', missing_selected_cases=list(wanted))
     started = False
     try:
         config = load_settings(config_path)
+        wanted = requested_cases(requested_case_ids if requested_case_ids is not None else config.get('requested_cases'))
+        record.update(requested_cases=wanted, requested_case_count=len(wanted),
+                      missing_selected_cases=list(wanted))
+        if requested_case_ids is not None or 'requested_cases' in config:
+            config['requested_cases'] = wanted
         record['host'] = config['host']
+        storage = ssh(config, [config['python'], '-c', STORAGE_PROBE, config['remote_root']],
+                      capture_output=True, text=True)
+        record['storage_admission'] = storage_admission(json.loads(storage.stdout))
         archive = snapshot(output, config)
         remote_root = str(Path(config['remote_root']) / ('run-' + uuid.uuid4().hex))
         record['remote_directory'] = remote_root
@@ -367,7 +505,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False):
                          '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Exact uploaded Figure 8 source snapshot']):
             ssh(config, command, capture_output=True)
         argv = ['timeout', '--signal=TERM', '--kill-after=45', str(config['timeout_s']),
-                config['python'], remote_source + '/ae/scripts/figure08_remote.py', '--remote-run', remote_root]
+                config['python'], '-B', remote_source + '/ae/scripts/figure08_remote.py', '--remote-run', remote_root]
         if probe_only:
             argv.append('--probe-only')
         started = True
@@ -384,12 +522,17 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False):
                        check=True, capture_output=True, text=True, timeout=180)
         remote = json.loads((output / 'results/remote.json').read_text())
         source = json.loads((output / 'source.json').read_text())
+        if requested_cases(remote.get('requested_cases')) != wanted:
+            raise ValueError('Remote GPU selection differs from request')
         if remote['source'] != source:
             raise ValueError('Remote source identity differs from uploaded snapshot')
         record.update(status=remote['status'], reason=remote['reason'], selected=remote['selected'])
         if remote['suites']:
             combined = collect_timings(output / 'results', remote, source)
             record['successful_cases'] = len(combined['cases'])
+            record['successful_selected_cases'] = len(combined['cases'])
+            record['selected_status'] = combined['selected_status']
+            record['missing_selected_cases'] = combined['missing_selected_cases']
             record['missing_cases'] = combined['missing_cases']
             failed = any(row['status'] != 'ok' for row in remote['suites'])
             record['status'] = ('complete' if not combined['missing_cases'] else
@@ -491,7 +634,9 @@ def report_lines(record, prefix):
     lines = ['', '## Figure 8(b) — automatic remote GPU measurement', '',
              f"Status: **{record['status']}**; successful cases: {record.get('successful_cases', 0)}/8.", '',
              f"Host: `{record.get('host', 'allinai2plus')}`; candidate physical GPUs: 0–7.", '', reason, '',
-             'GPU results are optional and do not change CPU completion. Missing cases are never filled from historical data.', '']
+             'Full GPU coverage requires all eight cases. Missing cases are never filled from historical data.', '']
+    if record.get('requested_cases'):
+        lines += [f"Selected cases: {', '.join(record['requested_cases'])}; selected status: **{record.get('selected_status', 'unavailable')}**. Global coverage remains {record.get('successful_cases', 0)}/8.", '']
     if prefix:
         lines += [f'[GPU manifest]({prefix}/manifest.json) · [SSH log]({prefix}/ssh.log)', '']
         if record.get('successful_cases'):
@@ -509,13 +654,15 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--probe-only', action='store_true', help='Diagnostic admission check; never loads a GPU model')
     parser.add_argument('--remote-run', type=Path, help=argparse.SUPPRESS)
+    parser.add_argument('--gpu-cases', help='Explicit comma-separated case subset; global eight-case coverage remains separate')
     args = parser.parse_args()
     if args.remote_run:
         remote_run(args.remote_run, probe_only=args.probe_only)
         return 0
     if not args.output:
         parser.error('--output is required')
-    result = run_auto(args.output, args.config, probe_only=args.probe_only)
+    result = run_auto(args.output, args.config, probe_only=args.probe_only,
+                      requested_case_ids=args.gpu_cases.split(',') if args.gpu_cases is not None else None)
     (args.output / 'result.md').write_text('\n'.join(report_lines(result, '.')))
     print(json.dumps(result, indent=2))
     return 0

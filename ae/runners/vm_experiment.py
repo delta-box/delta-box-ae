@@ -26,37 +26,42 @@ from provenance import build_guest_archive, cached_digest
 import vm
 
 
-def require_memory_workdir(path):
+def require_memory_workdir(path, *, experiment="figure-09"):
     """Fail before VM allocation if the runtime would use a disk or swap."""
     path = Path(path).resolve(strict=True)
     fstype = subprocess.check_output(['stat', '-f', '-c', '%T', str(path)], text=True).strip()
     mounted = json.loads(subprocess.check_output(
         ['findmnt', '--json', '--target', str(path), '--output', 'TARGET,FSTYPE,OPTIONS'], text=True))['filesystems'][0]
-    if fstype != 'tmpfs' or 'noswap' not in mounted['options'].split(','):
-        raise ValueError('Figure 9 requires work_dir on noswap tmpfs: '+str(path))
+    if (fstype != 'tmpfs' or mounted.get('fstype') != 'tmpfs'
+            or 'noswap' not in mounted['options'].split(',')):
+        raise ValueError(f'{experiment} requires work_dir on noswap tmpfs: {path}')
     return dict(path=str(path), fstype=fstype, mount=mounted)
 
 
 @contextmanager
 def runtime_directory(config, output):
-    war = config['experiment'] == 'figure-09'
+    experiment = config['experiment']
+    memory_required = experiment in ('figure-09', 'correctness')
     parent = config.get('work_dir')
-    if war and parent:
-        require_memory_workdir(parent)
-    if war and not parent:
+    if memory_required and parent:
+        require_memory_workdir(parent, experiment=experiment)
+    if memory_required and not parent:
         parent = AE_ROOT/'work'
         parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='ae-cpu-', dir=parent) as directory:
         runtime = Path(directory)
         mounted = False
         try:
-            if war and not config.get('work_dir'):
+            if memory_required and not config.get('work_dir'):
                 size = Path(config['base_xfs']).stat().st_size + 1024**3
                 subprocess.run(['mount', '-t', 'tmpfs', '-o', f'size={size},noswap',
                                 'ae-war-vm-memory', str(runtime)], check=True)
                 mounted = True
-            if war:
-                write_json(output/'host-storage.json', require_memory_workdir(runtime))
+            if memory_required:
+                # Guest /tmp and /app live on this private XFS rootfs. Keep XFS
+                # semantics while its writable backing bytes stay on noswap RAM.
+                write_json(output/'host-storage.json',
+                           require_memory_workdir(runtime, experiment=experiment))
             yield runtime
         finally:
             if mounted:

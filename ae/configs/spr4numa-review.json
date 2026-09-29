@@ -43,7 +43,8 @@
     "gomodcache": "/home/dyp/infra/.cache-go/pkg/mod",
     "nbd_pool_size": 8,
     "parent_manifest": "/home/atc-ae/delta-box-ae/ae/work/hosted/e2b-table2-storage/parent-isolation.json",
-    "fanout_python": "/mnt/disk2/dyp/ae-hosted-20260922/e2b/sdk-venv/bin/python"
+    "fanout_python": "/mnt/disk2/dyp/ae-hosted-20260922/e2b/sdk-venv/bin/python",
+    "l1_workspace": "l1-work-nvme"
   },
   "prewarm_policy": "off",
   "baseline_test_runtime": {
@@ -69,6 +70,7 @@
       "figure-06-adaptive": {
         "checkpoint_profile": "async-incremental",
         "legacy_timing_policy": "paper-zero",
+        "figure06_adaptive_mem_mib": 16384,
         "mem_mib": 16384
       },
       "figure-08-cube": {
@@ -83,14 +85,33 @@
         },
         "baseline_storage": "tmpfs"
       },
+      "table-02-criu": {
+        "baseline_storage": "disk",
+        "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted-criu-nvme",
+        "measurement": {
+          "frequency_khz": 2101000
+        }
+      },
       "table-02-replay": {
         "replay_workers": 16,
         "replay_mock_latency_policy": "recorded",
         "baseline_storage": "tmpfs",
-        "memory_job_size_gib": 8
+        "memory_job_size_gib": 8,
+        "litellm_cost_map": "remote",
+        "baseline_log_level": "INFO",
+        "measurement": {
+          "numa_node": 3,
+          "cpus": "72-95",
+          "frequency_khz": 2101000
+        }
       },
       "table-02-fc-diff": {
-        "memory_job_size_gib": 64
+        "baseline_storage": "disk",
+        "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted-fc-nvme",
+        "memory_job_size_gib": 64,
+        "measurement": {
+          "frequency_khz": 2101000
+        }
       },
       "table-02-e2b": {
         "recorded_search_order": true

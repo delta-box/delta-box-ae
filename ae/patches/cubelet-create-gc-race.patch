@@ -1,0 +1,453 @@
+--- a/Cubelet/services/cubebox/cube_container_create.go
++++ b/Cubelet/services/cubebox/cube_container_create.go
+@@ -166,6 +166,12 @@
+ 		RequestSource:    getUserAgent(ctx),
+ 		LocalRunTemplate: flowOpts.LocalRunTemplate,
+ 	}
++	// Publish the cubebox only while holding its lifecycle lock. DeadGC and
++	// task events must not reconcile a container before NewTask/Start finish.
++	// In particular, TaskNotFound during creation is not evidence of death.
++	sandBox.Lock()
++	defer sandBox.Unlock()
++
+ 	if sandBox.Metadata.Labels == nil {
+ 		sandBox.Metadata.Labels = make(map[string]string)
+ 	}
+@@ -283,12 +289,10 @@
+ 		})
+ 	}
+ 
+-	sandBox.Lock()
+ 	defer func() {
+ 		if err := l.cubeboxManger.Save(ctx, sandBox); err != nil {
+ 			log.G(ctx).Warnf("saveSandBoxInfo failed.%s", err.Error())
+ 		}
+-		sandBox.Unlock()
+ 	}()
+ 
+ 	for _, param := range params {
+@@ -1214,15 +1218,22 @@
+ 		return ret.Err(errorcode.ErrorCode_StartTaskFailed, err.Error())
+ 	}
+ 
+-	ci.Status.Update(func(status cubeboxstore.Status) (cubeboxstore.Status, error) {
+-		status.Pid = task.Pid()
+-		status.StartedAt = time.Now().UnixNano()
+-		return status, nil
+-	})
++	recordContainerStarted(ci, task.Pid())
+ 	workflow.RecordCreateMetric(ctx, err,
+ 		constants.CubeShimStartId,
+ 		time.Since(taskStart))
+ 	return nil
++}
++
++// recordContainerStarted records only the successful Start observation. It must
++// not erase a real exit, pause, deletion or unknown observation from another
++// lifecycle operation; the creation/DeadGC lock prevents pre-start pollution.
++func recordContainerStarted(ci *cubeboxstore.Container, pid uint32) {
++	ci.Status.Update(func(status cubeboxstore.Status) (cubeboxstore.Status, error) {
++		status.Pid = pid
++		status.StartedAt = time.Now().UnixNano()
++		return status, nil
++	})
+ }
+ 
+ func getMountOptions(mount *cubebox.VolumeMounts) []string {
+--- a/Cubelet/services/cubebox/service.go
++++ b/Cubelet/services/cubebox/service.go
+@@ -861,78 +861,92 @@
+ 
+ func scanDeadContainer(ctx context.Context, dc []*cubeboxstore.CubeBox, client *containerd.Client, ttl time.Duration) {
+ 	now := time.Now()
+-	var tmpDeadCount = 0
++	var tmpDeadCount int
+ 	for _, cb := range dc {
+-		stepLog := log.G(ctx).WithFields(CubeLog.Fields{
+-			string(CubeLog.KeyInstanceId): cb.ID,
+-		})
+-		if cb.FirstContainer() == nil {
+-			continue
+-		}
+-		// Cubelet itself initiated the pause and already tracks the in-progress
+-		// state via PausingAt (CONTAINER_PAUSING) or PausedAt (CONTAINER_PAUSED).
+-		// Calling RecoverContainer -> shim state() while pause_vm() holds the
+-		// sandbox mutex causes a ttrpc timeout; RecoverContainer then sets
+-		// Unknown=true, making the sandbox appear Terminated and triggering a
+-		// spurious Destroy cascade.
+-		//
+-		// The same race exists for snapshot rollback: while updateShimForRollback
+-		// runs, the shim holds its sandbox mutex doing delete_vm +
+-		// resume_vm_with_config and ttrpc state() either times out or returns
+-		// task status=Unknown. RollbackSandbox sets RollingBack on every
+-		// container's Status before invoking the shim and clears it via defer,
+-		// so DeadGC must respect the flag for the same reason.
+-		if status := cb.GetStatus(); status != nil {
+-			st := status.Get()
+-			if st.RollingBack {
+-				continue
+-			}
+-			switch st.State() {
+-			case cubebox.ContainerState_CONTAINER_PAUSED:
+-				// User-driven pause: a legitimate, possibly long-lived state.
+-				// Nothing for DeadGC to do.
+-				continue
+-			case cubebox.ContainerState_CONTAINER_PAUSING:
+-				// PAUSING is meant to be a short transient. While a pause is
+-				// genuinely in flight the shim holds its sandbox mutex, so a
+-				// state() query would time out and stamp Unknown=true (see
+-				// above) -- within the safety window we still skip. Past
+-				// pausingStuckThreshold the pause is no longer running (e.g. the
+-				// cubelet restarted mid-pause and missed both the RPC and
+-				// /tasks/paused reconcile windows); reconcile once against the
+-				// shim's real status so the sandbox never stays stuck at PAUSING
+-				// forever.
+-				if st.PausingAt == 0 ||
+-					time.Since(time.Unix(0, st.PausingAt)) < pausingStuckThreshold {
+-					continue
+-				}
+-				reconcileStuckPausingSandbox(ctx, client, cb)
+-				continue
+-			}
+-		}
+-		ctx = namespaces.WithNamespace(ctx, cb.Namespace)
+-		ctr, err := cubes.RecoverContainer(ctx, client, cb, cb.FirstContainer())
+-		if err != nil {
+-			stepLog.Errorf("recheck container status %s error: %v", cb.FirstContainer().ID, err)
+-			continue
+-		}
+-		if ctr.Status.IsTerminated() {
+-			if ctr.Status.Status.FinishedAt == 0 {
+-				ctr.Status.Update(func(s cubeboxstore.Status) (cubeboxstore.Status, error) {
+-					s.FinishedAt = now.UnixNano()
+-					return s, nil
+-				})
+-			}
+-			if time.Unix(0, ctr.Status.Status.FinishedAt).Add(ttl).Before(now) {
+-				stepLog.Warnf("dead container %s is terminating and reach ttl time", ctr.ID)
+-				tmpDeadCount++
+-			}
++		if scanDeadContainerOne(ctx, cb, client, ttl, now) {
++			tmpDeadCount++
+ 		}
+ 	}
+ 	if deadContainerCount != tmpDeadCount {
+ 		deadContainerCount = tmpDeadCount
+ 		log.G(ctx).Errorf("dead container num %d", deadContainerCount)
+ 	}
++}
++
++// scanDeadContainerOne shares the existing lifecycle lock with creation and
++// exit/pause/resume events. A busy cubebox is retried by the next heartbeat;
++// the scanner must never turn an in-flight create into a terminal observation.
++func scanDeadContainerOne(ctx context.Context, cb *cubeboxstore.CubeBox, client *containerd.Client, ttl time.Duration, now time.Time) bool {
++	if !cb.TryLock() {
++		return false
++	}
++	defer cb.Unlock()
++	stepLog := log.G(ctx).WithFields(CubeLog.Fields{
++		string(CubeLog.KeyInstanceId): cb.ID,
++	})
++	if cb.FirstContainer() == nil {
++		return false
++	}
++	// Cubelet itself initiated the pause and already tracks the in-progress
++	// state via PausingAt (CONTAINER_PAUSING) or PausedAt (CONTAINER_PAUSED).
++	// Calling RecoverContainer -> shim state() while pause_vm() holds the
++	// sandbox mutex causes a ttrpc timeout; RecoverContainer then sets
++	// Unknown=true, making the sandbox appear Terminated and triggering a
++	// spurious Destroy cascade.
++	//
++	// The same race exists for snapshot rollback: while updateShimForRollback
++	// runs, the shim holds its sandbox mutex doing delete_vm +
++	// resume_vm_with_config and ttrpc state() either times out or returns
++	// task status=Unknown. RollbackSandbox sets RollingBack on every
++	// container's Status before invoking the shim and clears it via defer,
++	// so DeadGC must respect the flag for the same reason.
++	if status := cb.GetStatus(); status != nil {
++		st := status.Get()
++		if st.RollingBack {
++			return false
++		}
++		switch st.State() {
++		case cubebox.ContainerState_CONTAINER_PAUSED:
++			// User-driven pause: a legitimate, possibly long-lived state.
++			// Nothing for DeadGC to do.
++			return false
++		case cubebox.ContainerState_CONTAINER_PAUSING:
++			// PAUSING is meant to be a short transient. While a pause is
++			// genuinely in flight the shim holds its sandbox mutex, so a
++			// state() query would time out and stamp Unknown=true (see
++			// above) -- within the safety window we still skip. Past
++			// pausingStuckThreshold the pause is no longer running (e.g. the
++			// cubelet restarted mid-pause and missed both the RPC and
++			// /tasks/paused reconcile windows); reconcile once against the
++			// shim's real status so the sandbox never stays stuck at PAUSING
++			// forever.
++			if st.PausingAt == 0 ||
++				time.Since(time.Unix(0, st.PausingAt)) < pausingStuckThreshold {
++				return false
++			}
++			reconcileStuckPausingSandbox(ctx, client, cb)
++			return false
++		}
++	}
++	ctx = namespaces.WithNamespace(ctx, cb.Namespace)
++	ctr, err := cubes.RecoverContainer(ctx, client, cb, cb.FirstContainer())
++	if err != nil {
++		stepLog.Errorf("recheck container status %s error: %v", cb.FirstContainer().ID, err)
++		return false
++	}
++	if ctr.Status.IsTerminated() {
++		if ctr.Status.Status.FinishedAt == 0 {
++			ctr.Status.Update(func(s cubeboxstore.Status) (cubeboxstore.Status, error) {
++				s.FinishedAt = now.UnixNano()
++				return s, nil
++			})
++		}
++		if time.Unix(0, ctr.Status.Status.FinishedAt).Add(ttl).Before(now) {
++			stepLog.Warnf("dead container %s is terminating and reach ttl time", ctr.ID)
++			return true
++		}
++	}
++	return false
+ }
+ 
+ func getUserAgent(ctx context.Context) string {
+--- /dev/null
++++ b/Cubelet/services/cubebox/create_gc_race_test.go
+@@ -0,0 +1,234 @@
++package cubebox
++
++import (
++	"context"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	taskapi "github.com/containerd/containerd/api/services/tasks/v1"
++	tasktypes "github.com/containerd/containerd/api/types/task"
++	containerd "github.com/containerd/containerd/v2/client"
++	"github.com/containerd/containerd/v2/core/containers"
++	"github.com/containerd/containerd/v2/pkg/namespaces"
++	"github.com/stretchr/testify/require"
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
++
++	cubeapi "github.com/tencentcloud/CubeSandbox/Cubelet/api/services/cubebox/v1"
++	cubeboxstore "github.com/tencentcloud/CubeSandbox/Cubelet/pkg/store/cubebox"
++	"github.com/tencentcloud/CubeSandbox/Cubelet/plugins/cube/internals/cubes"
++)
++
++type createGCContainerStore struct {
++	containers.Store
++}
++
++func (*createGCContainerStore) Get(_ context.Context, id string) (containers.Container, error) {
++	return containers.Container{ID: id}, nil
++}
++
++type createGCTasks struct {
++	taskapi.TasksClient
++	calls   atomic.Int32
++	missing atomic.Bool
++	fail    atomic.Bool
++	blockAt int32
++	entered chan struct{}
++	release chan struct{}
++}
++
++func (f *createGCTasks) Get(ctx context.Context, req *taskapi.GetRequest, _ ...grpc.CallOption) (*taskapi.GetResponse, error) {
++	call := f.calls.Add(1)
++	if call == f.blockAt {
++		close(f.entered)
++		select {
++		case <-f.release:
++		case <-ctx.Done():
++			return nil, ctx.Err()
++		}
++	}
++	if f.missing.Load() {
++		return nil, status.Error(codes.NotFound, "task not created yet")
++	}
++	if f.fail.Load() {
++		return nil, status.Error(codes.Unavailable, "injected status transport failure")
++	}
++	return &taskapi.GetResponse{Process: &tasktypes.Process{
++		ID: req.ContainerID, Pid: 42, Status: tasktypes.Status_RUNNING,
++	}}, nil
++}
++
++func createGCClient(t *testing.T, tasks *createGCTasks) *containerd.Client {
++	t.Helper()
++	client, err := containerd.New("", containerd.WithServices(
++		containerd.WithContainerStore(&createGCContainerStore{}),
++		containerd.WithTaskClient(tasks),
++	))
++	require.NoError(t, err)
++	t.Cleanup(func() { require.NoError(t, client.Close()) })
++	return client
++}
++
++func createGCCubebox(id string) *cubeboxstore.CubeBox {
++	cb := newCubeboxWithStatusForTest(id, cubeboxstore.Status{CreatedAt: 1})
++	cb.Namespace = "default"
++	return cb
++}
++
++// This uses production RecoverContainer and the production post-Start update
++// against a deterministic task-service response; it recreates the old race
++// without a VM, sleeps, disk-pressure tricks or manipulating a live service.
++func TestCreateDeadGCLegacyInterleavingReproducesUnknown(t *testing.T) {
++	tasks := &createGCTasks{}
++	tasks.missing.Store(true)
++	client := createGCClient(t, tasks)
++	cb := createGCCubebox("legacy-create-race")
++	ctx := namespaces.WithNamespace(context.Background(), "default")
++
++	_, err := cubes.RecoverContainer(ctx, client, cb, cb.FirstContainer())
++	require.NoError(t, err, "TaskNotFound is silently converted to UNKNOWN")
++	require.Equal(t, cubeapi.ContainerState_CONTAINER_UNKNOWN, cb.GetStatus().Get().State())
++
++	tasks.missing.Store(false)
++	recordContainerStarted(cb.FirstContainer(), 42)
++	got := cb.GetStatus().Get()
++	require.NotZero(t, got.StartedAt)
++	require.True(t, got.Unknown, "the old successful-Start update leaves UNKNOWN sticky")
++	require.Equal(t, cubeapi.ContainerState_CONTAINER_UNKNOWN, got.State())
++}
++
++func TestCreateDeadGCPreStartGateAndRunningAfterPublication(t *testing.T) {
++	tasks := &createGCTasks{}
++	tasks.missing.Store(true)
++	client := createGCClient(t, tasks)
++	cb := createGCCubebox("protected-create")
++
++	// createContainers takes this exact lock before the first manager.Save.
++	cb.Lock()
++	scanDeadContainer(context.Background(), []*cubeboxstore.CubeBox{cb}, client, time.Hour)
++	require.Zero(t, tasks.calls.Load(), "no task query may run before creation completes")
++	require.False(t, cb.GetStatus().Get().Unknown)
++
++	tasks.missing.Store(false)
++	recordContainerStarted(cb.FirstContainer(), 42)
++	cb.Unlock()
++	scanDeadContainer(context.Background(), []*cubeboxstore.CubeBox{cb}, client, time.Hour)
++	require.EqualValues(t, 2, tasks.calls.Load(), "the completed task is reconciled normally")
++	require.Equal(t, cubeapi.ContainerState_CONTAINER_RUNNING, cb.GetStatus().Get().State())
++}
++
++func TestCreateDeadGCDoesNotBlockOtherSandbox(t *testing.T) {
++	tasks := &createGCTasks{}
++	client := createGCClient(t, tasks)
++	busy := createGCCubebox("creating")
++	ready := createGCCubebox("already-running")
++	busy.Lock()
++	defer busy.Unlock()
++	scanDeadContainer(context.Background(), []*cubeboxstore.CubeBox{busy, ready}, client, time.Hour)
++	require.Zero(t, busy.GetStatus().Get().StartedAt)
++	require.Equal(t, cubeapi.ContainerState_CONTAINER_RUNNING, ready.GetStatus().Get().State())
++	require.EqualValues(t, 2, tasks.calls.Load())
++}
++
++func TestCreateDeadGCLockReleasedAfterStatusError(t *testing.T) {
++	tasks := &createGCTasks{}
++	tasks.fail.Store(true)
++	client := createGCClient(t, tasks)
++	cb := createGCCubebox("status-error")
++	scanDeadContainer(context.Background(), []*cubeboxstore.CubeBox{cb}, client, time.Hour)
++	require.True(t, cb.TryLock(), "an RPC error must release the lifecycle lock")
++	cb.Unlock()
++	require.Equal(t, cubeapi.ContainerState_CONTAINER_UNKNOWN, cb.GetStatus().Get().State(),
++		"the guard must not turn an unverified status into RUNNING")
++}
++
++func TestCreateDeadGCLockReleasedAfterMissingContainer(t *testing.T) {
++	cb := &cubeboxstore.CubeBox{Metadata: cubeboxstore.Metadata{ID: "empty"}, ContainersMap: &cubeboxstore.ContainersMap{}}
++	scanDeadContainer(context.Background(), []*cubeboxstore.CubeBox{cb}, nil, time.Hour)
++	require.True(t, cb.TryLock())
++	cb.Unlock()
++}
++
++func TestCreateDeadGCSerializesLifecycleEvents(t *testing.T) {
++	for _, event := range []string{"exit", "paused", "pausing", "delete"} {
++		t.Run(event, func(t *testing.T) {
++			tasks := &createGCTasks{blockAt: 2, entered: make(chan struct{}), release: make(chan struct{})}
++			client := createGCClient(t, tasks)
++			cb := createGCCubebox("event-" + event)
++			scanned := make(chan struct{})
++			go func() {
++				scanDeadContainerOne(context.Background(), cb, client, time.Hour, time.Now())
++				close(scanned)
++			}()
++			<-tasks.entered
++			require.False(t, cb.TryLock(), "GC must hold the same lifecycle lock through the status read and write")
++			handled := make(chan struct{})
++			go func() {
++				// TaskExit/TaskPaused/TaskResumed handlers use this lock.
++				cb.Lock()
++				defer cb.Unlock()
++				if event == "delete" {
++					now := time.Now()
++					cb.UserMarkDeletedTime = &now
++				} else {
++					require.NoError(t, cb.GetStatus().Update(func(s cubeboxstore.Status) (cubeboxstore.Status, error) {
++						switch event {
++						case "exit":
++							s.FinishedAt = 123
++							s.ExitCode = 9
++						case "paused":
++							s.PausedAt = 123
++						case "pausing":
++							s.PausingAt = 123
++						}
++						return s, nil
++					}))
++				}
++				close(handled)
++			}()
++			select {
++			case <-handled:
++				t.Fatal("lifecycle event passed the GC lock")
++			default:
++			}
++			close(tasks.release)
++			<-scanned
++			<-handled
++			switch event {
++			case "exit":
++				require.Equal(t, cubeapi.ContainerState_CONTAINER_EXITED, cb.GetStatus().Get().State())
++				require.EqualValues(t, 9, cb.GetStatus().Get().ExitCode)
++			case "paused":
++				require.Equal(t, cubeapi.ContainerState_CONTAINER_PAUSED, cb.GetStatus().Get().State())
++			case "pausing":
++				require.Equal(t, cubeapi.ContainerState_CONTAINER_PAUSING, cb.GetStatus().Get().State())
++			case "delete":
++				require.NotNil(t, cb.UserMarkDeletedTime)
++			}
++		})
++	}
++}
++
++func TestRecordContainerStartedPreservesNonRunningEvidence(t *testing.T) {
++	for _, before := range []cubeboxstore.Status{
++		{CreatedAt: 1, FinishedAt: 3, ExitCode: 9},
++		{CreatedAt: 1, PausedAt: 3},
++		{CreatedAt: 1, PausingAt: 3},
++		{CreatedAt: 1, Unknown: true},
++	} {
++		cb := newCubeboxWithStatusForTest("preserve", before)
++		now := time.Now()
++		cb.UserMarkDeletedTime = &now
++		recordContainerStarted(cb.FirstContainer(), 42)
++		after := cb.GetStatus().Get()
++		require.Equal(t, before.State(), after.State())
++		require.Equal(t, before.FinishedAt, after.FinishedAt)
++		require.Equal(t, before.ExitCode, after.ExitCode)
++		require.Equal(t, before.Unknown, after.Unknown)
++		require.Equal(t, before.PausedAt, after.PausedAt)
++		require.Equal(t, before.PausingAt, after.PausingAt)
++		require.Equal(t, &now, cb.UserMarkDeletedTime)
++	}
++}

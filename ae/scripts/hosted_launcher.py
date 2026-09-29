@@ -32,6 +32,7 @@ EXPERIMENTS = ('table-02-deltabox', 'table-03-slow', 'table-02-replay',
                'figure-08-cube', 'figure-08-e2b', 'figure-09', 'correctness', 'figure-08-gpu')
 GROUPS = ('deltabox', 'baselines', 'table-02', 'table-03', 'figure-02',
           'figure-06', 'figure-08', 'figure-08-cpu', 'gpu', 'cpu', 'figure-09', 'correctness')
+GPU_CASES = tuple(f'{phase}-B{batch}' for phase in ('generation', 'training') for batch in (1, 4, 16, 64))
 API_ENVIRONMENT = {
     'E2B_API_KEY', 'E2B_API_URL', 'E2B_SANDBOX_URL', 'E2B_TEMPLATE', 'E2B_TEMPLATE_ID',
     'CUBE_API_KEY', 'CUBE_API_URL', 'CUBE_TEMPLATE', 'CUBE_TEMPLATE_ID',
@@ -240,6 +241,13 @@ def positive_integer(value):
     return number
 
 
+def gpu_case_selection(value):
+    cases = value.split(',')
+    if not cases or len(set(cases)) != len(cases) or any(case not in GPU_CASES for case in cases):
+        raise argparse.ArgumentTypeError('--gpu-cases requires unique case IDs from ' + ','.join(GPU_CASES))
+    return [case for case in GPU_CASES if case in cases]
+
+
 class Once(argparse.Action):
     def __call__(self, parser, namespace, value, option_string=None):
         if getattr(namespace, self.dest, None) is not None:
@@ -257,6 +265,12 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--e2b-profile', choices=('paper-nested',), action=Once,
+                        help='E2B-only documented nested reconstruction; complete original eight inputs')
+    parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
+                        help='Cube-only documented disk/NUMA reconstruction; full twelve inputs')
+    parser.add_argument('--gpu-cases', type=gpu_case_selection, action=Once, metavar='CASE,...',
+                        help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
                         help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
@@ -265,16 +279,45 @@ def parse_arguments(argv):
     output = parser.add_mutually_exclusive_group()
     output.add_argument('--output', type=Path, action=Once, help='New result path, relative to the fixed output root or absolute within it')
     output.add_argument('--resume', type=Path, action=Once, help='Existing result path, relative to the fixed output root or absolute within it')
+    parser.add_argument('--reuse-completed-from', type=Path, action=Once,
+                        help='Verify completed Figure9, Cube paper-disk or E2B paper-nested inputs; retain their original source')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--numa-node', type=int, action=Once, help='NUMA node for this run; inherited by all selected CPU experiments')
     parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
+    if args.e2b_profile is not None:
+        if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
+                or args.list or args.limit is not None or args.max_events is not None
+                or args.gpu_cases is not None or args.resume is not None
+                or (args.reuse_completed_from is not None and args.output is None)
+                or args.cube_profile is not None or args.numa_node is not None or args.cpus is not None):
+            parser.error('--e2b-profile requires complete explicit table-02-e2b only; no overrides or resume; references require a new output')
+    if args.cube_profile is not None:
+        if (set(args.experiment or []) != {'table-02-cube'} or args.group or args.all or args.quick_check
+                or args.list or args.limit is not None or args.max_events is not None
+                or args.gpu_cases is not None or args.resume is not None
+                or args.numa_node is not None or args.cpus is not None):
+            parser.error('--cube-profile requires complete explicit table-02-cube only; profile controls placement')
+    if args.gpu_cases is not None:
+        explicit = bool(args.experiment or args.group)
+        if (not explicit or set(args.experiment or []) - {'figure-08-gpu'} or set(args.group or []) - {'gpu'}
+                or args.all or args.quick_check or args.list or args.limit is not None or args.max_events is not None):
+            parser.error('--gpu-cases requires explicit GPU-only selection without quick-check or limits')
     if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
         parser.error('--test already selects one DeltaBox instance and three events')
     if args.all and (args.experiment or args.group):
         parser.error('--all cannot be combined with a selected experiment/group')
     if args.list and (args.output or args.resume):
         parser.error('--list does not create or resume results')
+    if args.reuse_completed_from is not None:
+        selected_figure09 = 'figure-09' in (args.experiment or []) or 'figure-09' in (args.group or [])
+        selected_cube = (args.experiment == ['table-02-cube'] and not args.group
+                         and args.cube_profile == 'paper-disk')
+        selected_e2b = (args.experiment == ['table-02-e2b'] and not args.group
+                        and args.e2b_profile == 'paper-nested')
+        if (not (selected_figure09 or selected_cube or selected_e2b) or args.quick_check or args.all or args.resume or args.list
+                or args.limit is not None or args.max_events is not None):
+            parser.error('--reuse-completed-from requires explicit Figure9, Cube paper-disk or E2B paper-nested selection, a new output, and complete inputs')
     if args.numa_node is not None or args.cpus is not None:
         if args.numa_node is None or args.cpus is None:
             parser.error('--numa-node and --cpus must be supplied together')
@@ -389,11 +432,19 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if getattr(args, 'e2b_profile', None) is not None:
+        command += ['--e2b-profile', args.e2b_profile]
+    if getattr(args, 'cube_profile', None) is not None:
+        command += ['--cube-profile', args.cube_profile]
+    if args.gpu_cases is not None:
+        command += ['--gpu-cases', ','.join(args.gpu_cases)]
     if args.baseline_inputs is not None:
         command += ['--baseline-inputs', args.baseline_inputs]
     for key in ('limit', 'max_events', 'numa_node', 'cpus'):
         if getattr(args, key) is not None:
             command += ['--' + key.replace('_', '-'), str(getattr(args, key))]
+    if args.reuse_completed_from is not None:
+        command += ['--reuse-completed-from', str(args.reuse_completed_from)]
     if output is not None:
         command += ['--resume' if args.resume else '--output', str(output)]
     return command
@@ -455,6 +506,11 @@ def main(argv=None):
         output = None if args.list else result_path(policy, selected, caller,
                                                     resume=bool(args.resume), trust=trust,
                                                     allow_root=not (args.quick_check or args.limit is not None or args.max_events is not None or args.experiment or args.group))
+        if args.reuse_completed_from is not None:
+            source = result_path(policy, args.reuse_completed_from, caller, resume=True, trust=trust)
+            if source == output or output.is_relative_to(source) or source.is_relative_to(output):
+                raise ValueError('Reused and new result directories must be separate')
+            args.reuse_completed_from = source
         command = command_line(policy, args, output)
         audit_launch(policy, caller, command, trust=trust)
         print(f'Hosted AE runtime: {runtime}; caller: {caller.pw_name} (uid {caller.pw_uid})', flush=True)

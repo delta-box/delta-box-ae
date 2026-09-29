@@ -1,0 +1,422 @@
+--- /dev/null
++++ b/Cubelet/services/cubebox/snapshot_timing.go
+@@ -0,0 +1,48 @@
++// Copyright (c) 2026 Tencent Inc.
++// SPDX-License-Identifier: Apache-2.0
++//
++
++package cubebox
++
++import (
++	"time"
++
++	"github.com/tencentcloud/CubeSandbox/Cubelet/pkg/log"
++	CubeLog "github.com/tencentcloud/CubeSandbox/cubelog"
++)
++
++func logSnapshotPhaseTiming(
++	stepLog *log.CubeWrapperLogEntry,
++	flow string,
++	phase string,
++	sandboxID string,
++	templateID string,
++	start time.Time,
++	end time.Time,
++	extra CubeLog.Fields,
++) {
++	durationMs := float64(end.Sub(start).Microseconds()) / 1000.0
++	fields := CubeLog.Fields{
++		"snapshotTiming": "cube_ck_phase",
++		"flow":           flow,
++		"phase":          phase,
++		"sandboxID":      sandboxID,
++		"templateID":     templateID,
++		"startUnixNs":    start.UnixNano(),
++		"endUnixNs":      end.UnixNano(),
++		"durationMs":     durationMs,
++	}
++	for key, value := range extra {
++		fields[key] = value
++	}
++	stepLog.WithFields(fields).Warnf(
++		"cube_ck_phase_timing flow=%s phase=%s sandboxID=%s templateID=%s start_unix_ns=%d end_unix_ns=%d duration_ms=%.3f",
++		flow,
++		phase,
++		sandboxID,
++		templateID,
++		start.UnixNano(),
++		end.UnixNano(),
++		durationMs,
++	)
++}
+--- a/Cubelet/services/cubebox/template_ops.go
++++ b/Cubelet/services/cubebox/template_ops.go
+@@ -137,7 +137,23 @@
+ 		rsp.Ret.RetMsg = fmt.Sprintf("failed to resolve sandbox rootfs: %v", err)
+ 		return rsp, nil
+ 	}
++	rootfsStart := time.Now()
+ 	rootfsObject, err := storage.CommitTemplateRootfs(ctx, sourceRootfs, rsp.TemplateID)
++	rootfsEnd := time.Now()
++	rootfsFields := CubeLog.Fields{
++		"success":    err == nil,
++		"sourceName": sourceRootfs.Name,
++		"sourceKind": sourceRootfs.Kind,
++	}
++	if rootfsObject != nil {
++		rootfsFields["objectName"] = rootfsObject.Name
++		rootfsFields["objectKind"] = rootfsObject.Kind
++		rootfsFields["sizeBytes"] = rootfsObject.SizeBytes
++	}
++	if err != nil {
++		rootfsFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "commit_sandbox", "rootfs_dump", rsp.SandboxID, rsp.TemplateID, rootfsStart, rootfsEnd, rootfsFields)
+ 	if err != nil {
+ 		if errors.Is(err, storage.ErrCowObjectAlreadyExists) {
+ 			rsp.Ret.RetCode = errorcode.ErrorCode_PreConditionFailed
+@@ -155,7 +171,23 @@
+ 	//   - otherwise (lineage broken: missing/purged catalog or upstream
+ 	//     volume gone) create a fresh empty volume and fall back to a full
+ 	//     snapshot.
++	memoryPrepareStart := time.Now()
+ 	memoryObject, snapshotTypeForCmd, err := prepareCommitMemoryArtifact(ctx, stepLog, cb, rsp.TemplateID, memorySizeBytes)
++	memoryPrepareEnd := time.Now()
++	memoryPrepareFields := CubeLog.Fields{
++		"success":            err == nil,
++		"requestedSizeBytes": memorySizeBytes,
++		"snapshotTypeForCmd": snapshotTypeForCmd,
++	}
++	if memoryObject != nil {
++		memoryPrepareFields["objectName"] = memoryObject.Name
++		memoryPrepareFields["objectKind"] = memoryObject.Kind
++		memoryPrepareFields["sizeBytes"] = memoryObject.SizeBytes
++	}
++	if err != nil {
++		memoryPrepareFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "commit_sandbox", "memory_prepare", rsp.SandboxID, rsp.TemplateID, memoryPrepareStart, memoryPrepareEnd, memoryPrepareFields)
+ 	if err != nil {
+ 		if cleanupErr := storage.DeleteCowObject(ctx, rootfsObject.Name, rootfsObject.Kind); cleanupErr != nil {
+ 			stepLog.Warnf("failed to cleanup rootfs snapshot after memory artifact failure: %v", cleanupErr)
+@@ -187,7 +219,24 @@
+ 	// when degrading because no base could be resolved. AppSnapshot keeps
+ 	// using the default full type via its own call site.
+ 	stepLog = stepLog.WithFields(CubeLog.Fields{"snapshotType": snapshotTypeForCmd})
+-	if err := s.executeCubeRuntimeSnapshot(ctx, rsp.SandboxID, spec, tmpSnapshotPath, memoryObject.DevPath, snapshotTypeForCmd); err != nil {
++	memoryDumpStart := time.Now()
++	err = s.executeCubeRuntimeSnapshot(ctx, rsp.SandboxID, spec, tmpSnapshotPath, memoryObject.DevPath, snapshotTypeForCmd)
++	memoryDumpEnd := time.Now()
++	memoryDumpFields := CubeLog.Fields{
++		"success":       err == nil,
++		"snapshotType":  snapshotTypeForCmd,
++		"memoryDevPath": memoryObject.DevPath,
++	}
++	if memoryObject != nil {
++		memoryDumpFields["objectName"] = memoryObject.Name
++		memoryDumpFields["objectKind"] = memoryObject.Kind
++		memoryDumpFields["sizeBytes"] = memoryObject.SizeBytes
++	}
++	if err != nil {
++		memoryDumpFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "commit_sandbox", "memory_dump", rsp.SandboxID, rsp.TemplateID, memoryDumpStart, memoryDumpEnd, memoryDumpFields)
++	if err != nil {
+ 		_ = os.RemoveAll(tmpSnapshotPath) // NOCC:Path Traversal()
+ 		cleanupArtifacts()
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_Unknown
+--- a/Cubelet/services/cubebox/appsnapshot.go
++++ b/Cubelet/services/cubebox/appsnapshot.go
+@@ -257,7 +257,23 @@
+ 		stepLog.Warnf("Failed to remove existing temp directory: %v", err)
+ 	}
+ 
++	memoryPrepareStart := time.Now()
+ 	memoryObject, err = storage.CreateTemplateMemoryVolume(ctx, templateID, memorySizeBytes)
++	memoryPrepareEnd := time.Now()
++	memoryPrepareFields := CubeLog.Fields{
++		"success":            err == nil,
++		"requestedSizeBytes": memorySizeBytes,
++		"snapshotTypeForCmd": snapshotTypeFull,
++	}
++	if memoryObject != nil {
++		memoryPrepareFields["objectName"] = memoryObject.Name
++		memoryPrepareFields["objectKind"] = memoryObject.Kind
++		memoryPrepareFields["sizeBytes"] = memoryObject.SizeBytes
++	}
++	if err != nil {
++		memoryPrepareFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "app_snapshot", "memory_prepare", sandboxID, templateID, memoryPrepareStart, memoryPrepareEnd, memoryPrepareFields)
+ 	if err != nil {
+ 		stepLog.Errorf("Failed to create template memory volume: %v", err)
+ 		if errors.Is(err, storage.ErrCowObjectAlreadyExists) {
+@@ -281,7 +297,24 @@
+ 	// no base memory blob to overlay onto, so we always ask for a full memory
+ 	// snapshot. Incremental is reserved for CommitSandbox where the running
+ 	// sandbox is bound to a prior snapshot whose memory file we can clone.
+-	if err := s.executeCubeRuntimeSnapshot(ctx, sandboxID, spec, tmpSnapshotPath, memoryObject.DevPath, snapshotTypeFull); err != nil {
++	memoryDumpStart := time.Now()
++	err = s.executeCubeRuntimeSnapshot(ctx, sandboxID, spec, tmpSnapshotPath, memoryObject.DevPath, snapshotTypeFull)
++	memoryDumpEnd := time.Now()
++	memoryDumpFields := CubeLog.Fields{
++		"success":       err == nil,
++		"snapshotType":  snapshotTypeFull,
++		"memoryDevPath": memoryObject.DevPath,
++	}
++	if memoryObject != nil {
++		memoryDumpFields["objectName"] = memoryObject.Name
++		memoryDumpFields["objectKind"] = memoryObject.Kind
++		memoryDumpFields["sizeBytes"] = memoryObject.SizeBytes
++	}
++	if err != nil {
++		memoryDumpFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "app_snapshot", "memory_dump", sandboxID, templateID, memoryDumpStart, memoryDumpEnd, memoryDumpFields)
++	if err != nil {
+ 		stepLog.Errorf("Failed to execute cube-runtime snapshot: %v", err)
+ 
+ 		os.RemoveAll(tmpSnapshotPath) // NOCC:Path Traversal()
+@@ -301,7 +334,21 @@
+ 		return rsp, nil
+ 	}
+ 
++	rootfsStart := time.Now()
+ 	rootfsObject, err = storage.CreateTemplateRootfsFromBuild(ctx, templateID)
++	rootfsEnd := time.Now()
++	rootfsFields := CubeLog.Fields{
++		"success": err == nil,
++	}
++	if rootfsObject != nil {
++		rootfsFields["objectName"] = rootfsObject.Name
++		rootfsFields["objectKind"] = rootfsObject.Kind
++		rootfsFields["sizeBytes"] = rootfsObject.SizeBytes
++	}
++	if err != nil {
++		rootfsFields["error"] = err.Error()
++	}
++	logSnapshotPhaseTiming(stepLog, "app_snapshot", "rootfs_dump", sandboxID, templateID, rootfsStart, rootfsEnd, rootfsFields)
+ 	if err != nil {
+ 		stepLog.Errorf("Failed to create template rootfs snapshot: %v", err)
+ 		os.RemoveAll(tmpSnapshotPath) // NOCC:Path Traversal()
+--- a/Cubelet/services/cubebox/rollback.go
++++ b/Cubelet/services/cubebox/rollback.go
+@@ -76,6 +76,27 @@
+ 		"snapshotID": req.GetSnapshotID(),
+ 		"newGen":     req.GetNewGen(),
+ 	})
++	rollbackStart := time.Now()
++	logRollbackPhase := func(phase string, start, end time.Time, err error, fields CubeLog.Fields) {
++		if fields == nil {
++			fields = CubeLog.Fields{}
++		}
++		fields["success"] = err == nil
++		if err != nil {
++			fields["error"] = err.Error()
++		}
++		logSnapshotPhaseTiming(stepLog, "rollback_sandbox", phase, req.GetSandboxID(), req.GetSnapshotID(), start, end, fields)
++	}
++	defer func() {
++		var err error
++		if rsp.Ret.RetCode != errorcode.ErrorCode_Success {
++			err = fmt.Errorf("%s", rsp.Ret.RetMsg)
++		}
++		logRollbackPhase("rollback_total", rollbackStart, time.Now(), err, CubeLog.Fields{
++			"retCode": rsp.Ret.RetCode,
++			"retMsg":  rsp.Ret.RetMsg,
++		})
++	}()
+ 
+ 	cb, err := s.cubeboxMgr.cubeboxManger.Get(ctx, req.GetSandboxID())
+ 	if err != nil {
+@@ -89,16 +110,33 @@
+ 		return rsp, nil
+ 	}
+ 
++	currentRootfsStart := time.Now()
+ 	rootVolumeName, err := validateCommitSandboxTarget(cb)
++	var currentRootfs *storage.CowSnapshotObject
++	currentRootfsRetMsg := ""
++	if err != nil {
++		currentRootfsRetMsg = err.Error()
++	} else {
++		currentRootfs, err = storage.GetSandboxRootfsForSnapshot(ctx, req.GetSandboxID(), rootVolumeName)
++		if err != nil {
++			currentRootfsRetMsg = fmt.Sprintf("failed to resolve current rootfs: %v", err)
++		}
++	}
++	currentRootfsEnd := time.Now()
++	currentRootfsFields := CubeLog.Fields{
++		"rootVolumeName": rootVolumeName,
++	}
++	if currentRootfs != nil {
++		currentRootfsFields["currentRootfsName"] = currentRootfs.Name
++		currentRootfsFields["currentRootfsKind"] = currentRootfs.Kind
++		currentRootfsFields["currentRootfsDev"] = currentRootfs.DevPath
++		currentRootfsFields["currentRootfsGen"] = currentRootfs.Gen
++		currentRootfsFields["currentRootfsSizeBytes"] = currentRootfs.SizeBytes
++	}
++	logRollbackPhase("current_rootfs_resolve", currentRootfsStart, currentRootfsEnd, err, currentRootfsFields)
+ 	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_PreConditionFailed
+-		rsp.Ret.RetMsg = err.Error()
+-		return rsp, nil
+-	}
+-	currentRootfs, err := storage.GetSandboxRootfsForSnapshot(ctx, req.GetSandboxID(), rootVolumeName)
+-	if err != nil {
+-		rsp.Ret.RetCode = errorcode.ErrorCode_PreConditionFailed
+-		rsp.Ret.RetMsg = fmt.Sprintf("failed to resolve current rootfs: %v", err)
++		rsp.Ret.RetMsg = currentRootfsRetMsg
+ 		return rsp, nil
+ 	}
+ 	if req.GetNewGen() <= currentRootfs.Gen {
+@@ -108,21 +146,64 @@
+ 	}
+ 	rsp.OldRootfsVol = currentRootfs.Name
+ 
++	resolveTargetsStart := time.Now()
+ 	rootfsVol, memoryVol, memoryKind, metaDir, err := resolveRollbackTargets(ctx, req)
++	resolveTargetsEnd := time.Now()
++	logRollbackPhase("resolve_targets", resolveTargetsStart, resolveTargetsEnd, err, CubeLog.Fields{
++		"rootfsVol":  rootfsVol,
++		"memoryVol":  memoryVol,
++		"memoryKind": memoryKind,
++		"metaDir":    metaDir,
++	})
+ 	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_PreConditionFailed
+ 		rsp.Ret.RetMsg = err.Error()
+ 		return rsp, nil
+ 	}
+ 
++	resolveRefsStart := time.Now()
+ 	refs, err := storage.ResolveSnapshotForRollback(ctx, rootfsVol, memoryVol, memoryKind)
++	resolveRefsEnd := time.Now()
++	resolveRefsFields := CubeLog.Fields{
++		"rootfsVol":  rootfsVol,
++		"memoryVol":  memoryVol,
++		"memoryKind": memoryKind,
++	}
++	if refs != nil && refs.Rootfs != nil {
++		resolveRefsFields["rootfsName"] = refs.Rootfs.Name
++		resolveRefsFields["rootfsKind"] = refs.Rootfs.Kind
++		resolveRefsFields["rootfsDev"] = refs.Rootfs.DevPath
++		resolveRefsFields["rootfsSizeBytes"] = refs.Rootfs.SizeBytes
++	}
++	if refs != nil && refs.Memory != nil {
++		resolveRefsFields["memoryName"] = refs.Memory.Name
++		resolveRefsFields["memoryKindResolved"] = refs.Memory.Kind
++		resolveRefsFields["memoryDev"] = refs.Memory.DevPath
++		resolveRefsFields["memorySizeBytes"] = refs.Memory.SizeBytes
++	}
++	logRollbackPhase("resolve_snapshot_objects", resolveRefsStart, resolveRefsEnd, err, resolveRefsFields)
+ 	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_PreConditionFailed
+ 		rsp.Ret.RetMsg = fmt.Sprintf("failed to resolve snapshot objects: %v", err)
+ 		return rsp, nil
+ 	}
+ 
++	deriveStart := time.Now()
+ 	newRootfs, err := storage.RollbackDeriveNewGen(ctx, req.GetSandboxID(), refs.Rootfs.Name, req.GetNewGen(), req.GetDesiredSize())
++	deriveEnd := time.Now()
++	deriveFields := CubeLog.Fields{
++		"sourceRootfsName": refs.Rootfs.Name,
++		"newGen":           req.GetNewGen(),
++		"desiredSize":      req.GetDesiredSize(),
++	}
++	if newRootfs != nil {
++		deriveFields["newRootfsName"] = newRootfs.Name
++		deriveFields["newRootfsKind"] = newRootfs.Kind
++		deriveFields["newRootfsDev"] = newRootfs.DevPath
++		deriveFields["newRootfsGen"] = newRootfs.Gen
++		deriveFields["newRootfsSizeBytes"] = newRootfs.SizeBytes
++	}
++	logRollbackPhase("rootfs_derive_new_gen", deriveStart, deriveEnd, err, deriveFields)
+ 	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_Unknown
+ 		rsp.Ret.RetMsg = fmt.Sprintf("failed to derive rollback rootfs: %v", err)
+@@ -137,7 +218,21 @@
+ 		}
+ 	}()
+ 
++	buildConfigStart := time.Now()
+ 	restoreConfig, err := s.buildRollbackRestoreConfig(ctx, req.GetSandboxID(), metaDir, currentRootfs, newRootfs, refs.Memory)
++	buildConfigEnd := time.Now()
++	logRollbackPhase("build_restore_config", buildConfigStart, buildConfigEnd, err, CubeLog.Fields{
++		"metaDir":               metaDir,
++		"currentRootfsName":     currentRootfs.Name,
++		"currentRootfsDev":      currentRootfs.DevPath,
++		"newRootfsName":         newRootfs.Name,
++		"newRootfsDev":          newRootfs.DevPath,
++		"memoryName":            refs.Memory.Name,
++		"memoryDev":             refs.Memory.DevPath,
++		"restoreConfigBytes":    len(restoreConfig),
++		"snapshotStateDir":      snapshotStateDir(metaDir),
++		"snapshotMemoryDevPath": refs.Memory.DevPath,
++	})
+ 	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_Unknown
+ 		rsp.Ret.RetMsg = fmt.Sprintf("failed to build restore config: %v", err)
+@@ -154,7 +249,13 @@
+ 	setSandboxRollingBack(cb, true)
+ 	defer setSandboxRollingBack(cb, false)
+ 
+-	if err := s.updateShimForRollback(ctx, cb, restoreConfig); err != nil {
++	shimUpdateStart := time.Now()
++	err = s.updateShimForRollback(ctx, cb, restoreConfig)
++	shimUpdateEnd := time.Now()
++	logRollbackPhase("shim_update_restore", shimUpdateStart, shimUpdateEnd, err, CubeLog.Fields{
++		"restoreConfigBytes": len(restoreConfig),
++	})
++	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_Unknown
+ 		rsp.Ret.RetMsg = fmt.Sprintf("failed to update shim for rollback: %v", err)
+ 		return rsp, nil
+@@ -171,7 +272,16 @@
+ 	resetSandboxStatusAfterRollback(cb)
+ 
+ 	newRootfs.MountName = currentRootfs.MountName
+-	if err := storage.PersistSandboxRootfsAfterRollback(ctx, req.GetSandboxID(), newRootfs); err != nil {
++	persistStart := time.Now()
++	err = storage.PersistSandboxRootfsAfterRollback(ctx, req.GetSandboxID(), newRootfs)
++	persistEnd := time.Now()
++	logRollbackPhase("persist_rootfs_after_rollback", persistStart, persistEnd, err, CubeLog.Fields{
++		"newRootfsName": newRootfs.Name,
++		"newRootfsKind": newRootfs.Kind,
++		"newRootfsDev":  newRootfs.DevPath,
++		"newRootfsGen":  newRootfs.Gen,
++	})
++	if err != nil {
+ 		rsp.Ret.RetCode = errorcode.ErrorCode_Unknown
+ 		rsp.Ret.RetMsg = fmt.Sprintf("rollback restored VM but failed to persist storage info: %v", err)
+ 		return rsp, nil
+@@ -189,7 +299,15 @@
+ 	// SyncByID call below covers the persistence for both.
+ 	setRuntimeRestoreBaseLabels(cb, req.GetSnapshotID(), rollbackTime)
+ 
+-	if err := storage.DeleteCowObject(ctx, currentRootfs.Name, currentRootfs.Kind); err != nil {
++	deleteOldStart := time.Now()
++	err = storage.DeleteCowObject(ctx, currentRootfs.Name, currentRootfs.Kind)
++	deleteOldEnd := time.Now()
++	logRollbackPhase("delete_old_rootfs", deleteOldStart, deleteOldEnd, err, CubeLog.Fields{
++		"oldRootfsName": currentRootfs.Name,
++		"oldRootfsKind": currentRootfs.Kind,
++		"oldRootfsDev":  currentRootfs.DevPath,
++	})
++	if err != nil {
+ 		rsp.OldRootfsDeleted = false
+ 		rsp.Ret.RetMsg = fmt.Sprintf("rollback succeeded; old rootfs cleanup deferred: %v", err)
+ 		stepLog.Warnf("rollback succeeded but failed to delete old rootfs %s: %v", currentRootfs.Name, err)
+@@ -197,7 +315,12 @@
+ 		rsp.OldRootfsDeleted = true
+ 	}
+ 
++	syncStart := time.Now()
+ 	s.cubeboxMgr.cubeboxManger.SyncByID(ctx, cb.ID)
++	syncEnd := time.Now()
++	logRollbackPhase("sync_metadata", syncStart, syncEnd, nil, CubeLog.Fields{
++		"cubeboxID": cb.ID,
++	})
+ 	stepLog.Infof("RollbackSandbox completed successfully: newRootfs=%s oldRootfs=%s oldDeleted=%t", rsp.RootfsVol, rsp.OldRootfsVol, rsp.OldRootfsDeleted)
+ 	return rsp, nil
+ }

@@ -61,7 +61,19 @@ def doctor(config, experiments):
         for name in ('cube.phase_log',):
             try:path=configured_path(config,name);check(name,path.is_file(),path)
             except ValueError as err:check(name,False,err)
-    if 'table-02-e2b' in experiments:
+    if 'table-02-e2b' in experiments and config.get('e2b', {}).get('profile') == 'paper-nested':
+        try:
+            from ae.scripts.e2b_paper_profile import verify_inputs
+            if list(experiments) != ['table-02-e2b']:
+                raise ValueError('E2B paper profile cannot be mixed with other experiments')
+            proof = verify_inputs(config)
+            check('e2b.paper static frozen input contract', True,
+                  '8 inputs, 227 expansions, 185 actions; ' + proof['manifest']['sha256'])
+        except (ValueError, KeyError, OSError) as err:
+            check('e2b.paper static frozen input contract', False, err)
+        check('e2b.paper Linux', sys.platform == 'linux', 'Nested guest admission runs later inside the pinned suite')
+        check('e2b.paper root', hasattr(os, 'geteuid') and os.geteuid() == 0, 'Hosted nested context requires root')
+    elif 'table-02-e2b' in experiments:
         mode = config.get('e2b', {}).get('execution', 'ssh')
         check('e2b.execution', mode in ('local', 'ssh'), mode)
         for name in (('e2b.infra',) if mode == 'local' else ('e2b.infra','e2b.ssh_key')):

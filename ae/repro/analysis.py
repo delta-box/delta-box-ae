@@ -1346,6 +1346,10 @@ def analyze_fresh(input_root, output=None):
     purposes never share a statistical population. No raw file is discovered as
     an independent measurement, and no missing panel receives archive values.
     """
+    from ae.repro.e2b_paper_analysis import discover, analyze as analyze_paper_e2b
+    paper_source = discover(input_root)
+    if paper_source is not None:
+        return analyze_paper_e2b(paper_source, output)
     ev = Evidence(input_root, "fresh")
     claimed, excluded_roots = set(), set()
     runs, excluded_runs = [], []

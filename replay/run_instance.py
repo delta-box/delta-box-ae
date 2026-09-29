@@ -14,6 +14,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import contextmanager, ExitStack
 from types import SimpleNamespace
@@ -23,7 +25,7 @@ from legacy_schedule import convert_legacy
 from provenance import build_guest_archive, cached_digest, file_digest, signature
 from summarize import read_results, summarize
 from host_execution import (
-    InstanceRun, Lane, build_instance_command, cleanup_actions, execute_instance, write_json,
+    InstanceRun, Lane, build_instance_command, cleanup_actions, execute_instance, record_host_error, write_json,
 )
 
 TABLE_ROOT = Path(__file__).resolve().parent
@@ -219,10 +221,134 @@ def upload_inputs(machine, spec: InstanceRun) -> None:
                        check=True, timeout=60)
 
 
+class GuestRuntimeFailure(RuntimeError):
+    def __init__(self, reason: str, **evidence):
+        super().__init__(reason)
+        self.evidence = evidence
+
+
+class GuestSerialMonitor:
+    """Read only new serial bytes; ordinary silence is not a failure."""
+
+    fatal = re.compile(
+        rb"\[\s*\d+(?:\.\d+)?\]\s*"
+        rb"(?:(?:Out of memory|Memory cgroup out of memory):\s+Killed process\s+\d+\s+\("
+        rb"|Kernel panic - not syncing:)")
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.pending = b""
+        self.offset = 0
+
+    def check(self, limit: int | None = None) -> bool:
+        # One MiB per poll bounds monitoring cost, without rescanning the log.
+        for _ in range(16):
+            size = 65536 if limit is None else min(65536, limit - self.stream.tell())
+            if size <= 0:
+                return False
+            chunk = self.stream.read(size)
+            if not chunk:
+                return False
+            self.pending += chunk
+            lines = self.pending.split(b"\n")
+            for index, line in enumerate(lines):
+                match = self.fatal.search(line)
+                if match:
+                    text = line.decode("utf-8", errors="replace")
+                    pid = re.search(rb"Killed process\s+(\d+)", match.group())
+                    stamp = re.search(rb"\[\s*([\d.]+)\]", match.group())
+                    raise GuestRuntimeFailure(
+                        "Guest kernel fatal event: " + text,
+                        kind="guest_oom" if pid else "guest_kernel_panic",
+                        serial_path=Path(self.stream.name).name,
+                        serial_byte_offset=self.offset + match.start(),
+                        serial_line=text,
+                        guest_pid=int(pid.group(1)) if pid else None,
+                        guest_kernel_time_s=float(stamp.group(1)),
+                    )
+                if index < len(lines) - 1:
+                    self.offset += len(line) + 1
+            # A kernel fatal record can straddle reads or lack its final newline.
+            self.pending = lines[-1]
+            if len(self.pending) > 65536:
+                self.offset += len(self.pending) - 65536
+                self.pending = self.pending[-65536:]
+        return True
+
+
+def reap_replay_ssh(process) -> None:
+    # SSH and Firecracker share the runner's group. Never kill that group here:
+    # the still-running VM is needed by collect_results_on_exit.
+    if process.poll() is None:
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
 def execute_replay(machine, spec: InstanceRun) -> None:
-    with (spec.output_dir / "guest.log").open("w") as logfile:
-        subprocess.run(machine.ssh + ["python3 -u /app/entry.py"], check=True,
-                       timeout=spec.config["timeout"], stdout=logfile, stderr=subprocess.STDOUT)
+    command = machine.ssh + ["python3 -u /app/entry.py"]
+    started = time.monotonic()
+    config_sha256 = file_digest(spec.config_path)["sha256"]
+    process = None
+    primary = None
+    try:
+        with (spec.output_dir / "guest.log").open("w") as logfile, \
+             (spec.output_dir / "firecracker.log").open("rb") as serial:
+            monitor = GuestSerialMonitor(serial)
+            process = subprocess.Popen(command, stdout=logfile, stderr=subprocess.STDOUT)
+            while True:
+                # Check fatal serial output before accepting even a zero SSH exit.
+                monitor.check()
+                vm_code = machine.process.poll()
+                if vm_code is not None:
+                    raise GuestRuntimeFailure(
+                        f"Firecracker exited during replay (rc={vm_code})",
+                        kind="firecracker_exit", firecracker_returncode=vm_code)
+                code = process.poll()
+                if code is not None:
+                    # Drain the final bytes after SSH exits, including a fatal
+                    # line written between the previous read and poll().
+                    serial_end = os.fstat(serial.fileno()).st_size
+                    while monitor.check(limit=serial_end):
+                        pass
+                    if code:
+                        raise subprocess.CalledProcessError(code, command)
+                    return
+                remaining = spec.config["timeout"] - (time.monotonic() - started)
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(command, spec.config["timeout"])
+                time.sleep(min(0.5, remaining))
+    except BaseException as error:
+        primary = error
+        if isinstance(error, Exception):
+            record_host_error(spec.output_dir, "guest runtime", error)
+            detail = getattr(error, "evidence", {})
+            record = {
+                "schema_version": 1, "status": "failed", "phase": "execute_replay",
+                "kind": "replay_transport_or_timeout", **detail,
+                "reason": str(error), "error_type": type(error).__name__,
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+                "elapsed_s": time.monotonic() - started,
+                "runner_pid": os.getpid(), "run_config_sha256": config_sha256,
+                "ssh_pid": process.pid if process is not None else None,
+                "firecracker_pid": machine.process.pid,
+            }
+            try:
+                write_json(spec.output_dir / "guest_runtime_failure.json", record)
+            except Exception as reporting_error:
+                record_host_error(spec.output_dir, "record guest runtime failure", reporting_error)
+        raise
+    finally:
+        if process is not None:
+            cleanup_actions(spec.output_dir, [
+                ("reap replay SSH", lambda: reap_replay_ssh(process), True),
+            ], primary)
 
 
 def collect_jsonl(machine, spec: InstanceRun) -> None:

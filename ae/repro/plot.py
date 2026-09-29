@@ -401,6 +401,12 @@ def render(input_path, output):
         result = dict(result, source=summary["source"])
         variants = [("", result)]
         paper_layout = summary['source'] == 'fresh' and key in PAPER_LAYOUT_KEYS
+        if paper_layout and key == 'figure-09' and len({row.get('plot_group', '')
+                for row in result.get('series', [])}) > 1:
+            # Explicit completed-job imports preserve original source/scope.
+            # WAR populations occupy the same bins: show separate plots instead
+            # of merging their points or claiming a single-source cohort.
+            paper_layout = False
         if paper_layout:
             # Independent statistics occupy the paper's separate domains,
             # panels, columns or bars. Each renderer rejects conflicting
