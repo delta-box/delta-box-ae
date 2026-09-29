@@ -114,6 +114,7 @@
         }
       },
       "table-02-e2b": {
+        "baseline_storage": "disk",
         "recorded_search_order": true
       },
       "table-03-slow": {
