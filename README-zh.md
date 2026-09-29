@@ -426,4 +426,4 @@ bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
 - [实验输入与文件清单](ae/paper/README.md)
 - [镜像构建与模板准备](ae/images/README.md)
 
-Figure 8 Cube 配置默认只测 **N=1 和 N=16**。脚本在选定 NUMA 的测量锁内，将 Cube 数据和 MySQL 元数据完整复制到私有 noswap 内存盘，校验复制文件并保留数据库持久化参数。每个子实例都检查继承内存的字节数、校验和与 token，结束后恢复服务和存储。资源或恢复状态不确定时，保留私有环境及 `RECOVERY_REQUIRED.json` 供检查。准备和清理不计入原始克隆及验证计时。
+Figure 8 Cube 配置默认只测 **N=1 和 N=16**。脚本在选定 NUMA 的测量锁内，将 Cube 数据和 MySQL 元数据完整复制到私有 noswap 内存盘，校验复制文件并保留数据库持久化参数。每个子实例都检查继承内存的字节数、校验和与 token，结束后恢复服务和存储。资源或恢复状态不确定时，保留私有环境及 `RECOVERY_REQUIRED.json` 供检查。准备和清理不计入原始克隆及验证计时。 执行 guest 命令前，驱动通过只读请求确认 envd 就绪；这段等待保留在源准备或子实例验证阶段内，共用命令的超时预算，不重发已提交的命令。

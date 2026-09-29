@@ -55,7 +55,7 @@ def run_benchmark(args, ap, client_context):
         assert all(callable(getattr(Sandbox, name)) for name in ('create_snapshot', 'kill', 'clone'))
         print('Cube probe imports and SDK method bindings verified; no API call')
         return 0
-    events, checks = [], []
+    events, checks, readiness = [], [], []
     owned_sandboxes, owned_snapshots = {}, {}
     killed, deleted = set(), set()
     uncertain_creation = []
@@ -108,8 +108,17 @@ def run_benchmark(args, ap, client_context):
     expected_bytes = args.mem_mib * 1024 * 1024
     expected_checksum = sum(i % 251 for i in range(expected_bytes // 4096)) & 0xffffffff
 
+    if __package__:
+        from .cube_envd_ready import command_when_ready
+    else:
+        from cube_envd_ready import command_when_ready
+
+    def record_readiness(event):
+        with guard:
+            readiness.append(event)
+
     def verified_shell(sb, command, timeout):
-        text = original_shell(sb, command, timeout)
+        text = command_when_ready(sb, command, timeout, original_shell, record_readiness)
         if "s.sendall(b'touch" in command:
             fields = dict(re.findall(r'(token|bytes|checksum|requests|pid)=([^\s]+)', text))
             expected_token = re.search(r"assert 'OK token=([^']+)'", command).group(1)
@@ -159,7 +168,7 @@ def run_benchmark(args, ap, client_context):
                     item['error'] = str(exc)
                     time.sleep(.5)
             cleanup.append(item)
-        result.update(api_events=events, memory_checks=checks, cleanup=cleanup,
+        result.update(api_events=events, memory_checks=checks, readiness_events=readiness, cleanup=cleanup,
                       owned_sandbox_ids=list(owned_sandboxes), owned_snapshot_ids=list(owned_snapshots),
                       uncertain_creation=uncertain_creation)
         result['cleanup_ok'] = all(c['ok'] for c in cleanup) and not uncertain_creation
