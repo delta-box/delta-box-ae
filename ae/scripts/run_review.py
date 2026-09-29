@@ -89,6 +89,7 @@ def parser():
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
+    p.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA0 and NUMA1')
     p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
     p.add_argument('--e2b-profile', choices=('paper-nested',), action=GPUCases, help='E2B-only documented nested reconstruction; original eight complete inputs')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
@@ -656,6 +657,9 @@ class Review:
     def __init__(self, args, config, output):
         apply_validation_defaults(args, config)
         validate_gpu_selection(args)
+        if getattr(args, 'cpu_parallel', False):
+            from ae.scripts.run_cpu_parallel import validate
+            validate(args)
         from ae.scripts.cube_paper_profile import validate
         validate(args)
         from ae.scripts.e2b_paper_profile import validate as validate_e2b_profile
@@ -845,6 +849,8 @@ class Review:
         if self.cube_disk_manifest is not None:
             config['cube']['disk_manifest'] = str(self.cube_disk_manifest)
         config.pop('review', None)
+        if getattr(self.args, 'cpu_parallel_lane', False):
+            config['replay_workers'] = 1
         if pin_requested(self.args, config):
             placement = measurement_placement(self.args, config)
             config['measurement'] = {**config.get('measurement', {}), 'pin': True,
@@ -1362,6 +1368,9 @@ def main(argv=None):
     args = p.parse_args(argv)
     try:
         validate_gpu_selection(args)
+        if getattr(args, 'cpu_parallel', False):
+            from ae.scripts.run_cpu_parallel import validate
+            validate(args)
         from ae.scripts.cube_paper_profile import validate
         validate(args)
         from ae.scripts.e2b_paper_profile import validate as validate_e2b_profile
@@ -1399,6 +1408,10 @@ def main(argv=None):
             isolated_validation_output(args, config)
             with run_lock(REPO / 'ae/work/.results.lock', shared=True):
                 return run_selected(args, p)
+        if getattr(args, 'cpu_parallel', False):
+            from ae.scripts.run_cpu_parallel import run
+            with run_lock(REPO / 'ae/work/.results.lock') as lease_fd:
+                return run(args, p, config, lease_fd, sys.modules[__name__])
         parallel = config.get('review', {}).get('parallel_quick_check', False)
         if type(parallel) is not bool:
             raise ValueError('review.parallel_quick_check must be a boolean')

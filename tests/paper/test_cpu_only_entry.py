@@ -24,19 +24,22 @@ class CPUOnlyEntryTests(unittest.TestCase):
             shutil.copy2(ENTRY, root / ENTRY.name)
             (root / 'run_all.sh').write_text(
                 '#!/usr/bin/env bash\nprintf "%s\\0" "$@"\nexit ' + str(status) + '\n')
-            return subprocess.run(['bash', str(root / ENTRY.name), *flags], capture_output=True)
+            fake = root / 'numactl'
+            fake.write_text('#!/usr/bin/env bash\nshift 3\nexec "$@"\n')
+            fake.chmod(0o755)
+            return subprocess.run(['bash', str(root / ENTRY.name), *flags], capture_output=True,
+                                  env={**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH']})
 
     def test_normal_options_keep_argv_and_exit_status(self):
-        options = ['--output', '/path with spaces/result', '--numa-node', '0',
-                   '--cpus=0-3', '--limit', '2', '--baseline-inputs', '44']
+        options = ['--output', '/path with spaces/result', '--limit', '2', '--baseline-inputs', '44']
         result = self.invoke(options, status=7)
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual(result.stdout.decode().split('\0')[:-1], ['--group', 'cpu', *options])
+        self.assertEqual(result.stdout.decode().split('\0')[:-1], ['--group', 'cpu', '--cpu-parallel', *options])
 
     def test_selection_and_internal_dispatch_cannot_enable_gpu(self):
         for flags in (['--group', 'gpu'], ['--group=gpu'], ['--gro=gpu'],
                       ['--experiment', 'figure-08-gpu'], ['--gpu-cases', 'generation-B1'],
-                      ['--all'], ['--test'], ['--execute-plan', 'plan.json'],
+                      ['--all'], ['--test'], ['--numa-node', '2'], ['--cpus=4-7'], ['--execute-plan', 'plan.json'],
                       ['--analyze-existing', 'old-gpu-run'], ['--']):
             with self.subTest(flags=flags):
                 result = self.invoke(flags)
