@@ -28,7 +28,7 @@ def sandboxes():
     return value
 
 @contextmanager
-def memory_service(output_dir, *, node, cpus, size_gib=16):
+def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recovery_guard=None):
     """Hold a verified private service for the caller, restoring it on every exit."""
     a=SimpleNamespace(output=Path(output_dir),node=node,cpus=cpus)
     if os.geteuid()!=0:
@@ -42,33 +42,59 @@ def memory_service(output_dir, *, node, cpus, size_gib=16):
     if available < (size_gib+2)*GIB:
         raise ValueError(f'Cube NUMA {node} has {available/GIB:.2f} GiB available; needs {size_gib+2} GiB')
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False)
-    lock=open('/run/lock/deltabox-cube-memory.lock','w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    lock = None
+    if lease_fd is None:
+        lock = open('/run/lock/deltabox-cube-memory.lock', 'w')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    else:
+        if type(lease_fd) is not int or lease_fd < 0:
+            raise ValueError('Invalid borrowed Cube lease')
+        held = os.fstat(lease_fd)
+        named = os.stat('/run/lock/deltabox-cube-memory.lock', follow_symlinks=False)
+        if (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino):
+            raise ValueError('Borrowed Cube lease belongs to a different file')
+        fcntl.flock(lease_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if DROP.exists() or sandboxes(): raise ValueError('Cube must be idle and no prior experiment override may exist')
     if output('systemctl','is-active',SERVICE)!='active': raise ValueError('Expected running Cube service')
     device=output('findmnt','-n','-o','SOURCE','-T',STORAGE)
     if not device.startswith('/dev/loop'): raise ValueError('Cube storage must be a loop-backed XFS image')
     source=Path(json.loads(output('losetup','--list','--json',device))['loopdevices'][0]['back-file'])
+    source_present = source.is_file()
+    if not source_present and not str(source).endswith(' (deleted)'):
+        raise ValueError('Cube loop backing file is unavailable without a deleted-file marker')
+    source_size = source.stat().st_size if source_present else int(output('blockdev','--getsize64',device))
+    source_allocated = source.stat().st_blocks * 512 if source_present else None
+    copy_method = 'sparse-file-copy' if source_present else 'xfs-copy-frozen-live-device'
     before={'main_pid':output('systemctl','show',SERVICE,'-p','MainPID','--value'),
             'unit':output('systemctl','cat',SERVICE),
-            'source':str(source),'source_size':source.stat().st_size,
-            'source_allocated':source.stat().st_blocks*512,'cpu_list':a.cpus,'numa_node':a.node,
+            'source':str(source),'source_size':source_size,
+            'source_allocated':source_allocated,'source_device':device,'copy_method':copy_method,'cpu_list':a.cpus,'numa_node':a.node,
             'allowed_cpus':output('systemctl','show',SERVICE,'-p','AllowedCPUs','--value'),
-            'allowed_nodes':output('systemctl','show',SERVICE,'-p','AllowedMemoryNodes','--value')}
+            'allowed_nodes':output('systemctl','show',SERVICE,'-p','AllowedMemoryNodes','--value'),
+            'sandbox_cgroup':{name:(Path('/sys/fs/cgroup/cube_sandbox')/name).read_text().strip() for name in ('cpuset.cpus','cpuset.mems')}}
     (out/'before.json').write_text(json.dumps(before,indent=2)+'\n')
-    ram=out/'ram';ram.mkdir();mounted=stopped=override=placement=False;loop=None;volume=None
+    ram=out/'ram';ram.mkdir();mounted=stopped=override=placement=cgroup_placement=False;loop=None;volume=None;image=None
     def interrupted(signum, frame):
         signal.signal(signal.SIGTERM,signal.SIG_IGN)
         raise KeyboardInterrupt(f'signal {signum}')
     previous_term=signal.signal(signal.SIGTERM,interrupted)
     try:
-        run('mount','-t','tmpfs','-o',f'size={size_gib}G,noswap,mpol=bind:{a.node},mode=0700','tmpfs',ram);mounted=True
-        run('systemctl','stop',SERVICE);stopped=True
+        mounted=True
+        run('mount','-t','tmpfs','-o',f'size={size_gib}G,noswap,mpol=bind:{a.node},mode=0700','tmpfs',ram)
+        stopped=True
+        run('systemctl','stop',SERVICE)
         if sandboxes(): raise ValueError('Cube inventory changed during exclusive setup')
         image=ram/'storage.xfs'
         frozen=False
         try:
-            run('fsfreeze','--freeze',STORAGE);frozen=True
-            run('cp','--sparse=always','--reflink=never',source,image)
+            frozen=True
+            run('fsfreeze','--freeze',STORAGE)
+            if source_present:
+                run('cp','--sparse=always','--reflink=never',source,image)
+            else:
+                # xfs_copy explicitly supports frozen sources and skips free
+                # filesystem blocks. Never detach the original live loop.
+                run('xfs_copy','-d','-b','-L',out/'xfs-copy.log',device,image)
         finally:
             if frozen:run('fsfreeze','--unfreeze',STORAGE)
         loop=output('losetup','--find','--show',image)
@@ -87,14 +113,18 @@ def memory_service(output_dir, *, node, cpus, size_gib=16):
             ' time.sleep(.1)\n'
             f'(p/"cpuset.mems").write_text({str(a.node)!r})\n'
             f'(p/"cpuset.cpus").write_text({a.cpus!r})\n')
+        override=True
         DROP.write_text('[Service]\nPrivateMounts=yes\nBindPaths='+ ' '.join(bindings)+'\n'
             'ExecStart=\n'
             f'ExecStart=/usr/bin/numactl --physcpubind={a.cpus} --membind={a.node} /usr/local/services/cubetoolbox/scripts/systemd/cubelet-start.sh\n'
             'ExecStartPost=\n'+f'ExecStartPost=/usr/bin/python3 {pin}\n')
-        override=True
         run('systemctl','daemon-reload')
         placement=True
         run('systemctl','set-property','--runtime',SERVICE,f'AllowedCPUs={a.cpus}',f'AllowedMemoryNodes={a.node}')
+        cgroup_placement=True
+        group=Path('/sys/fs/cgroup/cube_sandbox')
+        (group/'cpuset.mems').write_text(str(a.node)+'\n')
+        (group/'cpuset.cpus').write_text(a.cpus+'\n')
         run('systemctl','start',SERVICE)
         pid=int(output('systemctl','show',SERVICE,'-p','MainPID','--value'))
         proof={'schema_version':1,'service_pid':pid,'service_start_ticks':Path(f'/proc/{pid}/stat').read_text().split()[21],
@@ -111,31 +141,71 @@ def memory_service(output_dir, *, node, cpus, size_gib=16):
         (out/'verified.json').write_text(json.dumps(verify(config),indent=2)+'\n')
         yield out/'storage.json'
     finally:
+        if recovery_guard is not None and Path(recovery_guard).exists():
+            (out/'retained.json').write_text(json.dumps({'reason':'Unresolved owned Cube resources', 'guard':str(recovery_guard), 'ram':str(ram), 'loop':loop},indent=2)+'\n')
+            signal.signal(signal.SIGTERM,previous_term)
+            if lock is not None:
+                lock.close()
+            raise RuntimeError('Cube RAM and service override retained for resource recovery')
+        cleanup_guard = Path(recovery_guard) if recovery_guard is not None else out/'RECOVERY_REQUIRED.json'
         errors=[]
-        def cleanup(label, fn):
-            try: return fn()
-            except Exception as exc: errors.append(f'{label}: {type(exc).__name__}: {exc}')
-        if override:
-            cleanup('stop private service',lambda:run('systemctl','stop',SERVICE))
-            cleanup('remove override',lambda:DROP.unlink(missing_ok=True))
-            cleanup('reload original unit',lambda:run('systemctl','daemon-reload'))
-        if placement:
-            cleanup('restore placement',lambda:run('systemctl','set-property','--runtime',SERVICE,
-                    'AllowedCPUs='+before['allowed_cpus'],'AllowedMemoryNodes='+before['allowed_nodes']))
-        if stopped:
-            cleanup('start original service',lambda:run('systemctl','start',SERVICE))
-            restored={'override_removed':not DROP.exists(),'cleanup_errors':errors}
-            for key,prop in [('service_status','ActiveState'),('pid','MainPID'),('allowed_cpus','AllowedCPUs'),('allowed_nodes','AllowedMemoryNodes')]:
-                restored[key]=cleanup('read '+prop,lambda prop=prop:output('systemctl','show',SERVICE,'-p',prop,'--value'))
-            (out/'restored.json').write_text(json.dumps(restored,indent=2)+'\n')
-        if volume and os.path.ismount(volume):cleanup('unmount RAM XFS',lambda:run('umount',volume))
-        if loop:cleanup('detach RAM loop',lambda:run('losetup','-d',loop))
-        if mounted:cleanup('unmount RAM',lambda:run('umount',ram))
-        signal.signal(signal.SIGTERM,previous_term)
-        lock.close()
-        if errors:
+        def step(label, fn):
+            try:
+                return fn()
+            except BaseException as exc:
+                errors.append(f'{label}: {type(exc).__name__}: {exc}')
+                raise
+        def stopped_service():
+            active = output('systemctl','show',SERVICE,'-p','ActiveState','--value')
+            pid = output('systemctl','show',SERVICE,'-p','MainPID','--value')
+            if active not in ('inactive','failed') or pid != '0':
+                raise RuntimeError('Private Cubelet did not stop')
+        try:
+            cleanup_guard.write_text(json.dumps({'reason':'Cube storage restoration in progress','output':str(out)})+'\n')
+            # Each prerequisite must finish before any subsequent restoration or
+            # release. A live or ambiguously configured service keeps its storage.
+            if override:
+                step('stop private service',lambda:run('systemctl','stop',SERVICE))
+                step('verify private service stopped',stopped_service)
+                step('remove override',lambda:DROP.unlink(missing_ok=True))
+                step('reload original unit',lambda:run('systemctl','daemon-reload'))
+            if placement:
+                step('restore placement',lambda:run('systemctl','set-property','--runtime',SERVICE,
+                     'AllowedCPUs='+before['allowed_cpus'],'AllowedMemoryNodes='+before['allowed_nodes']))
+            if cgroup_placement:
+                for name in ('cpuset.mems','cpuset.cpus'):
+                    step('restore sandbox '+name,lambda name=name:(Path('/sys/fs/cgroup/cube_sandbox')/name).write_text(before['sandbox_cgroup'][name]+'\n'))
+            if stopped:
+                step('start original service',lambda:run('systemctl','start',SERVICE))
+                restored={'override_removed':not DROP.exists(),'cleanup_errors':errors}
+                for key,prop in [('service_status','ActiveState'),('pid','MainPID'),('allowed_cpus','AllowedCPUs'),('allowed_nodes','AllowedMemoryNodes')]:
+                    restored[key]=step('read '+prop,lambda prop=prop:output('systemctl','show',SERVICE,'-p',prop,'--value'))
+                if (not restored['override_removed'] or restored['service_status']!='active' or
+                        int(restored['pid'])<=0 or restored['allowed_cpus']!=before['allowed_cpus'] or
+                        restored['allowed_nodes']!=before['allowed_nodes']):
+                    raise RuntimeError('Original Cubelet identity or placement did not restore')
+                restored['storage_device']=step('verify original mounted storage',lambda:output(
+                    'nsenter','-t',restored['pid'],'-m','findmnt','-n','-o','SOURCE','-T',STORAGE))
+                if restored['storage_device'] != device:
+                    raise RuntimeError('Original Cubelet did not return to its original storage device')
+                (out/'restored.json').write_text(json.dumps(restored,indent=2)+'\n')
+            if volume and os.path.ismount(volume):step('unmount RAM XFS',lambda:run('umount',volume))
+            if loop:
+                step('detach RAM loop',lambda:run('losetup','-d',loop))
+            elif image is not None and image.exists():
+                owned=step('recover interrupted loop attachment',lambda:output('losetup','-j',image,'-O','NAME','--noheadings'))
+                for owned_device in (owned or '').splitlines():
+                    if owned_device.strip():step('detach recovered RAM loop',lambda owned_device=owned_device:run('losetup','-d',owned_device.strip()))
+            if mounted and os.path.ismount(ram):step('unmount RAM',lambda:run('umount',ram))
+            cleanup_guard.unlink()
+        except BaseException as exc:
+            if not errors:errors.append(f'{type(exc).__name__}: {exc}')
             (out/'cleanup-errors.json').write_text(json.dumps(errors,indent=2)+'\n')
-            raise RuntimeError('Cube service restoration or RAM cleanup failed: '+'; '.join(errors))
+            raise RuntimeError('Cube restoration stopped; private resources retained: '+'; '.join(errors)) from exc
+        finally:
+            signal.signal(signal.SIGTERM,previous_term)
+            if lock is not None:
+                lock.close()
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)

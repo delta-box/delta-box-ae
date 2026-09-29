@@ -147,6 +147,42 @@ def table2_manifest(result):
                        "Missing rows and columns are never filled from another experiment or archived paper values."])
 
 
+
+SLOW_RESTORE_WINDOWS = (
+    ("critical", "restore_critical_ms", "Recorded restore_critical_ms return field; its timing boundary follows the source record, never inferred by subtraction."),
+    ("component", "restore_table3_total_ms", "Complete component window, including lazy daemon startup and coordination."),
+    ("api", "restore_api_wall_ms", "Complete measured restore API, including work outside the component window."),
+    ("lazy_daemon", "restore_slow_lazy_daemon_ms", "Lazy-pages service startup, already included in the component window; do not add it again."),
+)
+
+
+def slow_restore_windows(result):
+    """Expose distinct slow timers without replacing the component-table total."""
+    groups = {}
+    for index, row in enumerate(result.get("metrics", [])):
+        if (row.get("backend") != "deltabox" or row.get("mode") != "slow"
+                or row.get("experiment") not in (None, "table-03-slow")):
+            continue
+        key = json.dumps(_population(row), sort_keys=True)
+        groups.setdefault(key, []).append((index, row))
+    result_groups = []
+    for key, population in sorted(groups.items()):
+        instances = sorted({row["instance"] for _, row in population if row.get("instance") is not None})
+        windows = {}
+        for name, field, boundary in SLOW_RESTORE_WINDOWS:
+            matches = [(index, row) for index, row in population if row.get("metric") == field]
+            if matches and any(type(row.get("n")) is not int or row["n"] <= 0 for _, row in matches):
+                cell = _empty("Restore window requires positive integer event counts.", matches)
+            elif matches and instances and {row.get("instance") for _, row in matches} != set(instances):
+                cell = _empty("Restore window is missing one or more selected inputs.", matches)
+            else:
+                cell = _measure(matches, decimals=6, boundary=boundary, population=population, aggregate=True)
+            windows[name] = dict(metric=field, **cell)
+        result_groups.append(dict(population=json.loads(key), instances=instances,
+                                  instance_count=len(instances) if instances else None, windows=windows))
+    return result_groups
+
+
 def table3_manifest(result):
     """Map direct timers only; never reconstruct serialized work by subtraction."""
     indexed = [(i, row) for i, row in enumerate(result.get("metrics", []))
@@ -167,8 +203,11 @@ def table3_manifest(result):
         (4, "rs_fast"): ("fast", "restore_wall_ms", "Full controller API latency plus replay waiting; differs from the paper's internal critical-path timer."),
         (4, "rs_slow"): ("slow", "restore_wall_ms", "Full controller API latency plus replay waiting; differs from the paper's internal critical-path timer."),
     }
+    row_labels = list(TABLE3_ROWS)
+    if any(row.get("metric") == "restore_table3_total_ms" for _, row in indexed):
+        row_labels[4] = "Component window / ck overlap model"
     cells, used = [], set()
-    for row_number, label in enumerate(TABLE3_ROWS):
+    for row_number, label in enumerate(row_labels):
         for column in ("ck", "rs_fast", "rs_slow"):
             spec = mapping.get((row_number, column))
             if spec:
@@ -213,8 +252,9 @@ def table3_manifest(result):
         if row.get("mode") == "slow" and row.get("metric", "").startswith(("checkpoint_", "ckpt_"))
         else "No semantically matching paper cell; timer is retained only in the analysis."))
         for i, row in enumerate(result.get("metrics", [])) if i not in used]
-    return dict(layout="paper-table-03", rows=list(TABLE3_ROWS),
+    return dict(layout="paper-table-03", rows=row_labels,
                 columns=["ck", "rs_fast", "rs_slow"], cells=cells, excluded_metrics=excluded,
+                restore_windows=slow_restore_windows(result),
                 notes=["Fast and slow modes retain separate populations; per-instance means are event weighted only within one mode and population.",
                        "Coordination is not inferred from dispatch, total duration, fork, or ioctl differences; these intervals may overlap.",
                        "The async label describes configuration. Checkpoint overlap, when supplied, is explicitly a model using measured API cost and the recorded inference window.",
@@ -338,6 +378,17 @@ def table3(plt, result):
             "† Restore: full controller API latency + replay waiting;",
             "different from the paper’s internal critical-path timer.",
         ))
+        groups = manifest["restore_windows"]
+        if modern and len(groups) == 1 and groups[0]["windows"]["critical"]["status"] == "measured":
+            windows = groups[0]["windows"]
+            def shown(name):
+                cell = windows[name]
+                return f"{cell['value']:.2f} ms" if cell["status"] == "measured" else MISSING
+            notes = (
+                "§ Coordination includes lazy startup (" + shown("lazy_daemon") + ").",
+                r"$\parallel$ Checkpoint: overlap model; slow critical: " + shown("critical") + ".",
+                "Restore component window shown above; full API: " + shown("api") + ".",
+            )
         for text, y in zip(notes, (.144, .085, .026)):
             ax.text(.5, y, text, ha="center", va="center", fontsize=14)
     fig.paper_table_manifest = manifest

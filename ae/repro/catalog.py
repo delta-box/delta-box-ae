@@ -190,7 +190,13 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
                 if (not isinstance(arms,list) or not arms or any(not isinstance(a,str) or a not in ('none','skip','gc','warm') for a in arms)
                         or len(arms)!=len(set(arms))):
                     raise ValueError('figure06_memory_policies must be a nonempty unique list of none/skip/gc/warm')
-            elif experiment=='figure-06-adaptive':source='paper/figure-06/cohort-adaptive.csv';arms=['standard','adaptive']
+            elif experiment=='figure-06-adaptive':
+                source='paper/figure-06/cohort-adaptive.csv'
+                arms=config.get('figure06_adaptive_arms',['standard','adaptive'])
+                if (not isinstance(arms,list) or not arms
+                        or any(not isinstance(arm,str) or arm not in ('standard','adaptive') for arm in arms)
+                        or len(set(arms))!=len(arms)):
+                    raise ValueError('figure06_adaptive_arms must select unique standard/adaptive arms')
             else:source='paper/table-02/cohort-deltabox.csv';arms=['slow' if experiment=='table-03-slow' else 'fast']
             rows=cohort(source)
             if limit:rows=rows[:limit]
@@ -270,6 +276,10 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
             add(experiment,experiment,cmd)
         else:
             backend=experiment.removeprefix('figure-08-')
+            forks = config.get('cube', {}).get('fanout_forks', [1,16]) if backend == 'cube' else [1,4,16,64]
+            if (not isinstance(forks, list) or not forks or
+                    any(type(n) is not int or n not in (1,4,16,64) for n in forks) or len(set(forks)) != len(forks)):
+                raise ValueError('Cube fanout_forks must select unique counts from 1,4,16,64')
             add(experiment,experiment,[python,runner/'fanout.py','--backend',backend,'--config',config_path,'--out',output/experiment,
-                '--forks','1' if max_events else '1,4,16,64'])
+                '--forks','1' if max_events else ','.join(map(str, forks))])
     return jobs

@@ -61,19 +61,25 @@ def validate_complete_replay(state, policy):
         raise ValueError('Incomplete recorded-response replay')
 
 
+PROC_ROOT=Path('/proc')
+
+
 def sample(root):
     seen=[];stack=[root]
     while stack:
         pid=stack.pop()
         if pid in seen:continue
         try:
-            stat=Path(f'/proc/{pid}/status').read_text()
-            children=Path(f'/proc/{pid}/task/{pid}/children').read_text()
+            stat=(PROC_ROOT/str(pid)/'status').read_text()
+            children=set()
+            for task_children in (PROC_ROOT/str(pid)/'task').glob('*/children'):
+                try:children.update(map(int,task_children.read_text().split()))
+                except FileNotFoundError:pass
         except FileNotFoundError:continue
         rss=next((int(line.split()[1]) for line in stat.splitlines() if line.startswith('VmRSS:')),None)
         # Exited/zombie processes have no resident set; do not create a zero sample.
         if rss is None:continue
-        seen.append(pid);stack.extend(map(int,children.split()))
+        seen.append(pid);stack.extend(children)
         yield pid,rss
 
 
@@ -111,10 +117,16 @@ def main():
         record['baseline_test_runtime']=configure_test_runtime(config,'profile',env)
         python=str(configured_path(config,'moatless_venv')/'bin/python')
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        execution_record=output/'worker_execution.json'
         command=[python,str(payload/'replay_driver.py'),'--manifest-line',args.instance+'__ms','--traces-root',str(traces),
             '--mock-port',str(port),'--repo-base',str(repos),'--index-store-dir',str(payload/'index_store'),
             '--skip-mock-spawn','--defer-audit','--runtime','configured',
             '--recorded-boundary','--replay-contract-json',str(output/'replay_contract.json')]
+        if args.panel == 'memory':
+            replay_entry=HERE/'profile_replay.py'
+            record['profile_worker_entry']=file_record(replay_entry)
+            command=[python,str(replay_entry),'--driver',str(payload/'replay_driver.py'),
+                     '--execution-record',str(execution_record),*command[2:]]
         record.update(command=command,status='planned' if args.dry_run else 'running');write_json(output/'run.json',record)
         if args.dry_run:return 0
         with (output/'mock.log').open('w') as log:
@@ -136,6 +148,13 @@ def main():
                 if time.monotonic()-started>args.timeout:raise TimeoutError('Profile timeout')
                 time.sleep(.5)
         if worker.returncode:raise RuntimeError(f'Replay worker exited with status {worker.returncode}')
+        if args.panel == 'memory':
+            execution=json.loads(execution_record.read_text())
+            if (execution.get('status') != 'complete' or execution.get('returncode') != 0
+                    or execution.get('pid') != worker.pid
+                    or execution.get('worker_native_tid') == execution.get('main_native_tid')):
+                raise ValueError('Incomplete native single-worker execution')
+            record['worker_execution']=execution
         rows=jsonl(output/'step_metrics.jsonl')
         contract=json.loads((output/'replay_contract.json').read_text())
         if contract.get('status') != 'complete' or contract.get('structure_and_actions_verified') is not True:
@@ -201,7 +220,7 @@ def main():
             try:stop_owned(mock)
             except BaseException as error:failed(error,'stop_mock')
             try:
-                artifacts=[output/name for name in ('step_metrics.jsonl','tree_rss_samples.json','replay_contract.json',
+                artifacts=[output/name for name in ('worker_execution.json','step_metrics.jsonl','tree_rss_samples.json','replay_contract.json',
                            'mock_stats.json','mock_audit.json','mock.log','replay.log') if (output/name).is_file()]
                 if artifacts:record['artifacts']=artifact_records(output,artifacts)
                 write_json(output/'run.json',record)

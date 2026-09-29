@@ -469,8 +469,8 @@ def validate_options(args) -> None:
         raise ValueError("async-incremental requires --criu-dump-binary")
     if binary is not None and not binary.is_file():
         raise FileNotFoundError(binary)
-    if args.checkpoint_profile in ("async-incremental", "async-incremental-lazy") and (args.adaptive or args.memory_policy):
-        raise ValueError("async-incremental currently supports standard checkpoints only")
+    if args.checkpoint_profile in ("async-incremental", "async-incremental-lazy") and args.memory_policy:
+        raise ValueError("async-incremental cannot use the fork-only memory-policy adapter")
     for path in (args.kernel, args.base_xfs, args.data_xfs):
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -507,6 +507,11 @@ def prepare_single_run(args, *, existing_output: bool = False) -> InstanceRun:
         raise ValueError("schedule metadata requires a full repository commit")
     events = [json.loads(line) for line in schedule.read_text().splitlines() if line.strip()]
     validate_schedule(events, adaptive=args.adaptive)
+    if args.checkpoint_profile in ("async-incremental", "async-incremental-lazy"):
+        unsupported = {ev.get("strategy", "standard") for ev in events
+                       if ev.get("type") == "ckpt"} - {"standard", "lightweight"}
+        if unsupported:
+            raise ValueError(f"async-incremental cannot execute checkpoint strategies: {sorted(unsupported)}")
     original_n = len(events)
     if args.max_events is not None:
         events = events[:args.max_events]

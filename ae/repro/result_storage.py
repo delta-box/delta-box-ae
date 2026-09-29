@@ -76,6 +76,28 @@ def parallel_output(root, output, *, quick):
     elif output == checks or output.is_relative_to(checks):
         raise ValueError('ae/results/checks is reserved for quick checks')
 
+@contextmanager
+def output_tree_lock(work, root, output, *, quick=False):
+    """Exclude writers to the same output or any ancestor/descendant output."""
+    root = no_symlink_parents(root).resolve()
+    output = no_symlink_parents(output).resolve()
+    checks = root / 'checks'
+    in_checks = output == checks or output.is_relative_to(checks)
+    if in_checks and (not quick or output == checks):
+        raise ValueError('ae/results/checks is reserved for individual quick checks')
+    with ExitStack() as stack:
+        for path in [*reversed(output.parents), output]:
+            # Main publication excludes checks, and rotation holds .results.lock
+            # exclusively. Only that established quick subtree may skip this
+            # ancestor lease; every selected output still conflicts with main.
+            if in_checks and path == root:
+                continue
+            suffix = hashlib.sha256(str(path).encode()).hexdigest()[:16]
+            stack.enter_context(run_lock(Path(work) / f'.validation-{suffix}.lock',
+                                         shared=path != output))
+        yield
+
+
 
 def active_references(root):
     """Detect older producers which predate the shared results lock.

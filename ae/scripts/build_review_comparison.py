@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Place hash-verified original paper crops beside this campaign's fresh plots.
 
-This presentation step never reads archived measurements or fills missing values.
+Reference statistics may be read for a separate hash-verified Table3 comparison.
+They never fill a missing current timer or alter the supplied measured plots.
 Paper tables and Figures 2, 6 and 7 place independently identified populations
 in the paper's fixed domains, panels, columns or bars.
 With no fresh analysis, omit --analysis and --plots for missing-result panels.
@@ -14,13 +15,17 @@ import json
 from pathlib import Path
 import re
 import shutil
+import sys
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 AE = Path(__file__).resolve().parents[1]
 PAPER_LAYOUT_KEYS = frozenset(('table-02', 'table-03', 'figure-02', 'figure-06', 'figure-07', 'figure-09'))
 PAPER_SHA256 = "1cc012a6ba4afdd127372a236333983ad6d17934ac63680b37faa3e6f65bb95e"
 ITEMS = {
     "table-02": ("Table 2", ("table-02-",), "Full controller API event means; separate backend cohorts. Paper critical timers can differ."),
-    "table-03": ("Table 3", ("table-02-deltabox", "table-03-slow"), "Measured internal timers only. Overlapping timer windows must not be added."),
+    "table-03": ("Table 3", ("table-02-deltabox", "table-03-slow"), "Critical, component and complete API timers are separate. Daemon startup is included in the component window."),
     "figure-02": ("Figure 2", ("figure-02-",), "Positive filesystem writes for delta bars; actual contributors per step; binary KiB/MiB."),
     "figure-06": ("Figure 6", ("figure-06-",), "Memory-policy and adaptive populations remain separate; missing arms stay missing."),
     "figure-07": ("Figure 7", ("table-02-deltabox", "table-02-e2b"), "Derived serialized component model, NOT measured end-to-end latency or async overlap."),
@@ -31,7 +36,7 @@ ITEMS = {
 
 BOUNDARIES_ZH = {
     "table-02": "完整 controller API 的事件平均耗时；各 backend 的输入集合独立统计。论文的关键路径计时范围可能不同。",
-    "table-03": "仅展示实测的内部计时。存在重叠的计时窗口不能相加。",
+    "table-03": "critical、组件窗口和完整 API 分别展示；服务启动已包含在组件窗口内，不能重复相加。",
     "figure-02": "文件系统增量柱统计正写入步骤；每步按实际贡献的输入统计；输入中的 KiB/MiB 为二进制单位。",
     "figure-06": "内存策略与 adaptive 的统计集合分别保留；缺失的实验臂不补值。",
     "figure-07": "由串行计时组件推导的模型，不是实测端到端时延或异步重叠执行时间。",
@@ -379,6 +384,9 @@ def markdown_index(manifest, *, language):
         if item["status"] == "unavailable":
             lines += [("本项没有可用的本次测量图；请查看下方运行状态。" if zh else
                        "No measured plot is available for this item; see its execution status below."), ""]
+        if key == 'table-03' and item.get('restore_timing'):
+            from ae.repro.table3_restore import timing_markdown
+            lines += timing_markdown(item['restore_timing'], language=language)
         lines += [BOUNDARIES_ZH[key] if zh else item["timing_boundary"], "",
                   "**运行状态**" if zh else "**Execution status**", ""]
         lines += ["- " + line for line in coverage_lines(item["coverage"], language=language)]
@@ -504,9 +512,13 @@ class Canvas:
         return result
 
 
-def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_dir=AE / "reference/figures", figure08_path=None):
+def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_dir=AE / "reference/figures", figure08_path=None, table3_reference_root=None):
     summary, plots, coverage, paper, references = verify_inputs(analysis_path, plots_path, coverage_path, paper_dir)
     supplement = figure08_supplement(figure08_path, expected_release=source_identity(coverage))
+    table3_timing = None
+    if summary is not None:
+        from ae.repro.table3_restore import build_timing_report
+        table3_timing = build_timing_report(summary.get('experiments', {}).get('table-03', {}), table3_reference_root)
     canvas = Canvas()
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -520,7 +532,7 @@ def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_d
                     analysis=None if not summary else dict(path=str(Path(analysis_path).resolve()), sha256=digest(analysis_path)),
                     plots=None if not plots_path else dict(path=str(Path(plots_path).resolve()), sha256=digest(plots_path)),
                     selection=(summary or {}).get("selection", {}), excluded_runs=(summary or {}).get("excluded_runs", []),
-                    note="No archived values are used. Paper-layout columns/bars retain independent population identities; no statistics are pooled across them.", items=[])
+                    note="No archived values fill current measurements. Table3 may include a separate hash-verified archive-field comparison; each population and timing window stays explicit.", items=[])
     if coverage.get('completed_job_reuse'):
         manifest['completed_job_reuse'] = coverage['completed_job_reuse']
         manifest['note'] = ('New measurements and explicitly imported completed measurements retain their '
@@ -582,6 +594,8 @@ def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_d
                     layout='paper' if compact_paper else 'population-panels',
                     original=references[key], populations=populations, coverage=rows,
                     limitations=limitations, missing=missing, timing_boundary=boundary, artifacts=outputs)
+        if key == 'table-03' and table3_timing is not None:
+            item['restore_timing'] = table3_timing
         manifest["items"].append(item)
     if supplement is not None:
         for panel in supplement["panels"]:
@@ -605,10 +619,12 @@ def main(argv=None):
     parser.add_argument("--coverage", type=Path, required=True, help="One-click review.json or explicit coverage.json")
     parser.add_argument("--paper-figures", type=Path, default=AE / "reference/figures")
     parser.add_argument("--figure08", type=Path, help="Hash-bound GPU/theory supplement from this run")
+    parser.add_argument("--table3-reference-root", type=Path, default=AE / "paper",
+                        help="Table3 archive bundle for a separate critical-field comparison; never fills current values")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        result = build(args.analysis, args.plots, coverage_path=args.coverage, output=args.output, paper_dir=args.paper_figures, figure08_path=args.figure08)
+        result = build(args.analysis, args.plots, coverage_path=args.coverage, output=args.output, paper_dir=args.paper_figures, figure08_path=args.figure08, table3_reference_root=args.table3_reference_root)
     except (OSError, ValueError, KeyError, ImportError) as exc:
         parser.exit(2, f"Comparison generation failed: {exc}\n")
     print(f"Generated {len(result['items'])} paper comparison items; {args.output / 'manifest.json'}")

@@ -166,9 +166,15 @@ class AsyncIncrementalCheckpoint:
         started = time.perf_counter()
         if self.failed:
             raise RuntimeError(f"async checkpoint transaction previously failed: {self.failed}")
-        if raw_command in ("lightweight", "predump"):
-            raise ValueError("async-incremental currently requires standard checkpoints")
+        if raw_command == "predump":
+            raise ValueError("async-incremental does not support predump checkpoints")
         parent = self._parent(parent_id)
+        if raw_command == "lightweight":
+            if parent is None:
+                raise ValueError("lightweight checkpoint requires a physical parent")
+            # Keep the existing logical checkpoint and replay semantics. No
+            # writer, admission slot or fork is needed for a lightweight node.
+            return c._checkpoint_legacy(parent_id, tag, raw_command, replay_worker_ops)
         # Admission is bounded and its wait is part of the actual checkpoint API.
         if not self.slots.acquire(timeout=self.timeout):
             raise TimeoutError("async checkpoint admission timed out")
@@ -193,7 +199,10 @@ class AsyncIncrementalCheckpoint:
                          and not e["dump_future"].done()]
             resources = validate_replay_resources(c.agent_pid,
                 overlay_mount_point=c.overlay_mount_point, allowed_child_pids=protected)
-            layers, dirty, overlay_ms, overlay_preparation_ms = self._sink(checkpoint_id, parent)
+            # Filesystem ancestry follows the logical node, while CRIU waits
+            # for and compares against its effective physical memory parent.
+            logical_parent = c.registry[parent_id] if parent_id else None
+            layers, dirty, overlay_ms, overlay_preparation_ms = self._sink(checkpoint_id, logical_parent)
             view = {"contract": dump_child_contract(resources), "lower_layers": layers, "workspace": None}
             warm, fork_ms, attempted = c._bootstrap_active_before_dump(checkpoint_id)
             if attempted and warm is None:
@@ -329,7 +338,10 @@ class AsyncIncrementalCheckpoint:
                 dump_completed_ms=(time.perf_counter() - started) * 1000,
                 dump_size_bytes=size, memory_protocol=PROTOCOL,
                 parent_id=entry["prev_ckpt_id"], page_stats=page_stats)
-            entry.update(entry["dump_stats"])
+            # The nested dump statistics describe physical image ancestry;
+            # keep parent_id on the checkpoint itself as the logical parent.
+            entry.update({key: value for key, value in entry["dump_stats"].items()
+                          if key != "parent_id"})
             entry["dump_completed_mono"] = time.perf_counter()
             entry["state"] = "DURABLE_READY"
         except BaseException as exc:

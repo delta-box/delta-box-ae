@@ -6,7 +6,7 @@
 
 DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
 
-Start with the **approximately 5-minute quick check**, then run all experiments. Replay, CRIU, and Firecracker Diff use a fixed set of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
+Start with the **approximately 5-minute quick check**, then validate experiments one at a time. The supplied profile caps each experiment at **10 complete jobs**, including its arms; it does not launch full cohorts by default. Replay, CRIU, and Firecracker Diff draw from a fixed pool of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
 
@@ -36,15 +36,17 @@ ok: <result-directory>/SUMMARY.md
 
 Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the execution pipeline. The full experiments below evaluate the paper's claims.
 
-On the hosted machine, the quick check uses **NUMA 3, CPUs 88–91** and a separate `ae/results/checks/quick-check-<timestamp>/` directory. It can run alongside one complete evaluation on another NUMA node. If the requested node is occupied by another AE measurement (for example, the full run's Replay stage on NUMA 3), it waits before measuring. Results backup/rotation remains exclusive. To explicitly select the quick-check placement, use:
+Quick checks write to a separate `ae/results/checks/quick-check-<timestamp>/` directory. The hosted entry runs evaluations and checks sequentially. CPU and memory binding comes from the shared `measurement` configuration and applies to every selected CPU experiment.
+
+To select a node for one run, set `AE_NUMA_NODE` and `AE_CPUS` in your shell to the desired node and CPU list, then pass both arguments:
 
 ```bash
-bash ae/run_test.sh --numa-node 3 --cpus 88-91
+bash ae/run_test.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-Both arguments must be supplied together; the CPUs must belong to that node. Memory admission checks and CPU-frequency restoration still apply. Concurrent runs share the host, so their recorded placement and overlap must be considered when interpreting performance.
+The CPUs must belong to that node. Memory admission checks and CPU-frequency restoration still apply.
 
-### Run the complete evaluation
+### Run bounded validation
 
 <a id="一键运行"></a>
 <a id="run-all"></a>
@@ -53,19 +55,35 @@ Both arguments must be supplied together; the CPUs must belong to that node. Mem
 bash ae/run_all.sh
 ```
 
-This command runs all CPU experiments in the [index](#experiments), then analyzes the results, plots them, and creates paper-comparison pages. Replay, CRIU, and Firecracker Diff use the same 44 instance IDs and execute each trajectory to completion. Other experiments retain their respective input sets. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+Sampled CPU experiments run in sequence with one shared NUMA placement. Runtime placement can be selected for the bounded run:
 
-To use the original complete baseline input sets (244 each for Replay/CRIU and 238 for Firecracker Diff), run:
+```bash
+bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+```
+
+This command visits the experiment groups in the [index](#experiments) sequentially, runs at most 10 complete jobs per group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. The cap covers all arms together: Figure 6(b) uses at most five inputs × two arms, and Figure 9 at most three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+
+To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
 ```bash
 bash ae/run_all.sh --baseline-inputs all
 ```
 
-`--baseline-inputs` also applies to individual experiments; its default is `44`.
+`--baseline-inputs` selects the input pool, not the sample size. Its default is `44`; the supplied `review.validation_max_jobs=10` cap still applies. `--limit 1` starts a pilot and may be increased within the cap after checking its result. No implicit `--max-events` truncation is added.
 
-When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful complete run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
+When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful sampled run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
-The latest complete run is written directly to `ae/results/`. Before a new complete run, the script copies the previous results to a timestamped directory under `/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae/`, verifies every file and its metadata, then clears the working directory. Insufficient backup space or active jobs stop the launch and leave the results in place. Quick checks and selected experiments use separate subdirectories; an explicit `--output` to a different directory is never overwritten. New runs record the actual source without requiring a release lock. See [troubleshooting](#troubleshooting) for resuming a run.
+Bounded validation writes to a new `ae/results/selected/` directory. Existing complete-run results remain in their own directories. The legacy full-run backup/rotation path is not used by the supplied bounded profile. Insufficient backup space or active jobs stop the launch and leave the results in place. Quick checks and selected experiments use separate subdirectories; an explicit `--output` to a different directory is never overwritten. New runs record the actual source without requiring a release lock. See [troubleshooting](#troubleshooting) for resuming a run.
+
+For a small VM repair while another NUMA node is occupied, use an explicitly isolated output and placement:
+
+```bash
+bash ae/run_all.sh --experiment figure-06-adaptive --limit 1 \
+  --isolated-validation --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS" \
+  --output "$PWD/ae/results/selected/figure06-pilot"
+```
+
+This opt-in mode is restricted to supported VM experiments, preserves the results-rotation barrier, and still takes an exclusive lease on the selected NUMA node. Shared Cube/E2B service experiments are excluded. Resume a sampled output with the same placement and a larger bounded `--limit` to verify and reuse completed jobs. All completed and failed raw records remain identifiable. Every entry locks its output before loading resume state: the same output and parent/child outputs cannot be written concurrently. The `checks/` subtree remains reserved for quick checks.
 
 ## 2. Experiment index and individual runs
 
@@ -77,7 +95,7 @@ The latest complete run is written directly to `ae/results/`. Before a new compl
 <a id="experiment-index"></a>
 <a id="individual-experiments"></a>
 
-The complete evaluation command includes the CPU and GPU entries below. To evaluate one claim, run its section directly; you do not need to run the entire suite first.
+The one-click command selects the CPU and GPU entries below within the configured per-group job cap. To evaluate one claim, run its section directly; you do not need to run the entire suite first.
 
 | Paper experiment | Evaluation question | Selection | Resources |
 | --- | --- | --- | --- |
@@ -99,7 +117,7 @@ Individual commands below share an output prefix. **Define it once in your curre
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full and selected experiments sequentially; the isolated quick check above is the supported concurrent exception. The drivers select their inputs; use `--limit` only for a smaller check.
+Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full evaluations, selected experiments and quick checks sequentially; all selected CPU experiments use the run-level NUMA placement. The drivers select their inputs; use `--limit` only for a smaller check.
 
 Each section keeps the evaluation goal, command, output, and interpretation together. The side-by-side images are **examples of the one-click script's output**, illustrating the generated figures. Use the comparison pages from your own run for evaluation.
 
@@ -446,3 +464,5 @@ Self-hosting requires Linux x86-64, KVM, a DeltaBox guest kernel and disks, work
 
 - [Experiment inputs and file manifests](ae/paper/README.md)
 - [Image builds and template preparation](ae/images/README.md)
+
+The Figure 8 Cube profile selects **N=1 and N=16**. Within the selected NUMA lease it creates private noswap RAM copies of Cube data and MySQL metadata, preserving database durability settings and verifying every copied file. It checks inherited bytes, checksum and token in every child, then restores services and storage. An unresolved resource or restoration failure retains the private environment with `RECOVERY_REQUIRED.json` for inspection. Setup and teardown are outside the official clone and verification timers. Before each guest command, the driver checks envd through a read-only request; the wait stays inside source preparation or child verification, shares the command deadline, and never replays a submitted command.
