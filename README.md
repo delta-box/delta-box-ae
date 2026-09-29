@@ -66,10 +66,10 @@ This command visits the experiment groups in the [index](#experiments) sequentia
 To run the same CPU validation without any GPU probing or measurements, use:
 
 ```bash
-bash ae/run_all_no_gpu.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+bash ae/run_all_no_gpu.sh
 ```
 
-This entry delegates to `run_all.sh --group cpu`: it preserves the shared configuration, sequential execution, job caps and reporting. It includes Figure 8(a), skips Figure 8(b) and the GPU-dependent Figure 8(c), and accepts the usual output/resume and placement options. Use `--help` for its supported options; experiment selection stays fixed to CPU.
+This entry delegates to the normal runner in two fixed lanes: NUMA0/CPU0–3 for DeltaBox, profiling, Figure 9 and correctness; NUMA1/CPU28–31 for baselines. Each lane processes input jobs sequentially, and both feed one combined report. Shared configuration and job caps are retained. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume` for a two-lane result directory. Placement overrides are rejected; `--help` lists supported options.
 
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 

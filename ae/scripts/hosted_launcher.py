@@ -265,6 +265,7 @@ def parse_arguments(argv):
     mode.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
+    parser.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA0 and NUMA1')
     parser.add_argument('--e2b-profile', choices=('paper-nested',), action=Once,
                         help='E2B-only documented nested reconstruction; complete original eight inputs')
     parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
@@ -285,6 +286,10 @@ def parse_arguments(argv):
     parser.add_argument('--numa-node', type=int, action=Once, help='NUMA node for this run; inherited by all selected CPU experiments')
     parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
+    if args.cpu_parallel and (args.group != ['cpu'] or args.experiment or args.all or args.quick_check
+            or args.numa_node is not None or args.cpus is not None or args.gpu_cases
+            or args.cube_profile or args.e2b_profile or args.isolated_validation or args.reuse_completed_from):
+        parser.error('--cpu-parallel requires --group cpu with fixed NUMA0/1 placement')
     if args.e2b_profile is not None:
         if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
@@ -426,8 +431,8 @@ def default_result(policy, args, *, trust=None):
 def command_line(policy, args, output):
     command = [str(policy['python']), '-I', str(policy['runtime_root'] / 'ae/scripts/run_review.py'),
                '--config', str(policy['config'])]
-    for key, flag in (('all', '--all'), ('quick_check', '--test'), ('list', '--list'), ('isolated_validation', '--isolated-validation')):
-        if getattr(args, key):
+    for key, flag in (('all', '--all'), ('quick_check', '--test'), ('list', '--list'), ('isolated_validation', '--isolated-validation'), ('cpu_parallel', '--cpu-parallel')):
+        if getattr(args, key, False):
             command.append(flag)
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:

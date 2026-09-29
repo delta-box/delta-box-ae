@@ -64,10 +64,10 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 若要运行相同的 CPU 验证，并完全跳过 GPU 探测和测量，使用：
 
 ```bash
-bash ae/run_all_no_gpu.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+bash ae/run_all_no_gpu.sh
 ```
 
-此入口调用原来的 `run_all.sh --group cpu`，沿用共享配置、串行执行、作业上限和报告流程。保留 Figure 8(a)，跳过 Figure 8(b) 及依赖 GPU 数据的 Figure 8(c)。输出、续跑和运行绑定参数照常传入；支持的参数见 `--help`，实验范围固定为 CPU。
+此入口复用原运行器，固定两路并发：NUMA0/CPU0–3 执行 DeltaBox、状态剖析、Figure 9 和正确性检查；NUMA1/CPU28–31 执行 baseline。每路内部按输入串行处理，最后统一生成报告。沿用共享配置和作业上限，保留 Figure 8(a)，排除 GPU 探测及 Figure 8(b)(c)。可用 `--output` 或 `--resume` 指定两路结果目录；不接受运行绑定覆盖，支持参数见 `--help`。
 
 如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
 
