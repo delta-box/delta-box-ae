@@ -96,6 +96,10 @@ WORKER_INDEX_STATE: dict = {}
 WORKER_ROOT = os.environ.get("AGENT_WORKER_ROOT", "/testbed")
 WORKER_PYTHON = os.environ.get("AGENT_WORKER_PYTHON", "python3")
 WORKER_TEST_RUNNER = os.environ.get("AGENT_WORKER_TEST_RUNNER", "pytest")
+# Published Figure 7 replay resolved `python3` to this interpreter. It has
+# pytest and does not have asgiref, so `pytest -q tests/` fails during
+# collection and that wall time is part of the published floor.
+PAPER_TESTBED_BIN = "/opt/miniconda3/envs/testbed/bin"
 WORKER_CMD_TIMEOUT = float(os.environ.get("AGENT_WORKER_CMD_TIMEOUT", "30"))
 WORKER_MAX_OUTPUT = int(os.environ.get("AGENT_WORKER_MAX_OUTPUT", "65536"))
 WORKER_INDEX_MAX_FILE_BYTES = int(os.environ.get(
@@ -714,6 +718,20 @@ def _worker_index_find_symbol(name: str, symbol_kind: str | None,
     }
 
 
+def _paper_directory_pytest_command(op: dict) -> str:
+    files = [str(name) for name in (op.get("test_files") or [])]
+    return shlex.join(["python3", "-m", "pytest", "-q", *files])
+
+
+def _paper_testbed_env() -> dict:
+    env = os.environ.copy()
+    env["PATH"] = PAPER_TESTBED_BIN + os.pathsep + env.get("PATH", "")
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env["PYTHONNOUSERSITE"] = "1"
+    return env
+
+
 def _worker_shell_command_for_tests(op: dict) -> str:
     test_files = op.get("test_files") or []
     if not isinstance(test_files, list):
@@ -935,14 +953,38 @@ def _worker_exec_one(op: dict, root: str = WORKER_ROOT) -> dict:
                     "stderr": _short_text(cp.stderr),
                 })
         elif typ == "run_tests" and (op.get("expected_outcome") or {}).get("kind") == "test_directories":
-            # Moatless rejects directory-only selections before calling a test
-            # subprocess. Repeat that filesystem validation on the restored tree.
+            # The published replay executed `python3 -m pytest -q <directory>`
+            # with the testbed interpreter and included that wall time in the
+            # floor. Confirm the recorded paths are still directories, then
+            # run that command. A tree that no longer matches does not start pytest.
             matched = _matches_recorded_test_directories(op, root)
-            out.update({"ok": matched, "expected_failure_matched": matched,
-                        "err": None if matched else "expected_outcome_mismatch",
-                        "test_passed": False, "test_outcome": "invalid-test-selection",
-                        "test_subprocess_started": False, "rc": None,
-                        "stdout": "", "stderr": op["expected_outcome"].get("recorded_message", "")})
+            if not matched:
+                out.update({"ok": False, "expected_failure_matched": False,
+                            "err": "expected_outcome_mismatch",
+                            "test_passed": False, "test_outcome": "invalid-test-selection",
+                            "test_subprocess_started": False, "rc": None,
+                            "stdout": "", "stderr": op["expected_outcome"].get("recorded_message", "")})
+            else:
+                cmd = _paper_directory_pytest_command(op)
+                timeout = float(op.get("timeout", 180.0))
+                out.update({"command": cmd, "timeout": timeout, "test_subprocess_started": True})
+                cp = subprocess.run(
+                    cmd, shell=True, cwd=root, text=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    timeout=timeout, executable="/bin/bash",
+                    env=_paper_testbed_env())
+                out.update({
+                    "ok": True,
+                    "expected_failure_matched": True,
+                    "err": None,
+                    "test_passed": cp.returncode == 0,
+                    "test_outcome": "completed",
+                    "test_subprocess_started": True,
+                    "command": cmd,
+                    "rc": cp.returncode,
+                    "stdout": _short_text(cp.stdout),
+                    "stderr": _short_text(cp.stderr),
+                })
         elif typ == "run_tests":
             cmd = op.get("command") or _worker_shell_command_for_tests(op)
             timeout = float(op.get("timeout", WORKER_CMD_TIMEOUT))
