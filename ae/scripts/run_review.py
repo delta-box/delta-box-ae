@@ -788,9 +788,9 @@ class Review:
         identity['trace_workers'] = workers
         plan['workers'] = workers
         plan['measurement_identity'] = identity
-        if name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube') and config.get('baseline_storage') == 'tmpfs':
+        if (name == 'figure-02-memory' or (name.startswith('table-02-') and name not in ('table-02-deltabox', 'table-02-cube'))) and config.get('baseline_storage') == 'tmpfs':
             if not pinned:
-                raise ValueError('Memory Table 2 measurement requires NUMA/frequency pinning')
+                raise ValueError('Memory-backed measurement requires NUMA/frequency pinning')
             plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
         from ae.scripts.cube_control_context import metadata_enabled
         plan['cube_managed_metadata'] = name == 'figure-08-cube' and metadata_enabled(config)

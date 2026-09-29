@@ -51,7 +51,7 @@ class ProfileRunnerAuditTests(unittest.TestCase):
         pinned.write_text('# profile metrics\n')
 
     def run_profile(self, *, policy='audit', mismatches=1, timeout=False,
-                    stats_interrupt=False, audit_failure=False):
+                    stats_interrupt=False, audit_failure=False, invalid_context=False, panel='memory'):
         events = []
         state = stats(policy, mismatches)
         self.config.write_text(json.dumps({'moatless_venv': str(self.root / 'venv'),
@@ -99,10 +99,23 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             kind = 'mock' if 'mock_llm_server.py' in command[1] else 'worker'
             events.append('start_' + kind)
             if kind == 'worker':
+                if panel == 'memory':
+                    self.assertIn('--driver', command)
+                    write_json(self.output / 'worker_execution.json', {'status':'complete','returncode':0,
+                        'pid':702,'main_native_tid':702,'worker_native_tid':702 if invalid_context else 704})
+                else:self.assertNotIn('--driver', command)
                 self.assertIn('--defer-audit', command)
                 self.assertIn('--skip-mock-spawn', command)
+                self.assertIn('--recorded-boundary', command)
+                self.assertEqual(command[command.index('--replay-contract-json') + 1],
+                                 str(self.output / 'replay_contract.json'))
+                write_json(self.output / 'replay_contract.json', {
+                    'status':'complete', 'structure_and_actions_verified':True,
+                    'scope':'all recorded expansions', 'configured_max_iterations':30,
+                    'expected':{'node_count':2, 'nodes':[{'node_id':0,'parent_id':None},
+                                                       {'node_id':1,'parent_id':0}]}})
                 (self.output / 'step_metrics.jsonl').write_text(json.dumps(
-                    dict(soft_dirty_bytes=4096, action_write_bytes=12)) + '\n')
+                    dict(node_id=1, parent_node_id=0, soft_dirty_bytes=4096, action_write_bytes=12)) + '\n')
             return Process(kind)
 
         def http(port, path):
@@ -120,8 +133,8 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             self.assertIn('wait_worker', events)
             self.assertEqual(events.count('sample'), 1)
             events.append('flush')
-            if timeout or stats_interrupt:
-                self.assertIsInstance(primary_error, TimeoutError if timeout else KeyboardInterrupt)
+            if timeout or stats_interrupt or invalid_context:
+                self.assertIsInstance(primary_error, TimeoutError if timeout else ValueError if invalid_context else KeyboardInterrupt)
             else:
                 self.assertIsNone(primary_error)
             exported = report(state)
@@ -135,7 +148,7 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             return [(pid, 1024)]
 
         argv = ['profile.py', '--config', str(self.config), '--instance', self.instance,
-                '--trace', str(self.trace), '--panel', 'memory', '--out', str(self.output), '--timeout', '1']
+                '--trace', str(self.trace), '--panel', panel, '--out', str(self.output), '--timeout', '1']
         with ExitStack() as stack:
             for name, value in (('stage_payload', stage), ('stage_local_dependencies', dependencies),
                                 ('http', http), ('flush_audit', flush), ('sample', sample)):
@@ -143,6 +156,7 @@ class ProfileRunnerAuditTests(unittest.TestCase):
             stack.enter_context(patch.object(profile, 'AE_ROOT', self.ae))
             stack.enter_context(patch.object(profile, 'host_state', return_value={}))
             stack.enter_context(patch.object(profile, 'repository_state', return_value={}))
+            stack.enter_context(patch.object(profile, 'from_environment', return_value={}))
             stack.enter_context(patch.object(profile.subprocess, 'Popen', side_effect=popen))
             stack.enter_context(patch.object(profile.subprocess, 'check_output', side_effect=['a' * 40, '12 repo']))
             stack.enter_context(patch.object(profile.os, 'killpg', side_effect=lambda pid, sig: events.append('kill_' + str(pid))))
@@ -169,6 +183,17 @@ class ProfileRunnerAuditTests(unittest.TestCase):
         self.assertIsNone(caught)
         self.assertEqual(manifest['status'], 'ok')
         self.assertEqual(manifest['replay_audit']['message_equivalence'], 'different')
+
+    def test_filesystem_profile_keeps_its_existing_entry(self):
+        manifest, caught = self.run_profile(panel='filesystem')
+        self.assertIsNone(caught)
+        self.assertEqual(manifest['status'],'ok')
+        self.assertNotIn('profile_worker_entry',manifest)
+
+    def test_main_thread_cannot_be_reported_as_native_worker(self):
+        manifest, caught = self.run_profile(invalid_context=True)
+        self.assertIsInstance(caught, ValueError)
+        self.assertEqual(manifest['status'], 'failed')
 
     def test_strict_policy_reaches_parent_client_and_rejects_mismatch(self):
         manifest, caught = self.run_profile(policy='strict')
