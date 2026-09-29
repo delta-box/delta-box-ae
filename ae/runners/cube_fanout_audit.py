@@ -33,6 +33,15 @@ def main():
         ap.error('--out is required for measurement')
     if not args.self_check:
         args.out.parent.mkdir(parents=True, exist_ok=True)
+    if __package__:
+        from .cube_client_context import reuse_default_ssl_contexts
+    else:
+        from cube_client_context import reuse_default_ssl_contexts
+    with reuse_default_ssl_contexts() as client_context:
+        return run_benchmark(args, ap, client_context)
+
+
+def run_benchmark(args, ap, client_context):
     spec = importlib.util.spec_from_file_location('official_cube_probe_driver', DRIVER)
     driver = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = driver
@@ -122,7 +131,8 @@ def main():
     result = {'host_cpus': sorted(os.sched_getaffinity(0)),
               'host_status': [s for s in Path('/proc/self/status').read_text().splitlines()
                               if s.startswith(('Cpus_allowed_list:', 'Mems_allowed_list:'))],
-              'expected_bytes': expected_bytes, 'expected_checksum': expected_checksum}
+              'expected_bytes': expected_bytes, 'expected_checksum': expected_checksum,
+              'client_context_policy': client_context}
     result['rows'] = []
     try:
         for n in forks:
