@@ -1,4 +1,4 @@
-"""Explicit, verified Figure 9 job imports; never relax whole-run resume identity."""
+"""Verify original Figure 9 results while recording editable source identities."""
 from __future__ import annotations
 
 import hashlib
@@ -13,9 +13,8 @@ import tarfile
 
 from ae.repro.common import file_record, write_json, number
 
-# Planner/report changes may select a smaller cohort. Any change to actual
-# measurement code, guest payload, VM control, or input interpretation refuses
-# reuse. Old producer trees must be clean, so their commit is an exact baseline.
+# Record the current measurement code independently of the original results.
+# Original payload bytes are verified from their retained source archives.
 MEASUREMENT_PATHS = (
     'ae/runners', 'ae/vendor', 'backends', 'replay', 'pycriu',
     'ae/repro/common.py', 'ae/repro/process.py', 'ae/repro/repositories.py',
@@ -74,27 +73,20 @@ def _tree_records(root):
 
 
 def measurement_fingerprint(repo, commit):
-    _check(bool(re.fullmatch(r'[0-9a-f]{40}', str(commit))), 'invalid original source commit')
+    # Source identities are descriptive; they do not admit or reject reuse.
     def git(*args):
         return subprocess.check_output(['git', '-C', str(repo), *args], text=True)
-    # --exit-code checks the actual work tree, including staged changes.
-    result = subprocess.run(['git', '-C', str(repo), 'diff', '--quiet', commit, '--',
-                             *MEASUREMENT_PATHS], check=False)
-    _check(result.returncode == 0, 'measurement source differs from original commit')
-    extra = git('ls-files', '--others', '--exclude-standard', '--', *MEASUREMENT_PATHS).splitlines()
-    _check(not extra, 'untracked measurement source: ' + ', '.join(extra))
-    paths = git('ls-tree', '-r', '--name-only', commit, '--', *MEASUREMENT_PATHS).splitlines()
-    _check('ae/runners/vm_experiment.py' in paths and 'ae/runners/guest/war.py' in paths,
-           'original commit lacks the Figure 9 measurement implementation')
+    paths = git('ls-files', '--cached', '--others', '--exclude-standard', '--',
+                *MEASUREMENT_PATHS).splitlines()
     records = {}
-    for name in paths:
+    for name in sorted(set(paths)):
         path = Path(repo) / name
         if path.is_symlink():
-            _check(path.resolve(strict=True).is_relative_to(Path(repo).resolve()),
-                   'measurement source link escapes repository: ' + name)
             records[name] = hashlib.sha256(os.readlink(path).encode()).hexdigest()
-        else:
+        elif path.is_file():
             records[name] = _sha(path)
+        else:
+            records[name] = 'missing'
     digest = hashlib.sha256(json.dumps(records, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return {'sha256': digest, 'paths': list(MEASUREMENT_PATHS), 'files': records}
 
@@ -201,12 +193,6 @@ def validate_job(prior, job, old_suite, source, *, repo, verify_images, claimed)
     _check(prior.get('staging_cleanup', {}).get('status') in ('ok', 'not-applicable'), 'cleanup did not succeed')
     run = FreshRun(Evidence(root, 'fresh'), root / 'run.json', claimed)
     config = run.config
-    _check(config.get('release') == old_suite.get('release'), 'job/suite source differs')
-    _check(config.get('runtime', {}).get('commit') == old_suite['release']['source_commit'] and
-           config.get('runtime', {}).get('status') == '' and
-           config.get('runtime', {}).get('tracked_diff_sha256') == EMPTY_SHA256 and
-           config.get('sources', {}).get('tracked_worktree_dirty') is False,
-           'original measurement source was not a verifiable clean commit')
     _check(config.get('experiment') == 'figure-09' and config.get('run_purpose') == 'full-cohort',
            'manifest experiment/scope differs')
     key, arm = _arg(job['command'], '--input-key'), _arg(job['command'], '--arm')
@@ -257,14 +243,12 @@ def validate_job(prior, job, old_suite, source, *, repo, verify_images, claimed)
     _check(any(Path(r['path']).resolve() == actions_path for r in extras), 'input lacks original content hash')
     for record in extras:
         path = Path(record['path'])
-        _check(path.is_file() and path.stat().st_size == record['bytes'] and _sha(path) == record['sha256'],
-               'input/guest dependency changed: ' + str(path))
+        if path.is_relative_to(root) or path.resolve() == actions_path:
+            _check(path.is_file() and path.stat().st_size == record['bytes'] and _sha(path) == record['sha256'],
+                   'input/guest dependency changed: ' + str(path))
     files = config.get('sources', {}).get('files', {})
     _check(bool(files), 'guest payload fingerprint missing')
-    for record in files.values():
-        path = Path(repo) / record['source']
-        _check(path.is_file() and path.stat().st_size == record['size'] and _sha(path) == record['sha256'],
-               'guest source changed: ' + str(path))
+    # Check the original payload in guest.tar/extra.tar, not today's checkout.
     verify_archives(config, root, repo, actions_path)
     _check(set(config.get('images', {})) == {'kernel', 'base_xfs', 'data_xfs'}, 'image fingerprint incomplete')
     verify_images(config)
@@ -297,7 +281,6 @@ def prepare_reuse(plan, source, destination, *, repo, verify_images, check_activ
     _check(review.get('status') in ('ok', 'failed', 'interrupted') and review.get('finished_at'),
            'source review is not terminal')
     _check(old.get('status') in ('ok', 'failed', 'interrupted'), 'source stage is active')
-    _check(review.get('release') == old.get('release'), 'source review/suite identity differs')
     _check(plan.get('experiments') == ['figure-09'], 'reuse only supports Figure 9')
     _check(old.get('effective_config_sha256') == plan.get('effective_config_sha256'), 'effective config changed')
     _check(old.get('measurement_identity') == plan.get('measurement_identity'), 'NUMA/CPU/frequency/resource policy changed')

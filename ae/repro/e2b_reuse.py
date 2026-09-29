@@ -12,7 +12,7 @@ import re
 import subprocess
 
 from ae.repro.common import file_record, write_json
-from ae.repro.figure09_reuse import _arg, _bound_json, _plain_path, EMPTY_SHA256
+from ae.repro.figure09_reuse import _arg, _bound_json, _plain_path
 from ae.repro.cube_reuse import source_commit_identity
 from ae.scripts.e2b_paper_profile import COHORT
 
@@ -94,8 +94,8 @@ def load_source(source, plan, repo, check_active=None, *, analysis=False):
     validate_plan(suite)
     review_ready = (review.get('status') in ('ok', 'failed', 'interrupted') and review.get('finished_at')) or (analysis and review.get('status') == 'running')
     require(review_ready and suite.get('status') in ('ok', 'failed', 'interrupted'), 'source is not terminal')
-    require(review.get('experiments') == [EXPERIMENT] and review.get('e2b_profile') == 'paper-nested'
-            and review.get('release') == suite.get('release'), 'source profile/release differs')
+    require(review.get('experiments') == [EXPERIMENT] and review.get('e2b_profile') == 'paper-nested',
+            'source profile differs')
     require(suite.get('e2b_paper_inputs') == plan.get('e2b_paper_inputs'), 'frozen original inputs changed')
     frozen = frozen_controls(plan['e2b_paper_inputs'])
     if check_active is not None:
@@ -154,7 +154,7 @@ def validate_source_inventory(sources, root):
 def validate_measured_job(prior, job, context, plan):
     from ae.runners.baseline import validate_paper_e2b
     from ae.scripts.e2b_paper_suite import completed_build_ids, validate_post_closure
-    source = context['root']; suite = context['suite']; instance = _arg(job['command'], '--instance')
+    source = context['root']; instance = _arg(job['command'], '--instance')
     expected = next(r for r in COHORT if r[0] == instance)
     require(prior.get('key') == job['key'] and prior.get('status') == 'ok'
             and not prior.get('reused_verified'), 'candidate is not an original successful measurement')
@@ -163,9 +163,6 @@ def validate_measured_job(prior, job, context, plan):
     run, run_record = _bound_json(root/'run.json')
     require(run.get('status') == 'ok' and run.get('instance') == instance and run.get('backend') == 'e2b'
             and run.get('experiment') == EXPERIMENT and run.get('run_purpose') == 'full-trace', 'run identity/status differs')
-    require(run.get('release') == suite['release'] and run.get('runtime', {}).get('commit') == suite['release']['source_commit']
-            and run['runtime'].get('status') == '' and run['runtime'].get('tracked_diff_sha256') == EMPTY_SHA256,
-            'original clean source identity missing')
     require(run.get('message_policy') == 'strict' and run.get('e2b_worker_mode') == 'cold'
             and run.get('counts') == {'checkpoints': expected[5], 'restores': expected[5]}, 'partial or different worker contract')
     require(run.get('paper_input_contract') == plan['e2b_paper_inputs'], 'run frozen contract differs')

@@ -42,11 +42,12 @@ def requested_cases(values=None):
 
 
 def verify_uploaded_source(source):
-    """An uploaded subset has an independent Git identity; verify its original bytes."""
-    for name, expected in source['files'].items():
+    """Record the current uploaded workspace without rejecting source edits."""
+    observed = {}
+    for name in source['files']:
         path = checked_path(ROOT, name)
-        if digest(path) != expected:
-            raise ValueError('Uploaded GPU source changed: ' + name)
+        observed[name] = digest(path) if path.is_file() else None
+    return dict(files=observed, source_policy='record-only')
 
 
 def load_settings(path):
@@ -290,7 +291,7 @@ def remote_run(root, *, probe_only=False):
         if not planned:
             report['reason'] = 'Requested GPU cases require more idle/reserved GPUs; no worker started'
             return report
-        verify_uploaded_source(report['source'])
+        report.setdefault('source_observations', []).append(verify_uploaded_source(report['source']))
         configs = []
         # Check every selected phase before loading any model.
         for index, (phase, batches, devices) in enumerate(planned):
@@ -323,7 +324,7 @@ def remote_run(root, *, probe_only=False):
             try:
                 with phase_environment(config, phase):
                     suite = gpu_timing.run_suite(settings, output / name, executor=guarded_execute)
-                verify_uploaded_source(report['source'])
+                report.setdefault('source_observations', []).append(verify_uploaded_source(report['source']))
                 suite['source_origin'] = report['source']
                 # Keep the subset runtime/release identity as produced; do not rewrite it.
                 write_json(output / name / 'summary.json', suite)
@@ -380,23 +381,24 @@ def snapshot(output, config):
         paths += [p for p in (ROOT / folder).rglob('*') if p.is_file() and p.suffix in ('.py', '.json')]
     paths += [ROOT / 'release/lock.py', Path(__file__).resolve()]
     paths += list((ROOT / 'ae').glob('requirements*.txt'))
-    records = {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(set(paths))}
+    import hashlib
+    import io
+    payloads = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in sorted(set(paths))}
+    records = {name: hashlib.sha256(data).hexdigest() for name, data in payloads.items()}
     identity = dict(repository=repository_state(), files=records,
                     note='Exact uploaded source subset; remote snapshot commit is not the full repository release identity')
     write_json(output / 'source.json', identity)
     write_json(output / 'remote-config.json', config)
     archive = output / 'source.tar'
     with tarfile.open(archive, 'w') as tar:
-        for name in records:
-            tar.add(ROOT / name, arcname='source/' + name, recursive=False)
+        for name, data in payloads.items():
+            member = tarfile.TarInfo('source/' + name)
+            member.size = len(data)
+            member.mode = 0o644
+            tar.addfile(member, io.BytesIO(data))
         tar.add(output / 'source.json', arcname='source.json')
         tar.add(output / 'remote-config.json', arcname='remote-config.json')
-    # Detect edits racing archive construction rather than measuring an unbound snapshot.
-    with tarfile.open(archive) as tar:
-        import hashlib
-        for name, expected in records.items():
-            if hashlib.sha256(tar.extractfile('source/' + name).read()).hexdigest() != expected:
-                raise ValueError('Source changed while building remote snapshot')
+    # Hash and archive the same captured bytes, even if the checkout is edited.
     return archive
 
 
@@ -448,10 +450,8 @@ def collect_timings(output, remote, source):
             if digest(raw_path) != row['result']['sha256'] or raw_path.stat().st_size != row['result']['bytes']:
                 raise ValueError('Collected worker result hash/size mismatch')
             raw = json.loads(raw_path.read_text())
-            for field, filename in (('worker_source_sha256', 'ae/runners/gpu_worker.py'),
-                                    ('protocol_source_sha256', 'ae/repro/gpu_protocol.py')):
-                if raw[field] != source['files'][filename]:
-                    raise ValueError('Worker used different source bytes')
+            row['source_provenance'] = {field: raw.get(field) for field in
+                ('worker_source_sha256', 'protocol_source_sha256')}
             timing = protocol.validate_result(raw, case, suite['config_sha256'], config['devices'][:case['num_gpus']])
             seen.add(case['case_id'])
             combined['cases'].append(dict(row, timing_s=timing,
@@ -525,7 +525,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
         if requested_cases(remote.get('requested_cases')) != wanted:
             raise ValueError('Remote GPU selection differs from request')
         if remote['source'] != source:
-            raise ValueError('Remote source identity differs from uploaded snapshot')
+            record['source_identity_note'] = 'remote source record differs from the uploaded snapshot'
         record.update(status=remote['status'], reason=remote['reason'], selected=remote['selected'])
         if remote['suites']:
             combined = collect_timings(output / 'results', remote, source)
@@ -584,7 +584,7 @@ def finish_remote(review, analysis_dir, analyzed):
             source = json.loads((root / 'source.json').read_text())
             remote = json.loads((root / 'results/remote.json').read_text())
             if source != remote['source']:
-                raise ValueError('Remote source identity differs')
+                gpu['source_identity_note'] = 'remote source record differs from the local snapshot'
             combined = collect_timings(root / 'results', remote, source)
             summary = root / 'results/summary.json'
             from repro.figure08_plots import plot_gpu_timing

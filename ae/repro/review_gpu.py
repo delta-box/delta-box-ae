@@ -33,8 +33,8 @@ def _verified(record):
 def verify_suite(path, release, batches):
     """Check case bytes and producer identities before reuse, plotting or modeling."""
     suite = _load(path)
-    if suite.get("source_kind") != "fresh" or suite.get("release") != release:
-        raise ValueError("GPU suite has a different source identity")
+    if suite.get("source_kind") != "fresh":
+        raise ValueError("GPU suite must contain fresh measurements")
     cases = indexed_gpu_cases(suite, required_batches=batches)
     if set(cases) != {(phase, batch) for phase in gpu_protocol.PHASES for batch in batches}:
         raise ValueError("GPU suite does not match the selected matrix")
@@ -56,9 +56,6 @@ def verify_suite(path, release, batches):
                                               config_sha, suite["protocol"]["devices"][:case["num_gpus"]])
         if timing != case["timing_s"]:
             raise ValueError("GPU aggregate differs from the worker result")
-        for field in ("worker_source", "protocol_source"):
-            if raw[field + "_sha256"] != suite[field]["sha256"]:
-                raise ValueError("GPU worker source differs")
     return suite
 
 

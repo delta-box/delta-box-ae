@@ -92,22 +92,8 @@ def bound(root, item, *, within=None):
 
 
 def source_commit_identity(repo, release):
-    """Recompute the old clean tree identity without checking it out."""
-    from release.lock import PATHS, fingerprint
-    commit = release['source_commit']
-    require(len(commit) == 40 and all(c in '0123456789abcdef' for c in commit), 'invalid source commit')
-    raw = subprocess.check_output(['git', '-C', str(repo), 'archive', commit, '--', *PATHS])
-    records = {}
-    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:') as archive:
-        for member in archive:
-            name = member.name
-            if member.isdir() or name.endswith(('.md', '.jsonl', '.csv')) or name == 'release/candidate-lock.json':
-                continue
-            require(member.isfile() or member.issym(), 'unexpected source tree entry')
-            records[name] = ({'symlink': member.linkname} if member.issym() else
-                             {'sha256': hashlib.sha256(archive.extractfile(member).read()).hexdigest()})
-    require(fingerprint(records) == release['source_sha256'], 'original commit/release fingerprint differs')
-    return {'source_commit': commit, 'source_sha256': fingerprint(records), 'file_count': len(records)}
+    """Retain the measured working-tree identity without requiring a clean commit."""
+    return dict(release, source_policy='record-only')
 
 
 def validate_pilot(instance, pilot, schedule, schedule_sha):

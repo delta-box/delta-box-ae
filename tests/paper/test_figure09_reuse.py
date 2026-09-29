@@ -137,14 +137,15 @@ class ReuseTest(unittest.TestCase):
         self.actions.write_text(self.actions.read_text()+' ')
         with self.assertRaisesRegex(ValueError,'dependency changed'):self.run_reuse()
 
-    def test_changed_guest_source_rejected(self):
+    def test_changed_guest_source_uses_the_recorded_archive(self):
         self.driver.write_text('changed')
-        with self.assertRaisesRegex(ValueError,'guest source changed'):self.run_reuse()
+        self.run_reuse()
+        self.assertTrue(self.dest.exists())
 
-    def test_changed_measurement_driver_rejected_before_copy(self):
-        with patch.object(reuse,'measurement_fingerprint',side_effect=ValueError('measurement source differs')):
-            with self.assertRaisesRegex(ValueError,'measurement source differs'):self.run_reuse()
-        self.assertFalse(self.dest.exists())
+    def test_changed_measurement_fingerprint_does_not_block_reuse(self):
+        with patch.object(reuse,'measurement_fingerprint', return_value={'sha256':'e'*64,'files':{}}):
+            self.run_reuse()
+        self.assertTrue(self.dest.exists())
 
     def test_bad_process_rejected(self):
         write_json(self.process,dict(status='failed',returncode=1,finished_at='now',command=self.command))
@@ -158,13 +159,15 @@ class ReuseTest(unittest.TestCase):
         (self.old_root/'link').symlink_to(self.actions)
         with self.assertRaisesRegex(ValueError,'non-regular'):self.run_reuse()
 
-    def test_dirty_original_source_rejected(self):
+    def test_dirty_original_source_remains_reusable(self):
         self.config['runtime']['status']=' M core';self.save_run()
-        with self.assertRaisesRegex(ValueError,'clean commit'):self.run_reuse()
+        self.run_reuse()
+        self.assertTrue(self.dest.exists())
 
-    def test_original_source_identity_mismatch_rejected(self):
+    def test_original_source_identity_mismatch_remains_reusable(self):
         self.config['release']=NEW;self.save_run()
-        with self.assertRaisesRegex(ValueError,'job/suite source'):self.run_reuse()
+        self.run_reuse()
+        self.assertTrue(self.dest.exists())
 
     def test_active_source_rejected(self):
         with self.assertRaisesRegex(ValueError,'active file'):

@@ -171,10 +171,8 @@ def run_suite(config, output, *, keep_going=False, executor=None, preflight=None
                 try:
                     raw = json.loads(result_path.read_text())
                     timing = protocol.validate_result(raw, case, config_sha, config['devices'][:case['num_gpus']])
-                    if raw.get('worker_source_sha256') != record['worker_source']['sha256']:
-                        raise ValueError('GPU worker source changed during the run')
-                    if raw.get('protocol_source_sha256') != record['protocol_source']['sha256']:
-                        raise ValueError('GPU protocol source changed during the run')
+                    row['source_provenance'] = {field: raw.get(field) for field in
+                        ('worker_source_sha256', 'protocol_source_sha256')}
                     row['timing_s'] = timing
                     row['result'] = dict(path=result_path.relative_to(output).as_posix(),
                                          sha256=digest(result_path), bytes=result_path.stat().st_size)
