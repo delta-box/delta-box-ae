@@ -740,11 +740,21 @@ class Review:
                 raise ValueError('Resume Cube profile differs; start a new output')
             if previous.get('measurement_request') != self.record['measurement_request']:
                 raise ValueError('Resume NUMA/frequency policy differs; start a new output')
-            if previous.get('experiments') != self.experiments or previous.get('run_purpose') != self.record['run_purpose']:
+            if previous.get('run_purpose') != self.record['run_purpose']:
                 raise ValueError('Resume experiment selection/purpose differs; start a new output')
+            if previous.get('experiments') != self.experiments:
+                from repro.cpu_work_queue import permits_scope_expansion
+                if (getattr(args, 'cpu_work_queue', None) is None
+                        or not permits_scope_expansion(previous.get('experiments'), self.experiments, CPU_EXPERIMENTS)):
+                    raise ValueError('Resume experiment selection/purpose differs; start a new output')
+                self.record['queue_scope_expansion'] = dict(previous=previous['experiments'], candidates=self.experiments)
             self.attempt = f"attempt-{int(previous.get('attempt_number', 1)) + 1:03d}"
             self.record['resumed_review'] = file_record(output / 'review.json')
         self.record.update(attempt=self.attempt, attempt_number=int(self.attempt.split('-')[-1]))
+        self.work_queue = getattr(args, 'cpu_work_queue', None)
+        if self.work_queue is not None:
+            self.record['coverage'] = self.work_queue.completed_rows()
+            self.record['cpu_work_queue'] = str(self.work_queue.path)
         if args.analyze_existing:
             self.record['analyzer'] = working_source()
             self.record.update(analysis_only=True, run_purpose='analysis-only', input=str(args.analyze_existing.resolve()))
@@ -1299,7 +1309,8 @@ class Review:
                         return 1
                     if not self.step('verify', [self.python, str(REPO / 'ae/scripts/paper_data.py'), 'verify']):
                         return 1
-                for name in self.experiments:
+                work = self.work_queue.work() if self.work_queue is not None else self.experiments
+                for name in work:
                     try:
                         if name.endswith('-cube'):
                             cube_contexts = ExitStack()
@@ -1330,8 +1341,11 @@ class Review:
                         self.save()
                         print(f'[{name}] failed: {error}', flush=True)
                     row = next((row for row in self.record['coverage'] if row['experiment'] == name), {})
+                    if self.work_queue is not None:
+                        self.work_queue.finish(name, row)
                     if not row.get('optional') and (row.get('status') == 'failed' or (not self.available and row.get('status') in ('partial', 'unavailable'))):
-                        for remaining in self.experiments[self.experiments.index(name) + 1:]:
+                        remaining_names = [] if self.work_queue is not None else self.experiments[self.experiments.index(name) + 1:]
+                        for remaining in remaining_names:
                             self.record['coverage'].append(dict(experiment=remaining, status='not-run',
                                 reasons=['Stopped after failed experiment ' + name]))
                         self.save()

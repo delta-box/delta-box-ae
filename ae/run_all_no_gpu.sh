@@ -10,9 +10,10 @@ while (($#)); do
 Usage: bash ae/run_all_no_gpu.sh [options]
 
 Run the normal bounded CPU experiments in two concurrent lanes:
-  NUMA1, CPU28-31: DeltaBox, profiling, Figure 9 and correctness
-  NUMA2, CPU48-51: baselines, including Cube and E2B
-Input jobs within each lane run sequentially. Results feed one combined report.
+  NUMA1, CPU28-31: claims the next pending experiment
+  NUMA2, CPU48-51: claims the next pending experiment
+Idle nodes claim the next experiment; input jobs within each group stay serial.
+Cube/E2B service changes never overlap. Results feed one combined report.
 Figure 8(a) remains included. GPU probing and Figure 8(b)(c) are skipped.
 
 Options forwarded unchanged to the normal entry:
