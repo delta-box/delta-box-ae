@@ -138,11 +138,18 @@ def run(args, parser, config, lease_fd, review):
     inherited_lease(lease_fd, REPO / 'ae/work/.results.lock')
     with review.output_tree_lock(REPO / 'ae/work', root, output):
         runner = review.Review(args, config, output)
-        assignments = partition(review.CPU_EXPERIMENTS)
-        policy = dict(mode='cpu-two-lane', lanes={str(n): {'node': n, 'cpus': PLACEMENT[n], 'experiments': exps}
+        assignments = {node: list(review.CPU_EXPERIMENTS) for node in PLACEMENT}
+        policy = dict(mode='cpu-shared-queue', lanes={str(n): {'node': n, 'cpus': PLACEMENT[n], 'experiments': exps}
                                                 for n, exps in assignments.items()}, trace_workers_per_lane=1)
         if args.resume and runner.previous_record.get('concurrency_policy') != policy:
-            raise ValueError('Resume requires the same two-lane layout')
+            legacy = runner.previous_record.get('concurrency_policy', {})
+            old_lanes = legacy.get('lanes', {})
+            if (legacy.get('mode') != 'cpu-two-lane' or set(old_lanes) != {str(n) for n in PLACEMENT}
+                    or any(old_lanes[str(n)].get('node') != n or old_lanes[str(n)].get('cpus') != cpus
+                           or old_lanes[str(n)].get('experiments') != partition(review.CPU_EXPERIMENTS)[n]
+                           for n, cpus in PLACEMENT.items())):
+                raise ValueError('Resume requires unchanged NUMA1/2 binding')
+            runner.record['queue_migration'] = dict(previous_policy=legacy, source_review=runner.record['resumed_review'])
         runner.record['concurrency_policy'] = policy
         output.mkdir(parents=True, exist_ok=bool(args.resume))
         if args.resume:
@@ -151,6 +158,11 @@ def run(args, parser, config, lease_fd, review):
             for name in ('review.json', 'result.md', 'SUMMARY.md'):
                 if (output / name).is_file():
                     (history / name).write_bytes((output / name).read_bytes())
+        from repro.cpu_work_queue import WorkQueue, recover_groups
+        groups = recover_groups(output, review.CPU_EXPERIMENTS, PLACEMENT, args.config,
+                                review.verify_reused_images) if args.resume else None
+        WorkQueue.initialize(output / 'cpu-work-queue.json', review.CPU_EXPERIMENTS, PLACEMENT, groups=groups)
+        runner.record['cpu_work_queue'] = str(output / 'cpu-work-queue.json')
         runner.record['cpu_lanes'] = {}
         runner.save()
         print('Two CPU lanes: NUMA1 CPU28–31; NUMA2 CPU48–51. Output: ' + str(output), flush=True)
@@ -182,7 +194,11 @@ def run(args, parser, config, lease_fd, review):
                 except BaseException as error:
                     failure = failure or error
                     runner.record['analysis_error'] = f'{type(error).__name__}: {error}'
-            failed = failure is not None or len(rows) != 2 or any(row['status'] != 'ok' for row in rows.values())
+            coverage_names = [r['experiment'] for r in runner.record['coverage']]
+            coverage_complete = (len(coverage_names) == len(set(coverage_names))
+                                 and set(coverage_names) == set(review.CPU_EXPERIMENTS)
+                                 and all(r['status'] == 'ok' for r in runner.record['coverage']))
+            failed = not coverage_complete or failure is not None or len(rows) != 2 or any(row['status'] != 'ok' for row in rows.values())
             if not any(step['name'] == 'paper-comparison' and step['status'] == 'ok' for step in runner.record['steps']):
                 failed = True
             runner.record.update(status='failed' if failed else 'ok', finished_at=datetime.now(timezone.utc).isoformat())
@@ -205,7 +221,7 @@ def worker(argv=None):
     inherited_lease(options.lease_fd, REPO / 'ae/work/.results.lock')
     rp = review.parser()
     args = rp.parse_args(rest)
-    expected = partition(review.CPU_EXPERIMENTS)[options.worker_node]
+    expected = list(review.CPU_EXPERIMENTS)
     if (args.experiment != expected or args.group or args.cpu_parallel or args.quick_check
             or args.all or args.no_pin or args.analyze_existing or args.available
             or args.numa_node != options.worker_node or args.cpus != PLACEMENT[options.worker_node]):
@@ -222,6 +238,8 @@ def worker(argv=None):
     expected_cpus = [int(x) for part in args.cpus.split(',') for x in (range(int(part.split('-')[0]), int(part.split('-')[1])+1) if '-' in part else [part])]
     if actual != expected_cpus:
         raise ValueError('Worker CPU affinity differs from fixed lane')
+    from repro.cpu_work_queue import WorkQueue
+    args.cpu_work_queue = WorkQueue(output.parent.parent / 'cpu-work-queue.json', options.worker_node)
     # Parent owns the exclusive result/output leases through all worker cleanup.
     return review.run_locked_selection(args, rp, config, output)
 
