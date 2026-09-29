@@ -15,13 +15,13 @@ import time
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO), str(REPO / 'ae')]
-PLACEMENT = {0: '0-3', 1: '28-31'}
+PLACEMENT = {1: '28-31', 2: '48-51'}
 BASELINES = {'table-02-replay', 'table-02-criu', 'table-02-fc-diff',
              'table-02-cube', 'table-02-e2b', 'figure-08-cube', 'figure-08-e2b'}
 
 
 def partition(experiments):
-    return {node: [name for name in experiments if (name in BASELINES) == bool(node)]
+    return {node: [name for name in experiments if (name in BASELINES) == (node == 2)]
             for node in PLACEMENT}
 
 
@@ -32,7 +32,7 @@ def validate(args):
             or args.isolated_validation or args.execute_plan or args.probe_plan
             or args.publish_output or args.reuse_completed_from
             or args.cube_profile or args.e2b_profile or args.experiment_config):
-        raise ValueError('--cpu-parallel requires --group cpu with fixed NUMA0/1 placement; selection, placement, profile and internal overrides are not allowed')
+        raise ValueError('--cpu-parallel requires --group cpu with fixed NUMA1/2 placement; selection, placement, profile and internal overrides are not allowed')
 
 
 def lane_arguments(args, node, output, experiments):
@@ -153,7 +153,7 @@ def run(args, parser, config, lease_fd, review):
                     (history / name).write_bytes((output / name).read_bytes())
         runner.record['cpu_lanes'] = {}
         runner.save()
-        print('Two CPU lanes: NUMA0 CPU0–3; NUMA1 CPU28–31. Output: ' + str(output), flush=True)
+        print('Two CPU lanes: NUMA1 CPU28–31; NUMA2 CPU48–51. Output: ' + str(output), flush=True)
         commands = {node: ['numactl', '--all', '--physcpubind=' + PLACEMENT[node], '--membind=' + str(node),
                            sys.executable, '-I', str(Path(__file__).resolve()),
                            '--worker-node', str(node), '--lease-fd', str(lease_fd), '--',

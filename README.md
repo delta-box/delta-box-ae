@@ -69,7 +69,7 @@ To run the same CPU validation without any GPU probing or measurements, use:
 bash ae/run_all_no_gpu.sh
 ```
 
-This entry delegates to the normal runner in two fixed lanes: NUMA0/CPU0–3 for DeltaBox, profiling, Figure 9 and correctness; NUMA1/CPU28–31 for baselines. Each lane processes input jobs sequentially, and both feed one combined report. Shared configuration and job caps are retained. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume` for a two-lane result directory. Placement overrides are rejected; `--help` lists supported options.
+This entry delegates to the normal runner in two fixed lanes: NUMA1/CPU28–31 for DeltaBox, profiling, Figure 9 and correctness; NUMA2/CPU48–51 for baselines. Each lane processes input jobs sequentially, and both feed one combined report. Shared configuration and job caps are retained. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume` for a two-lane result directory. Placement overrides are rejected; `--help` lists supported options.
 
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
