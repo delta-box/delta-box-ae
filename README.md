@@ -71,6 +71,14 @@ bash ae/run_all_no_gpu.sh
 
 This entry runs a shared experiment queue on NUMA1/CPU28–31 and NUMA2/CPU48–51. An idle node claims the next pending group, so a slow Replay group does not block independent baselines on the other node. Input jobs within a group remain serial; Cube/E2B service-changing groups never overlap. Configuration, job caps, fresh measurement identities and combined reporting are retained. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node. It can migrate the earlier NUMA1/2 static layout without importing another run. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume`; placement overrides are rejected.
 
+For hosted background validation on NUMA0/3, use the separate entry below. The reviewer command above keeps its NUMA1/2 placement.
+
+```bash
+bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
+```
+
+This validation entry visits all 16 CPU groups with the existing per-group job cap on NUMA0/CPU0–3 and NUMA3/CPU72–75. It holds an exclusive lease on the results and shared backends. Reviewer requests take priority: the background run cleans up its owned experiment and services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume.
+
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
 ```bash

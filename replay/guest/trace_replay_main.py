@@ -1685,6 +1685,8 @@ def _run_replay(args: argparse.Namespace, resources: ReplayResources) -> None:
                     "async_admission_wait_ms": info.get("async_admission_wait_ms"),
                     "checkpoint_state_at_return": info.get("state"),
                     "checkpoint_fork_ms": info.get("fork_ms"),
+                    "checkpoint_warm_stop_wait_ms": info.get("warm_stop_wait_ms"),
+                    "checkpoint_dump_stop_wait_ms": info.get("dump_stop_wait_ms"),
                     "checkpoint_overlay_ms": info.get("overlay_ms"),
                     "checkpoint_overlay_preparation_ms": info.get("overlay_preparation_ms"),
                     "checkpoint_pre_template_dump_join_ms": info.get(

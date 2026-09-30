@@ -253,9 +253,34 @@ def mysql_launcher(out, recovery_guard):
         recovery_guard.unlink()
 
 
+def service_cgroup_masks(unit):
+    relative = Path(output('systemctl', 'show', unit, '-p', 'ControlGroup', '--value'))
+    if not relative.is_absolute() or '..' in relative.parts or relative.name != unit:
+        raise RuntimeError('Unexpected Cube service cgroup: ' + unit)
+    group = Path('/sys/fs/cgroup') / str(relative).lstrip('/')
+    return {'path': str(group), **{name: (group / name).read_text().strip()
+        for name in ('cpuset.cpus', 'cpuset.mems', 'cpuset.cpus.effective', 'cpuset.mems.effective')}}
+
+
+def restore_service_cgroup_masks(unit, expected):
+    actual = service_cgroup_masks(unit)
+    if actual['path'] != expected['path']:
+        raise RuntimeError('Cube service cgroup identity changed: ' + unit)
+    group = Path(actual['path'])
+    # An empty systemd resource property does not clear a previously written
+    # kernel cpuset. Restore its exact prior raw masks, then check effective
+    # masks rather than treating the declarative property as proof.
+    for name in ('cpuset.mems', 'cpuset.cpus'):
+        (group / name).write_text(expected[name] + '\n')
+    restored = service_cgroup_masks(unit)
+    if restored != expected:
+        raise RuntimeError('Cube service effective cgroup masks did not restore: ' + unit)
+    return restored
+
+
 @contextmanager
 def placement(node, cpus, out, recovery_guard=None):
-    before = {'units': {}, 'containers': {}}
+    before = {'units': {}, 'containers': {}, 'unit_cgroups': {}}
     changed_units, changed_containers, changed_dropins = [], [], []
     cg = Path('/sys/fs/cgroup/cube_sandbox')
     before['sandbox_cgroup'] = {n: (cg / n).read_text().strip() for n in ('cpuset.cpus', 'cpuset.mems')}
@@ -264,6 +289,7 @@ def placement(node, cpus, out, recovery_guard=None):
             raise RuntimeError('Cube service not active: ' + unit)
         before['units'][unit] = {n: output('systemctl', 'show', unit, '-p', n, '--value')
                                  for n in UNIT_PROPERTIES}
+        before['unit_cgroups'][unit] = service_cgroup_masks(unit)
     for name in CONTAINERS:
         before['containers'][name] = inspect(name)
         if not before['containers'][name]['running']:
@@ -325,6 +351,7 @@ def placement(node, cpus, out, recovery_guard=None):
                 b = before['units'][unit]
                 run('systemctl', 'set-property', '--runtime', unit,
                     'AllowedCPUs=' + b['AllowedCPUs'], 'AllowedMemoryNodes=' + b['AllowedMemoryNodes'])
+                restore_service_cgroup_masks(unit, before['unit_cgroups'][unit])
             except Exception as exc:
                 errors.append(str(exc))
         for name in ('cpuset.mems', 'cpuset.cpus'):
@@ -334,10 +361,14 @@ def placement(node, cpus, out, recovery_guard=None):
                 errors.append(str(exc))
         restored = {'units': {u: {k: output('systemctl', 'show', u, '-p', k, '--value')
                          for k in UNIT_PROPERTIES} for u in changed_units},
+                    'unit_cgroups': {u: service_cgroup_masks(u) for u in changed_units},
                     'containers': {n: inspect(n) for n in changed_containers}}
         for unit, values in restored['units'].items():
             if values != before['units'][unit]:
                 errors.append('Placement did not restore: ' + unit)
+        for unit, values in restored['unit_cgroups'].items():
+            if values != before['unit_cgroups'][unit]:
+                errors.append('Effective cgroup masks did not restore: ' + unit)
         for name, values in restored['containers'].items():
             if any(values[k] != before['containers'][name][k] for k in ('effective_cpus', 'effective_mems')):
                 errors.append('Placement did not restore: ' + name)
@@ -562,4 +593,3 @@ def managed_memory_service(config, out):
                'metadata_manifest': str(out/'mysql-memory/active.json'),
                'placement_manifest': str(out/'placement.json')}
         proof(node, cpus, out/'placement-after.json')
-

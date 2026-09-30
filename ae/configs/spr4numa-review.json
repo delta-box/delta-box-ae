@@ -114,8 +114,12 @@
         }
       },
       "table-02-e2b": {
-        "baseline_storage": "disk",
-        "recorded_search_order": true
+        "baseline_storage": "tmpfs",
+        "memory_job_size_gib": 24,
+        "recorded_search_order": true,
+        "e2b": {
+          "warm_action_worker": false
+        }
       },
       "table-03-slow": {
         "checkpoint_profile": "async-incremental-lazy",
