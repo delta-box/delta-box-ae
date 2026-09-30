@@ -96,9 +96,22 @@ def stage_local_dependencies(config, output, env):
             raise ValueError(f'Incomplete offline NLTK data: {path}; configure nltk_data with real punkt, punkt_tab and stopwords')
     staged = output / 'nltk_data'
     shutil.copytree(cache, staged, symlinks=False)
-    env.update(NLTK_DATA=str(staged), LITELLM_LOCAL_MODEL_COST_MAP='True')
+    env['NLTK_DATA'] = str(staged)
+    cost_map = config.get('litellm_cost_map', 'local')
+    if cost_map not in ('local', 'remote'):
+        raise ValueError('litellm_cost_map must be local or remote')
+    if cost_map == 'local':
+        env['LITELLM_LOCAL_MODEL_COST_MAP'] = 'True'
+    else:
+        env.pop('LITELLM_LOCAL_MODEL_COST_MAP', None)
+    log_level = config.get('baseline_log_level')
+    if log_level is not None:
+        if log_level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR'):
+            raise ValueError('baseline_log_level must be DEBUG, INFO, WARNING or ERROR')
+        env['BASELINE_LOG_LEVEL'] = log_level
     return {'nltk_data': {'source': str(cache), 'staged': str(staged),
                          'files': [file_record(path) for path in sorted(staged.rglob('*')) if path.is_file()]},
+            'litellm_cost_map': cost_map, 'baseline_log_level': log_level or 'driver-default',
             'litellm_local_model_cost_map': file_record(cost_maps[0]),
             'litellm_source': file_record(cost_maps[0].parent / '__init__.py')}
 

@@ -214,15 +214,19 @@ class AsyncIncrementalCheckpoint:
                 warm = c.template_pool.request_stash_template(
                     c.agent_pid, checkpoint_id, timeout=2, fresh_pidns=False)
                 fork_ms = (time.perf_counter() - before) * 1000
+            before = time.perf_counter()
             if warm is None or not c._wait_pid_stopped(warm):
                 raise RuntimeError("warm template failed to stop")
+            warm_stop_wait_ms = (time.perf_counter() - before) * 1000
             before = time.perf_counter()
             dump_pid = c.template_pool.request_stash_template(
                 c.agent_pid, None, timeout=10, fresh_pidns=True,
                 async_resources=view)
             fork_ms += (time.perf_counter() - before) * 1000
+            before = time.perf_counter()
             if dump_pid is None or not c._wait_pid_stopped(dump_pid):
                 raise RuntimeError("disposable dump task failed to stop")
+            dump_stop_wait_ms = (time.perf_counter() - before) * 1000
             if not c._is_pidns_init(dump_pid):
                 raise RuntimeError("exact-parent writer must have virtual PID 1")
             dump_pidfd = open_pidfd(dump_pid)
@@ -243,6 +247,7 @@ class AsyncIncrementalCheckpoint:
                 checkpoint_started_mono=started,
                 criu_ms=0.0, predump_ms=0.0, fork_ms=fork_ms, overlay_ms=overlay_ms,
                 overlay_preparation_ms=overlay_preparation_ms,
+                warm_stop_wait_ms=warm_stop_wait_ms, dump_stop_wait_ms=dump_stop_wait_ms,
                 dump_size_bytes=0, upper_dirty=dirty, action=None,
                 pre_template_dump_join_ms=0.0, pending_dump_join_ms=0.0,
                 validation_production_join_ms=0.0, validation_needed=False,

@@ -600,8 +600,11 @@ class SandboxController:
         return total
 
     def _wait_pid_stopped(self, pid: int, timeout: float = 1.0) -> bool:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        # A stash reply may precede its child's SIGSTOP. Keep the actual
+        # stop confirmation, but avoid adding a 5 ms polling quantum to the
+        # synchronous checkpoint. Sleep between reads to yield the CPU.
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             try:
                 with open(f"/proc/{pid}/stat") as f:
                     fields = f.read().split()
@@ -609,7 +612,10 @@ class SandboxController:
                     return True
             except OSError:
                 return False
-            time.sleep(0.005)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(0.0001, remaining))
         return False
 
     def _process_memory_digest(self, pid: int) -> dict:

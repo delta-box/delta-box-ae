@@ -133,6 +133,15 @@ def vm_options(spec: InstanceRun, runtime: Path) -> argparse.Namespace:
     )
 
 
+def remove_runtime_directory(temporary, machine) -> None:
+    if machine is not None and getattr(machine.args, "_rootfs_cleanup_error", None):
+        # Raising alone does not preserve a TemporaryDirectory: its GC
+        # finalizer would recursively remove the retained image afterwards.
+        temporary._finalizer.detach()
+        raise RuntimeError("Rootfs cleanup failed; retain runtime directory for recovery")
+    temporary.cleanup()
+
+
 def capture_binding(machine, spec: InstanceRun) -> None:
     process = machine.process
     write_json(spec.output_dir / "host_binding.json", {
@@ -194,7 +203,7 @@ def managed_vm(spec: InstanceRun):
                 ("stop VM", lambda: vm.stop_vm(machine.args, machine.process), True),
             ])
         actions.append(("unmount RAM disks", storage.close, True))
-        actions.append(("remove runtime directory", temporary.cleanup, True))
+        actions.append(("remove runtime directory", lambda: remove_runtime_directory(temporary, machine), True))
         cleanup_actions(spec.output_dir, actions, primary)
 
 

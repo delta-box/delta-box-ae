@@ -11,15 +11,33 @@ from datetime import datetime, timezone
 import errno
 import fcntl
 import grp
+import importlib.util
 import json
 import os
 from pathlib import Path
 import pwd
 import re
+import signal
 import stat
 import struct
 import sys
 import subprocess
+import time
+import uuid
+
+CPU_STOP_GRACE = 700  # Existing lane cleanup may wait 600 seconds.
+CPU_UNIT_PATTERN = r'deltabox-ae-cpu-[0-9a-f]{32}\.service'
+CPU_REVIEWER_YIELD = 125
+CPU_LAYOUT_PROPERTIES = {
+    'numa12': {'AllowedCPUs': '24-71', 'AllowedMemoryNodes': '1-2',
+               'CPUAffinity': '32-35', 'NUMAPolicy': 'bind', 'NUMAMask': '1'},
+    'numa03': {'AllowedCPUs': '0-23 72-95', 'AllowedMemoryNodes': '0 3',
+               'CPUAffinity': '4-7', 'NUMAPolicy': 'bind', 'NUMAMask': '0'},
+}
+
+
+class ReviewerYield(Exception):
+    """Only the background unit yields; reviewer work is never signalled."""
 
 POLICY_PATH = Path('/etc/deltabox-ae/launcher.json')
 POLICY_FIELDS = {'runtime_root', 'python', 'config', 'environment_file',
@@ -266,6 +284,8 @@ def parse_arguments(argv):
     parser.add_argument('--experiment', action='append', choices=EXPERIMENTS)
     parser.add_argument('--group', action='append', choices=GROUPS)
     parser.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA1 and NUMA2')
+    parser.add_argument('--cpu-layout', choices=('numa12', 'numa03'), action=Once,
+                        help='Fixed CPU layout; numa03 gives hosted reviewers priority')
     parser.add_argument('--e2b-profile', choices=('paper-nested',), action=Once,
                         help='E2B-only documented nested reconstruction; complete original eight inputs')
     parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
@@ -286,10 +306,13 @@ def parse_arguments(argv):
     parser.add_argument('--numa-node', type=int, action=Once, help='NUMA node for this run; inherited by all selected CPU experiments')
     parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
+    args.cpu_layout = args.cpu_layout or 'numa12'
+    if args.cpu_layout != 'numa12' and not args.cpu_parallel:
+        parser.error('--cpu-layout numa03 requires --cpu-parallel')
     if args.cpu_parallel and (args.group != ['cpu'] or args.experiment or args.all or args.quick_check
             or args.numa_node is not None or args.cpus is not None or args.gpu_cases
             or args.cube_profile or args.e2b_profile or args.isolated_validation or args.reuse_completed_from):
-        parser.error('--cpu-parallel requires --group cpu with fixed NUMA1/2 placement')
+        parser.error('--cpu-parallel requires --group cpu with a fixed CPU layout')
     if args.e2b_profile is not None:
         if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
@@ -365,7 +388,7 @@ def fixed_environment(policy, caller):
     return environment
 
 
-def acquire_lock(path, *, shared=False):
+def acquire_lock(path, *, shared=False, wait=False):
     # /run/lock may be root-owned and sticky. Its root-owned lock file cannot
     # be unlinked by the reviewer; non-sticky writable ancestors are rejected.
     trusted_path(path.parent, directory=True, sticky_parents=True)
@@ -380,7 +403,7 @@ def acquire_lock(path, *, shared=False):
         if not stat.S_ISREG(os.fstat(fd).st_mode) or os.fstat(fd).st_nlink != 1:
             raise ValueError('Lock must be a root-owned regular file with one link')
         try:
-            fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+            fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | (0 if wait else fcntl.LOCK_NB))
         except BlockingIOError as error:
             raise ValueError('Another hosted AE run is active; retry after it finishes') from error
         return fd
@@ -437,6 +460,8 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
+    if args.cpu_parallel and args.cpu_layout != 'numa12':
+        command += ['--cpu-layout', args.cpu_layout]
     if getattr(args, 'e2b_profile', None) is not None:
         command += ['--e2b-profile', args.e2b_profile]
     if getattr(args, 'cube_profile', None) is not None:
@@ -455,7 +480,7 @@ def command_line(policy, args, output):
     return command
 
 
-def audit_launch(policy, caller, command, *, trust=None):
+def audit_launch(policy, caller, command, *, trust=None, event='launch', **identity):
     path = policy['output_root'].parent / '.launcher-audit.jsonl'
     if path.exists() or path.is_symlink():
         trusted_path(path, trust=trust, root_leaf=True)
@@ -465,18 +490,412 @@ def audit_launch(policy, caller, command, *, trust=None):
         if os.fstat(stream.fileno()).st_nlink != 1:
             raise ValueError('Audit file must have one link')
         stream.write(json.dumps(dict(started_at=datetime.now(timezone.utc).isoformat(),
-                                     caller_uid=caller.pw_uid, caller=caller.pw_name, command=command)) + '\n')
+                                     caller_uid=caller.pw_uid, caller=caller.pw_name,
+                                     command=command, event=event, **identity)) + '\n')
         stream.flush()
         os.fsync(stream.fileno())
 
 
-def main(argv=None):
-    lock_fd = None
+def cpu_service_identity(unit, *, cgroup_root=Path('/sys/fs/cgroup'), membership=Path('/proc/self/cgroup')):
+    """Bind service admission to its actual cgroup and effective no-swap limit."""
+    if not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('Invalid owned CPU service name')
+    rows = [line[3:] for line in membership.read_text().splitlines() if line.startswith('0::')]
+    if len(rows) != 1:
+        raise ValueError('Hosted CPU service requires unified cgroup v2')
+    relative = Path(rows[0].lstrip('/'))
+    if '..' in relative.parts or relative.name != unit:
+        raise ValueError('CPU service does not occupy its owned cgroup')
+    group = cgroup_root / relative
+    limit = (group / 'memory.swap.max').read_text().strip()
+    if limit != '0':
+        raise ValueError('CPU service memory.swap.max must be zero')
+    return dict(unit=unit, cgroup=str(group), memory_swap_max=limit, main_pid=os.getpid(),
+                coverage='Direct AE descendants; external backend services retain their own cleanup')
+
+
+def cpu_service_command(policy, caller, command, unit):
+    if not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('Invalid owned CPU service name')
+    layout = cpu_command_layout(command)
+    properties = ['--property=' + key + '=' + value
+                  for key, value in CPU_LAYOUT_PROPERTIES[layout].items()]
+    return ['/usr/bin/systemd-run', '--quiet', '--pipe', '--wait', '--collect',
+            '--service-type=exec', '--unit=' + unit,
+            '--property=MemoryAccounting=yes', '--property=MemorySwapMax=0',
+            '--property=Slice=system.slice',
+            '--property=KillMode=mixed', '--property=KillSignal=SIGINT',
+            '--property=TimeoutStopSec=' + str(CPU_STOP_GRACE),
+            '--property=SendSIGKILL=yes', '--property=UMask=0022',
+            '--property=WorkingDirectory=' + str(policy['runtime_root']),
+            *properties,
+            '--', str(policy['python']), '-I',
+            str(policy['runtime_root'] / 'ae/scripts/hosted_cpu_service.py'),
+            '--unit', unit, '--caller-uid', str(caller.pw_uid), '--',
+            '--checkout', str(policy['runtime_root']), *command[5:]]
+
+
+def cpu_command_layout(command):
+    """Read only the launcher-generated argument vector, never an environment."""
+    if '--cpu-layout' not in command:
+        return 'numa12'
+    layout = command[command.index('--cpu-layout') + 1]
+    if layout not in CPU_LAYOUT_PROPERTIES:
+        raise ValueError('Unsupported hosted CPU layout')
+    return layout
+
+
+def background_cpu_binding(cgroup):
+    """Fail before planning if PID1 did not apply the background constraints."""
+    def mask(value):
+        result = set()
+        for part in value.strip().split(','):
+            a, *b = part.split('-')
+            result.update(range(int(a), int(b[0]) + 1) if b else [int(a)])
+        return result
+    group = Path(cgroup)
+    cpus = (group / 'cpuset.cpus.effective').read_text().strip()
+    mems = (group / 'cpuset.mems.effective').read_text().strip()
+    actual = set(os.sched_getaffinity(0))
+    policy = dict(line.split(':', 1) for line in subprocess.check_output(
+        ['/usr/bin/numactl', '--show'], env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'},
+        text=True, stderr=subprocess.PIPE).splitlines() if ':' in line)
+    if (mask(cpus) != set(range(24)) | set(range(72, 96)) or mask(mems) != {0, 3}
+            or actual != {4, 5, 6, 7} or policy.get('policy', '').strip() != 'bind'
+            or policy.get('membind', '').split() != ['0']):
+        raise ValueError('Background CPU service actual NUMA0/3 binding differs from admission')
+    return dict(cpu_layout='numa03', effective_cpus=cpus, effective_memory_nodes=mems,
+                controller_cpus=sorted(actual), controller_membind=0)
+
+
+def load_cpu_priority(policy, trust):
+    source = trusted_path(policy['runtime_root'] / 'ae/scripts/hosted_cpu_priority.py', trust=trust)
+    spec = importlib.util.spec_from_file_location('hosted_cpu_priority', source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def cpu_unit_state(unit, environment):
+    if not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('Invalid owned CPU service name')
+    result = subprocess.run(['/usr/bin/systemctl', 'show', unit,
+        '--property=LoadState,ActiveState,SubState,MainPID,Result,ExecMainStatus,ControlGroup,MemorySwapMax'],
+        env=environment, capture_output=True, text=True, timeout=15)
+    state = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+    if result.returncode and state.get('LoadState') != 'not-found':
+        raise RuntimeError('Cannot inspect owned CPU service: ' + unit)
+    return state
+
+
+def verify_cpu_service_empty(unit, state, *, cgroup_root=Path('/sys/fs/cgroup')):
+    if not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('Invalid owned CPU service name')
+    relative = Path('system.slice') / unit
+    reported = state.get('ControlGroup')
+    if reported and reported != '/' + str(relative):
+        raise ValueError('CPU service reports an unexpected cgroup')
+    group = cgroup_root / relative
+    try:
+        events = dict(line.split() for line in (group / 'cgroup.events').read_text().splitlines())
+    except FileNotFoundError:
+        if group.exists():
+            raise RuntimeError('Cannot verify owned CPU cgroup occupancy')
+        return dict(cgroup=str(group), cgroup_absent=True)
+    if events.get('populated') != '0':
+        raise RuntimeError('Owned CPU cgroup still contains processes: ' + unit)
+    if state.get('LoadState') == 'not-found':
+        try:
+            group.rmdir()  # Only this exact, verified-empty collected unit.
+        except FileNotFoundError:
+            return dict(cgroup=str(group), cgroup_absent=True, cgroup_populated='0',
+                        empty_cgroup_removed=False)
+        return dict(cgroup=str(group), cgroup_absent=True, cgroup_populated='0',
+                    empty_cgroup_removed=True)
+    return dict(cgroup=str(group), cgroup_absent=False, cgroup_populated='0')
+
+
+def stop_cpu_service(unit, environment):
+    if not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('Invalid owned CPU service name')
+    result = subprocess.run(['/usr/bin/systemctl', 'stop', unit], env=environment,
+                            capture_output=True, text=True, timeout=CPU_STOP_GRACE + 30)
+    state = cpu_unit_state(unit, environment)
+    if state.get('LoadState') != 'not-found' and (
+            result.returncode or state.get('ActiveState') not in ('inactive', 'failed')
+            or state.get('MainPID') != '0'):
+        raise RuntimeError('Owned CPU service did not stop: ' + unit)
+    state.update(verify_cpu_service_empty(unit, state))
+    return state
+
+
+def cpu_git_environment(policy, runtime, trust):
+    paths = [runtime]
+    infra = read_root_json(policy['config']).get('e2b', {}).get('infra')
+    if infra:
+        # Only the registered, root-approved infra repository is additionally
+        # allowed; never import caller Git config or a wildcard allowance.
+        infra = trusted_path(infra, directory=True, trust=trust)
+        if infra not in paths:
+            paths.append(infra)
+    result = {'GIT_CONFIG_COUNT': str(len(paths))}
+    for index, path in enumerate(paths):
+        result['GIT_CONFIG_KEY_' + str(index)] = 'safe.directory'
+        result['GIT_CONFIG_VALUE_' + str(index)] = str(path)
+    return result
+
+
+def verify_background_cleanup(policy, command, *, check_experiment_failure=True):
+    """Direct-unit emptiness alone cannot prove shared backend restoration."""
+    runtime = Path(policy['runtime_root'])
+    guard = runtime / 'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
+    if guard.exists():
+        raise RuntimeError('E2B backend recovery remains required: ' + str(guard))
+    destination = next((command[i + 1] for i, value in enumerate(command[:-1])
+                        if value in ('--output', '--resume')), None)
+    if destination is None:
+        raise ValueError('Background handover requires its fixed output directory')
+    output = Path(destination)
+    if not output.is_relative_to(runtime / 'ae/results/selected'):
+        raise ValueError('Background handover output escaped the fixed results tree')
+    # Context guards and failed cleanup receipts survive a killed producer.
+    for path in output.rglob('*'):
+        if path.name == 'RECOVERY_REQUIRED.json' or (path.is_file() and
+                path.name.endswith(('.json',)) and 'cleanup-error' in path.name):
+            raise RuntimeError('Backend cleanup requires investigation: ' + str(path))
+    for path in [output / 'review.json', *(output / 'lanes').glob('numa*/review.json')]:
+        if not path.is_file():
+            continue  # A yield may occur before admission creates any record.
+        record = json.loads(path.read_text())
+        if any(row.get('cleanup_timeout') for row in record.get('cpu_lanes', {}).values()):
+            raise RuntimeError('A CPU lane exceeded its graceful cleanup deadline: ' + str(path))
+        if any(step.get('status') == 'failed' and 'cleanup' in step.get('name', '')
+               for step in record.get('steps', [])):
+            raise RuntimeError('A backend cleanup step failed: ' + str(path))
+    queue = output / 'cpu-work-queue.json'
+    if check_experiment_failure and queue.is_file() and any(row.get('status') == 'failed'
+                              for row in json.loads(queue.read_text()).get('groups', {}).values()):
+        raise RuntimeError('A failed experiment cannot be retried as a reviewer handover: ' + str(queue))
+    for path in output.rglob('staging-cleanup.json'):
+        if json.loads(path.read_text()).get('status') == 'failed':
+            raise RuntimeError('Owned experiment staging cleanup failed: ' + str(path))
+
+
+def retain_backend_recovery(policy, command, error):
+    path = Path(policy['runtime_root']) / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json'
+    # A failed restoration is persistent admission state, never an automatic
+    # retry. The EX-protected reviewer gate consumes this marker after waiting.
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        return
+    with os.fdopen(fd, 'w') as stream:
+        json.dump({'reason': 'NUMA0/3 shared backend cleanup could not be verified',
+                   'error': f'{type(error).__name__}: {error}', 'command': command,
+                   'recorded_at': datetime.now(timezone.utc).isoformat()}, stream, indent=2)
+        stream.write('\n')
+
+
+def begin_background_transaction(policy, unit):
+    path = Path(policy['runtime_root']) / 'ae/work/CPU_BACKGROUND_TRANSACTION.json'
+    for name in ('CPU_SERVICE_RECOVERY_REQUIRED.json', 'E2B_SERVICE_RECOVERY_REQUIRED.json'):
+        guard = path.parent / name
+        if guard.exists():
+            raise RuntimeError('Shared backend recovery is required before validation: ' + str(guard))
+    start_ticks = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+    record = {'pid': os.getpid(), 'start_ticks': start_ticks, 'unit': unit,
+              'created_at': datetime.now(timezone.utc).isoformat()}
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), 'w') as stream:
+        info = os.fstat(stream.fileno())
+        require_root_owned(path, info)
+        json.dump(record, stream)
+        stream.write('\n')
+    return path, (info.st_dev, info.st_ino), record
+
+
+def finish_background_transaction(transaction, unit):
+    path, inode, original = transaction
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW)) as stream:
+        info = os.fstat(stream.fileno())
+        require_root_owned(path, info)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or (info.st_dev, info.st_ino) != inode:
+            raise RuntimeError('Background transaction file identity changed: ' + str(path))
+        record = json.load(stream)
+    if record != original or record.get('pid') != os.getpid() or record.get('unit') != unit:
+        raise RuntimeError('Background transaction identity changed; retained: ' + str(path))
+    if (path.lstat().st_dev, path.lstat().st_ino) != inode:
+        raise RuntimeError('Background transaction inode changed; retained: ' + str(path))
+    path.unlink()
+
+
+def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_requested=None):
+    """Keep admission held while systemd owns escaped sessions and stop cleanup."""
+    if not Path('/sys/fs/cgroup/cgroup.controllers').is_file():
+        raise ValueError('Hosted CPU service requires unified cgroup v2')
+    version = subprocess.check_output(['/usr/bin/systemd-run', '--version'], env=environment, text=True)
+    match = re.match(r'systemd (\d+)\b', version)
+    if not match or int(match[1]) < 240:
+        raise ValueError('Hosted CPU service requires systemd 240 or newer')
+    unit = 'deltabox-ae-cpu-' + uuid.uuid4().hex + '.service'
+    argv = cpu_service_command(policy, caller, command, unit)
+    audit_launch(policy, caller, command, trust=trust, event='cpu-service-submitted', unit=unit)
+    print('Owned CPU service: ' + unit + '; MemorySwapMax=0', flush=True)
+    previous, interrupted = {}, []
+    def interrupt(signum, frame):
+        interrupted.append(signum)
+        raise KeyboardInterrupt(f'CPU launcher interrupted by signal {signum}')
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        previous[signum] = signal.signal(signum, interrupt)
+    process, code, workload_code, state, cleanup_error = None, 1, None, {}, None
+    transaction, cleanup_verified = None, False
+    try:
+        if yield_requested is not None:
+            transaction = begin_background_transaction(policy, unit)
+        process = subprocess.Popen(argv, env=environment, start_new_session=True)
+        if yield_requested is None:
+            code = process.wait()
+        else:
+            while True:
+                try:
+                    code = process.wait(timeout=0.5)
+                    break
+                except subprocess.TimeoutExpired:
+                    if yield_requested():
+                        raise ReviewerYield('Hosted reviewer requested admission')
+        workload_code = code
+        # 125 belongs exclusively to a verified cooperative handover, never
+        # to a workload's exit status (which must not trigger an endless retry).
+        code = 1 if code == CPU_REVIEWER_YIELD else code if code >= 0 else 128 - code
+        state = cpu_unit_state(unit, environment)
+        if state.get('LoadState') != 'not-found' and state.get('ActiveState') not in ('inactive', 'failed'):
+            state = stop_cpu_service(unit, environment)
+            raise RuntimeError('CPU service remained active after systemd-run exited')
+        state.update(verify_cpu_service_empty(unit, state))
+        if yield_requested is not None:
+            try:
+                verify_background_cleanup(policy, command, check_experiment_failure=False)
+            except BaseException as backend_error:
+                retain_backend_recovery(policy, command, backend_error)
+                raise
+        cleanup_verified = True
+        return code
+    except BaseException as error:
+        yielding = isinstance(error, ReviewerYield)
+        code = CPU_REVIEWER_YIELD if yielding else 128 + interrupted[0] if interrupted else 1
+        cleanup_error = None if yielding else f'{type(error).__name__}: {error}'
+        # Stop the launch client first: it cannot submit a new unit after our
+        # stop request. This does not replace stopping the service cgroup.
+        for signum in previous:
+            signal.signal(signum, signal.SIG_IGN)
+        client_error = None
+        try:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        except BaseException as error:
+            client_error = error
+        try:
+            state = stop_cpu_service(unit, environment)
+        except BaseException as stop_error:
+            code = 1
+            cleanup_error = f'{type(stop_error).__name__}: {stop_error}'
+            if transaction is not None:
+                retain_backend_recovery(policy, command, stop_error)
+            raise
+        if transaction is not None:
+            try:
+                verify_background_cleanup(policy, command, check_experiment_failure=False)
+            except BaseException as backend_error:
+                code = 1
+                cleanup_error = f'{type(backend_error).__name__}: {backend_error}'
+                retain_backend_recovery(policy, command, backend_error)
+                raise
+        cleanup_verified = True
+        if client_error is not None:
+            code = 1
+            cleanup_error = f'{type(client_error).__name__}: {client_error}'
+            raise client_error
+        if yielding:
+            try:
+                verify_background_cleanup(policy, command)
+            except BaseException as backend_error:
+                code = 1
+                cleanup_error = f'{type(backend_error).__name__}: {backend_error}'
+                raise
+            return CPU_REVIEWER_YIELD
+        if interrupted:
+            code = 128 + interrupted[0]
+            return code
+        raise
+    finally:
+        try:
+            try:
+                if transaction is not None and cleanup_verified:
+                    try:
+                        finish_background_transaction(transaction, unit)
+                    except BaseException as commit_error:
+                        code = 1
+                        cleanup_error = f'{type(commit_error).__name__}: {commit_error}'
+                        retain_backend_recovery(policy, command, commit_error)
+                        raise
+            finally:
+                audit_launch(policy, caller, command, trust=trust, event='cpu-service-finished',
+                             unit=unit, returncode=code, interrupted_signals=interrupted,
+                             workload_returncode=workload_code,
+                             yielded_to_reviewer=(code == CPU_REVIEWER_YIELD),
+                             unit_state=state, cleanup_error=cleanup_error)
+            if code == CPU_REVIEWER_YIELD:
+                print('Reviewer requested admission; owned background unit cleaned and yielded.', flush=True)
+        finally:
+            for signum, handler in previous.items():
+                signal.signal(signum, handler)
+
+
+def run_background_cpu(policy, caller, args, output, environment, priority, *, trust=None):
+    """Retry only cooperative reviewer yields, with the same source and output."""
+    while True:
+        waiting = priority.reviewer_waiting()
+        if waiting:
+            print('Waiting for hosted reviewer work before NUMA0/3 validation.', flush=True)
+        while waiting:
+            time.sleep(0.5)
+            waiting = priority.reviewer_waiting()
+        # A maintained source tree is held by the caller's shared maintenance
+        # lease. Revalidate result controls on each continuation; never mix
+        # layouts or silently retry an actual measurement/cleanup failure.
+        if (output / 'review.json').is_file():
+            result_path(policy, output, caller, resume=True, trust=trust)
+            args.resume, args.output = output, None
+        command = command_line(policy, args, output)
+        code = run_cpu_service(policy, caller, command, environment, trust=trust,
+                               yield_requested=priority.reviewer_waiting)
+        if code != CPU_REVIEWER_YIELD:
+            return code
+        print('NUMA0/3 validation will resume completed coverage after reviewer cleanup.', flush=True)
+
+
+def main(argv=None, *, service_context=None):
+    lock_fd = priority_fd = None
     try:
         policy = load_policy()
-        caller = caller_identity(policy)
+        if service_context is None:
+            caller = caller_identity(policy)
+        else:
+            if os.geteuid() != 0 or os.getuid() != 0:
+                raise ValueError('CPU service admission requires root')
+            uid, unit = service_context
+            allowed = pwd.getpwnam(policy['allowed_user'])
+            if uid not in (0, allowed.pw_uid):
+                raise ValueError('CPU service caller is not allowed')
+            caller = pwd.getpwuid(uid)
         trust = runtime_trust(policy)
         args = parse_arguments(argv)
+        if service_context is not None and (not args.cpu_parallel or args.list):
+            raise ValueError('CPU service admission requires a CPU execution')
         runtime = trusted_path(policy['runtime_root'], directory=True, trust=trust)
         if args.checkout.resolve(strict=True) != runtime:
             raise ValueError('Checkout differs from the fixed hosted runtime')
@@ -491,7 +910,7 @@ def main(argv=None):
         environment = fixed_environment(policy, caller)
         # Keep the maintenance gate held through cleanup. The runner uses
         # exclusive run admission with the official serial configuration.
-        lock_fd = acquire_lock(policy['lock_file'], shared=True)
+        lock_fd = acquire_lock(policy['lock_file'], shared=True, wait=True)
         venv = policy['python'].parent.parent
         environments = (venv,) if (venv / 'pyvenv.cfg').is_file() else ()
         # paper_data.materialize links paper/*/data through traces/objects;
@@ -503,6 +922,13 @@ def main(argv=None):
         if (venv / 'pyvenv.cfg').is_file():
             trusted_tree(venv, code=True, external_code=True, trust=trust,
                          data_roots=data_roots, seen=seen)
+        priority = None
+        if not args.list:
+            priority = load_cpu_priority(policy, trust)
+            if args.cpu_layout != 'numa03':
+                # The service independently takes this lease too, so caller
+                # SIGKILL cannot make reviewer admission disappear early.
+                priority_fd = priority.acquire_reviewer()
         trusted_path(policy['output_root'], directory=True, trust=trust, root_leaf=True)
         os.umask(0o022)
         selected = args.resume or args.output
@@ -517,19 +943,35 @@ def main(argv=None):
                 raise ValueError('Reused and new result directories must be separate')
             args.reuse_completed_from = source
         command = command_line(policy, args, output)
-        audit_launch(policy, caller, command, trust=trust)
+        if service_context is not None:
+            identity = cpu_service_identity(unit)
+            if args.cpu_layout == 'numa03':
+                identity.update(background_cpu_binding(identity['cgroup']))
+            # HOME=/root also preserves root-owned dependency Git allowances.
+            environment.update(cpu_git_environment(policy, runtime, trust))
+            audit_launch(policy, caller, command, trust=trust, event='cpu-service-running', **identity)
+        elif not (args.cpu_parallel and not args.list):
+            audit_launch(policy, caller, command, trust=trust)
         print(f'Hosted AE runtime: {runtime}; caller: {caller.pw_name} (uid {caller.pw_uid})', flush=True)
         if output is not None:
             print(f'Hosted AE results: {output}', flush=True)
         os.chdir(runtime)
+        if args.cpu_parallel and not args.list and service_context is None:
+            if args.cpu_layout == 'numa03':
+                return run_background_cpu(policy, caller, args, output, environment, priority, trust=trust)
+            return run_cpu_service(policy, caller, command, environment, trust=trust)
         # Keep the lock in the runner itself, including during signal cleanup.
         os.set_inheritable(lock_fd, True)
+        if priority_fd is not None:
+            os.set_inheritable(priority_fd, True)
         os.execve(str(policy['python']), command, environment)
         return 0
     except (OSError, ValueError, KeyError) as error:
         print(f'Hosted AE refused: {error}', file=sys.stderr)
         return 2
     finally:
+        if priority_fd is not None:
+            os.close(priority_fd)
         if lock_fd is not None:
             os.close(lock_fd)  # Reached only when exec fails (or during tests).
 
