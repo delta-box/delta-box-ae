@@ -961,10 +961,18 @@ def main(argv=None, *, service_context=None):
                 raise ValueError('Reused and new result directories must be separate')
             args.reuse_completed_from = source
         command = command_line(policy, args, output)
+        executable = str(policy['python'])
         if service_context is not None:
             identity = cpu_service_identity(unit)
             if args.cpu_layout == 'numa03':
                 identity.update(background_cpu_binding(identity['cgroup']))
+                if args.isolated_validation:
+                    # The protected controller starts on CPU4-7. A strict
+                    # serial diagnostic must first select its permitted lane,
+                    # as the parallel lane launcher already does.
+                    command = ['/usr/bin/numactl', '--all', '--physcpubind=' + args.cpus,
+                               '--membind=' + str(args.numa_node), *command]
+                    executable = command[0]
             # HOME=/root also preserves root-owned dependency Git allowances.
             environment.update(cpu_git_environment(policy, runtime, trust))
             audit_launch(policy, caller, command, trust=trust, event='cpu-service-running', **identity)
@@ -982,7 +990,7 @@ def main(argv=None, *, service_context=None):
         os.set_inheritable(lock_fd, True)
         if priority_fd is not None:
             os.set_inheritable(priority_fd, True)
-        os.execve(str(policy['python']), command, environment)
+        os.execve(executable, command, environment)
         return 0
     except (OSError, ValueError, KeyError) as error:
         print(f'Hosted AE refused: {error}', file=sys.stderr)

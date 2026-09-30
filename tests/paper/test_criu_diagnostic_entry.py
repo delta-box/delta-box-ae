@@ -56,16 +56,33 @@ class DiagnosticHostedTests(unittest.TestCase):
 
     def test_service_helper_repeats_trust_without_taking_reviewer_priority(self):
         unit='deltabox-ae-cpu-'+'b'*32+'.service'
+        for node,cpus in ((0,'0-3'),(3,'72-75')):
+            with self.subTest(node=node), self.launcher() as (execute,_,stderr), \
+                    patch.object(hosted,'cpu_service_identity',return_value={'unit':unit,'cgroup':'/owned','memory_swap_max':'0'}), \
+                    patch.object(hosted,'background_cpu_binding',return_value={'cpu_layout':'numa03'}) as binding:
+                self.assertEqual(hosted.main(self.flags(node),service_context=(fixture.REVIEWER.pw_uid,unit)),0,stderr.getvalue())
+                self.priority.acquire_reviewer.assert_not_called()
+                binding.assert_called_once_with('/owned')
+                executable,command,_=execute.call_args.args
+                self.assertEqual(executable,'/usr/bin/numactl')
+                self.assertEqual(command[:4],['/usr/bin/numactl','--all','--physcpubind='+cpus,'--membind='+str(node)])
+                self.assertEqual(command[4:9],[str(self.policy['python']),'-I',str(self.runtime/'ae/scripts/run_review.py'),'--config',str(self.policy['config'])])
+                self.assertEqual(command[command.index('--cpu-layout')+1],'numa03')
+                self.assertEqual(command[command.index('--cpus')+1],cpus)
+                self.assertNotIn('--max-events',command)
+
+    def test_parallel_service_keeps_existing_python_exec_and_controller_affinity(self):
+        unit='deltabox-ae-cpu-'+'c'*32+'.service'
+        flags=['--checkout',str(self.runtime),'--group','cpu','--cpu-parallel','--cpu-layout','numa03',
+               '--output','selected/full']
         with self.launcher() as (execute,_,stderr), \
                 patch.object(hosted,'cpu_service_identity',return_value={'unit':unit,'cgroup':'/owned','memory_swap_max':'0'}), \
-                patch.object(hosted,'background_cpu_binding',return_value={'cpu_layout':'numa03'}) as binding:
-            self.assertEqual(hosted.main(self.flags(3),service_context=(fixture.REVIEWER.pw_uid,unit)),0,stderr.getvalue())
-            self.priority.acquire_reviewer.assert_not_called()
-            binding.assert_called_once_with('/owned')
-            command=execute.call_args.args[1]
-            self.assertEqual(command[command.index('--cpu-layout')+1],'numa03')
-            self.assertEqual(command[command.index('--cpus')+1],'72-75')
-            self.assertNotIn('--max-events',command)
+                patch.object(hosted,'background_cpu_binding',return_value={'cpu_layout':'numa03'}):
+            self.assertEqual(hosted.main(flags,service_context=(fixture.REVIEWER.pw_uid,unit)),0,stderr.getvalue())
+            executable,command,_=execute.call_args.args
+            self.assertEqual(executable,str(self.policy['python']))
+            self.assertEqual(command[0],str(self.policy['python']))
+            self.assertNotIn('/usr/bin/numactl',command)
 
     def test_scope_rejects_gpu_other_backend_event_prefix_wrong_node_and_reuse(self):
         changes=(('experiment','table-02-e2b'),('experiment','table-02-deltabox'),
