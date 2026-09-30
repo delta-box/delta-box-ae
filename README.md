@@ -87,6 +87,8 @@ bash ae/run_all.sh --baseline-inputs all
 
 `--baseline-inputs` selects the input pool, not the sample size. Its default is `44`; the supplied `review.validation_max_jobs=10` cap still applies. `--limit 1` starts a pilot and may be increased within the cap after checking its result. No implicit `--max-events` truncation is added.
 
+Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; the [coverage and deviation ledger](ae/report/README.md) records these scopes.
+
 When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful sampled run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
 Bounded validation writes to a new `ae/results/selected/` directory. Existing complete-run results remain in their own directories. The legacy full-run backup/rotation path is not used by the supplied bounded profile. Insufficient backup space or active jobs stop the launch and leave the results in place. Quick checks and selected experiments use separate subdirectories; an explicit `--output` to a different directory is never overwritten. New runs record the actual source without requiring a release lock. See [troubleshooting](#troubleshooting) for resuming a run.

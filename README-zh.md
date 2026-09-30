@@ -85,6 +85,8 @@ bash ae/run_all.sh --baseline-inputs all
 
 `--baseline-inputs` 只选择输入池，默认值为 `44`；不会绕过 `review.validation_max_jobs=10` 上限。先用 `--limit 1` 做小样本，检查后再在上限内扩大。脚本不自动截断轨迹事件。
 
+各 backend 保留自身声明的输入池和作业顺序。默认 44 条输入池包含 34 条 Django 和 10 条 Astropy，前 10 个作业均为 Astropy。每份 plan 和 `suite.json` 记录实际选中的输入。Table 2 的事件平均值保留各 backend 自身的 cohort；具体范围见[覆盖与偏差总账](ae/report/README-zh.md)。
+
 运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。样本运行成功时状态为 `ok`，失败步骤会保留日志并返回非零退出码。
 
 小规模验证写入新的 `ae/results/selected/` 子目录，既有完整结果保留原目录。当前受限配置不走旧的全量结果备份与轮换路径。备份空间不足或仍有活动任务时，启动会停止并保留原结果。快速检查与单项实验使用独立子目录；通过 `--output` 指定的其他目录不会被覆盖。新运行记录实际源码，无需更新源码锁。续跑方法见[故障排查](#troubleshooting)。

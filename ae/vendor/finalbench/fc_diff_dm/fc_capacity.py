@@ -29,20 +29,32 @@ def job_size_gib(experiment, config):
     return size
 
 
-def check_capacity(path, phase, allocation, record, *, node=None, reserve=2 * GIB):
-    """Require space for the next allocation, preserving evidence before cleanup."""
+def check_capacity(path, phase, allocation, record, *, node=None, reserve=2 * GIB,
+                   filesystem_required=None):
+    """Check filesystem and node budgets separately, outside measured timers.
+
+    By default both require allocation + reserve, preserving existing callers.
+    filesystem_required is the complete filesystem budget, including reserve;
+    it may exclude guest RAM that is still required by the node budget.
+    """
+    if filesystem_required is not None and (
+            type(filesystem_required) is not int or filesystem_required < 0):
+        raise ValueError('filesystem_required must be a nonnegative integer byte count')
+    required = allocation + reserve
+    filesystem_required = required if filesystem_required is None else filesystem_required
     usage = shutil.disk_usage(path)
     row = dict(phase=phase, tmpfs_total_bytes=usage.total,
                tmpfs_used_bytes=usage.used, tmpfs_free_bytes=usage.free,
-               next_allocation_bytes=allocation, reserve_bytes=reserve)
+               next_allocation_bytes=allocation, reserve_bytes=reserve,
+               filesystem_required_bytes=filesystem_required)
     if node is not None:
-        row.update(numa_node=node, numa_available_bytes=node_available(node))
+        row.update(numa_node=node, numa_available_bytes=node_available(node),
+                   node_required_bytes=required)
     record.parent.mkdir(parents=True, exist_ok=True)
     with record.open('a') as stream:
         stream.write(json.dumps(row, sort_keys=True) + '\n')
-    required = allocation + reserve
-    if usage.free < required:
-        raise RuntimeError(f'{phase}: tmpfs has {usage.free/GIB:.2f} GiB free; needs {required/GIB:.2f} GiB')
+    if usage.free < filesystem_required:
+        raise RuntimeError(f'{phase}: tmpfs has {usage.free/GIB:.2f} GiB free; needs {filesystem_required/GIB:.2f} GiB')
     if node is not None and row['numa_available_bytes'] < required:
         raise RuntimeError(f'{phase}: NUMA {node} has {row["numa_available_bytes"]/GIB:.2f} GiB available; needs {required/GIB:.2f} GiB')
     return row
