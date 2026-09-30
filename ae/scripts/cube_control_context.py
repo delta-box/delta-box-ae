@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import stat
 import subprocess
@@ -71,6 +72,8 @@ MYSQL_UNIT = 'cube-sandbox-mysql.service'
 
 MYSQL = 'cube-sandbox-mysql'
 
+MYSQL_ENV_FILE = Path('/usr/local/services/cubetoolbox/.one-click.env')
+
 
 MYSQL_DROP = Path('/run/systemd/system/cube-sandbox-mysql.service.d/zzzz-deltabox-preserve-container.conf')
 
@@ -99,6 +102,21 @@ def save(path, data):
 
 def inspect(name):
     j = json.loads(output('docker', 'inspect', name))[0]
+    config = dict(j['Config'])
+    if config.get('Hostname') == j['Id'][:12]:
+        config['Hostname'] = '<docker-generated-container-id>'
+    # Compose may reorder unique environment keys when recreating a container.
+    # Duplicate keys retain their order because precedence can be significant.
+    env = config.get('Env')
+    if isinstance(env, list) and all(isinstance(item, str) and '=' in item and
+            item.split('=', 1)[0] and '\0' not in item for item in env):
+        keys = [item.split('=', 1)[0] for item in env]
+        if len(set(keys)) == len(keys):
+            config['Env'] = sorted(env, key=lambda item: item.split('=', 1)[0])
+    host = {key: value for key, value in j['HostConfig'].items()
+            if key not in ('CpusetCpus', 'CpusetMems')}
+    config_digest = hashlib.sha256(json.dumps({'Config': config, 'HostConfig': host},
+        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     effective = {}
     if j['State']['Running']:
         status = Path(f"/proc/{j['State']['Pid']}/status").read_text().splitlines()
@@ -108,7 +126,45 @@ def inspect(name):
             'started_at': j['State']['StartedAt'],
             'finished_at': j['State']['FinishedAt'],
             'cpus': j['HostConfig']['CpusetCpus'], 'mems': j['HostConfig']['CpusetMems'],
-            'mounts': j['Mounts'], **effective}
+            'mounts': j['Mounts'], 'image_id': j['Image'],
+            'config_sha256': config_digest, **effective}
+
+
+def mysql_volume_removal_disabled():
+    """Read only this destructive switch; never source or serialize the env file."""
+    key = 'CUBE_SANDBOX_REMOVE_VOLUMES'
+    values = [os.environ.get(key, '')]
+    pid = int(output('systemctl', 'show', MYSQL_UNIT, '-p', 'MainPID', '--value'))
+    if pid:
+        prefix = (key + '=').encode()
+        values.extend(item[len(prefix):].decode() for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+                      if item.startswith(prefix))
+    for line in MYSQL_ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if line.startswith('export '):
+            line = line[7:].lstrip()
+        if line.startswith(key + '='):
+            words = shlex.split(line, comments=True)
+            if len(words) != 1 or not words[0].startswith(key + '='):
+                raise RuntimeError('Cannot verify MySQL volume-removal switch')
+            values.append(words[0].split('=', 1)[1])
+    if any(value not in ('', '0') for value in values):
+        raise RuntimeError('MySQL volume removal must be disabled before managed service changes')
+
+
+def mysql_preserve_launcher(container_id):
+    return ('[Service]\nExecStart=\nExecStart=/usr/bin/docker start --attach ' + container_id +
+            '\nExecStop=\nExecStop=/usr/bin/docker stop --time 30 ' + container_id + '\n')
+
+
+def verify_mysql_container(before, *, same_id):
+    after = inspect(MYSQL)
+    fields = ['mounts', 'image_id', 'config_sha256', 'effective_cpus', 'effective_mems']
+    if same_id:
+        fields.append('id')
+    if not after['running'] or any(after[key] != before[key] for key in fields):
+        raise RuntimeError('MySQL image, configuration, storage or placement did not restore')
+    return after
 
 
 def restore_masks(before):
@@ -141,7 +197,7 @@ def idle(timeout=45):
         time.sleep(.5)
 
 
-def service_start():
+def service_start(*, start_front=True):
     run('systemctl', 'start', MYSQL_UNIT)
     end = time.monotonic() + 60
     while True:
@@ -152,6 +208,8 @@ def service_start():
             if time.monotonic() >= end:
                 raise
             time.sleep(.5)
+    if not start_front:
+        return
     run('systemctl', 'start', *reversed(FRONT))
     end = time.monotonic() + 60
     while True:
@@ -209,7 +267,9 @@ def mysql_launcher(out, recovery_guard):
     drop = MYSQL_DROP
     if drop.exists():
         raise RuntimeError('An earlier Cube database operation has a service override')
+    mysql_volume_removal_disabled()
     original = inspect(MYSQL)
+    original_masks = service_cgroup_masks(MYSQL_UNIT)
     before_start = output('systemctl', 'show', MYSQL_UNIT, '-p', 'ExecMainStartTimestampMonotonic', '--value')
     if output('systemctl', 'show', MYSQL_UNIT, '-p', 'Type', '--value') != 'simple':
         raise RuntimeError('Unexpected Cube MySQL service type')
@@ -218,8 +278,7 @@ def mysql_launcher(out, recovery_guard):
     try:
         drop.parent.mkdir(parents=True, exist_ok=True)
         changed = True
-        drop.write_text('[Service]\nExecStart=\nExecStart=/usr/bin/docker start --attach ' + original['id'] +
-                        '\nExecStop=\nExecStop=/usr/bin/docker stop --time 30 ' + original['id'] + '\n')
+        drop.write_text(mysql_preserve_launcher(original['id']))
         run('systemctl', 'daemon-reload')
         yield
     finally:
@@ -228,6 +287,7 @@ def mysql_launcher(out, recovery_guard):
             raise RuntimeError('Database launcher retained for resource recovery')
         save(recovery_guard, {'reason': 'MySQL supervisor restoration in progress'})
         if changed:
+            mysql_volume_removal_disabled()
             drop.unlink(missing_ok=True)
             run('systemctl', 'daemon-reload')
             after_start = output('systemctl', 'show', MYSQL_UNIT, '-p', 'ExecMainStartTimestampMonotonic', '--value')
@@ -247,8 +307,8 @@ def mysql_launcher(out, recovery_guard):
                 if errors:
                     save(recovery_guard, {'reason': 'Original MySQL supervisor restoration failed', 'errors': errors})
                     raise RuntimeError('; '.join(errors))
-            restored = inspect(MYSQL)
-            assert (restored['effective_cpus'], restored['effective_mems']) == (original['effective_cpus'], original['effective_mems'])
+            restored = verify_mysql_container(original, same_id=False)
+            restore_service_cgroup_masks(MYSQL_UNIT, original_masks)
             save(out / 'mysql-launcher-restored.json', {'override_removed': not drop.exists(), 'container': restored})
         recovery_guard.unlink()
 
@@ -275,6 +335,57 @@ def restore_service_cgroup_masks(unit, expected):
     restored = service_cgroup_masks(unit)
     if restored != expected:
         raise RuntimeError('Cube service effective cgroup masks did not restore: ' + unit)
+    return restored
+
+
+def mysql_inherited_masks_need_rebuild(expected):
+    if any(expected[name] for name in ('cpuset.cpus', 'cpuset.mems')):
+        return False
+    actual = service_cgroup_masks(MYSQL_UNIT)
+    if actual['path'] != expected['path']:
+        raise RuntimeError('Cube service cgroup identity changed: ' + MYSQL_UNIT)
+    if not any(actual[name] for name in ('cpuset.cpus', 'cpuset.mems')):
+        return False
+    events = dict(line.split() for line in (Path(actual['path'])/'cgroup.events').read_text().splitlines())
+    return events.get('populated') == '1'
+
+
+def restore_mysql_inherited_masks(expected, original, out):
+    """Rebuild only the known MySQL inherited-mask case under the preserve launcher."""
+    if not mysql_inherited_masks_need_rebuild(expected):
+        raise RuntimeError('MySQL cgroup is not the populated inherited-mask case')
+    if MYSQL_DROP.read_text() != mysql_preserve_launcher(original['id']):
+        raise RuntimeError('MySQL inherited-mask restoration requires its preserve-container launcher')
+    if (not WEBUI_DROP.exists() or
+            output('systemctl', 'show', WEBUI, '-p', 'ActiveState', '--value') not in ('inactive', 'failed')):
+        raise RuntimeError('MySQL inherited-mask restoration requires quiesced Cube UI')
+    if any(output('systemctl', 'show', MYSQL_UNIT, '-p', key, '--value')
+           for key in ('AllowedCPUs', 'AllowedMemoryNodes')):
+        raise RuntimeError('Original MySQL systemd masks must be empty before rebuilding its cgroup')
+    mysql_volume_removal_disabled()
+    verify_mysql_container(original, same_id=True)
+    idle(timeout=1)
+    run('systemctl', 'stop', *FRONT)
+    run('systemctl', 'stop', MYSQL_UNIT)
+    if (output('systemctl', 'show', MYSQL_UNIT, '-p', 'ActiveState', '--value') not in ('inactive', 'failed') or
+            any(output('systemctl', 'show', MYSQL_UNIT, '-p', key, '--value') != '0'
+                for key in ('MainPID', 'ControlPID'))):
+        raise RuntimeError('MySQL supervisor did not stop before cgroup restoration')
+    group = Path(expected['path'])
+    if group.exists():
+        events = dict(line.split() for line in (group/'cgroup.events').read_text().splitlines())
+        if events.get('populated') != '0':
+            raise RuntimeError('MySQL cgroup remained populated after stopping its supervisor')
+        for name in ('cpuset.mems', 'cpuset.cpus'):
+            (group/name).write_text(expected[name] + '\n')
+    service_start(start_front=False)
+    restored = service_cgroup_masks(MYSQL_UNIT)
+    if restored != expected:
+        raise RuntimeError('MySQL raw and effective cgroup masks did not restore')
+    container = verify_mysql_container(original, same_id=True)
+    save(out/'mysql-inherited-masks-restored.json', {'cgroup': restored, 'container': container})
+    # Only expose the front end after both the database and its exact masks pass.
+    service_start()
     return restored
 
 
@@ -346,17 +457,29 @@ def placement(node, cpus, out, recovery_guard=None):
                     stdout=subprocess.DEVNULL)
             except Exception as exc:
                 errors.append(str(exc))
+        mysql_rebuild = None
         for unit in reversed(changed_units):
             try:
                 b = before['units'][unit]
                 run('systemctl', 'set-property', '--runtime', unit,
                     'AllowedCPUs=' + b['AllowedCPUs'], 'AllowedMemoryNodes=' + b['AllowedMemoryNodes'])
-                restore_service_cgroup_masks(unit, before['unit_cgroups'][unit])
+                expected = before['unit_cgroups'][unit]
+                if unit == 'cube-sandbox-mysql.service' and mysql_inherited_masks_need_rebuild(expected):
+                    mysql_rebuild = expected
+                else:
+                    restore_service_cgroup_masks(unit, expected)
             except Exception as exc:
                 errors.append(str(exc))
         for name in ('cpuset.mems', 'cpuset.cpus'):
             try:
                 (cg / name).write_text(before['sandbox_cgroup'][name])
+            except Exception as exc:
+                errors.append(str(exc))
+        # Restore front-end policies before restarting MySQL can start them:
+        # their original NUMA policy may otherwise conflict with the test mask.
+        if mysql_rebuild is not None and not errors:
+            try:
+                restore_mysql_inherited_masks(mysql_rebuild, before['containers'][MYSQL], out)
             except Exception as exc:
                 errors.append(str(exc))
         restored = {'units': {u: {k: output('systemctl', 'show', u, '-p', k, '--value')

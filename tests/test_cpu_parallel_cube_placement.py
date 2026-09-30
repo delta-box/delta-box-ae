@@ -27,7 +27,7 @@ def preparation_method():
 class CubePlacementTests(unittest.TestCase):
     def run_preparation(self, layout, *, cleanup_error=False, hosted=False, node=None, validate_only=False):
         events, placements, memory_calls, guards = [], [], [], []
-        active = {'placement': False, 'memory': False}
+        active = {'placement': False, 'memory': False, 'webui': False, 'mysql': False}
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             node = node if node is not None else (0 if layout == 'numa03' else 2)
@@ -46,7 +46,21 @@ class CubePlacementTests(unittest.TestCase):
             runner.prepare_cube_service = types.MethodType(prepare, runner)
 
             @contextmanager
+            def protected_service(name, directory, guard):
+                if name == 'mysql':
+                    self.assertTrue(active['webui'])
+                active[name] = True
+                events.append(name+'-enter')
+                try:
+                    yield
+                finally:
+                    self.assertFalse(active['placement'] or active['memory'])
+                    events.append(name+'-guarded' if guard.exists() else name+'-restored')
+                    active[name] = False
+
+            @contextmanager
             def placement(selected_node, selected_cpus, directory, guard):
+                self.assertTrue(active['webui'] and active['mysql'])
                 placements.append((selected_node, selected_cpus, directory, guard))
                 guards.append(guard)
                 events.append('placement-enter')
@@ -96,6 +110,8 @@ class CubePlacementTests(unittest.TestCase):
             control = types.ModuleType('cube_control_context')
             control.metadata_enabled = lambda config: False
             control.placement = mock.Mock(side_effect=placement)
+            control.quiesce_webui = lambda directory, guard: protected_service('webui', directory, guard)
+            control.mysql_launcher = lambda directory, guard: protected_service('mysql', directory, guard)
             control.proof = mock.Mock(side_effect=proof)
             memory = types.ModuleType('cube_memory_context')
             memory.memory_service = memory_service
@@ -138,8 +154,10 @@ class CubePlacementTests(unittest.TestCase):
         for failed in (False, True):
             with self.subTest(cleanup_error=failed):
                 events = self.run_preparation('numa03', cleanup_error=failed)
-                self.assertEqual(events, ['placement-enter', 'memory-enter', 'placement-proof', 'verified', 'saved',
-                                          'memory-cleaned', 'placement-guarded' if failed else 'placement-restored'])
+                self.assertEqual(events, ['webui-enter', 'mysql-enter', 'placement-enter', 'memory-enter', 'placement-proof', 'verified', 'saved',
+                                          'memory-cleaned', 'placement-guarded' if failed else 'placement-restored',
+                                          'mysql-guarded' if failed else 'mysql-restored',
+                                          'webui-guarded' if failed else 'webui-restored'])
 
     def test_self_managed_numa12_uses_only_existing_memory_context(self):
         self.assertEqual(self.run_preparation('numa12'), ['memory-enter', 'verified', 'saved', 'memory-cleaned'])
@@ -149,8 +167,10 @@ class CubePlacementTests(unittest.TestCase):
             for failed in (False, True):
                 with self.subTest(layout=layout, node=node, cleanup_error=failed):
                     events = self.run_preparation(layout, node=node, hosted=True, cleanup_error=failed)
-                    self.assertEqual(events, ['placement-enter', 'memory-enter', 'placement-proof', 'verified', 'saved',
-                                              'memory-cleaned', 'placement-guarded' if failed else 'placement-restored'])
+                    self.assertEqual(events, ['webui-enter', 'mysql-enter', 'placement-enter', 'memory-enter', 'placement-proof', 'verified', 'saved',
+                                              'memory-cleaned', 'placement-guarded' if failed else 'placement-restored',
+                                              'mysql-guarded' if failed else 'mysql-restored',
+                                              'webui-guarded' if failed else 'webui-restored'])
 
     def test_hosted_preflight_validates_placement_without_mutating_services(self):
         for layout in ('numa12', 'numa03'):

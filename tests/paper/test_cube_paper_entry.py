@@ -25,11 +25,14 @@ class CubePaperEntryTests(unittest.TestCase):
 
     def test_hosted_forwarding_and_selected_destination(self):
         args = hosted.parse_arguments(['--checkout', '/repo', *FLAGS])
-        policy = dict(python=Path('/python'), runtime_root=Path('/repo'), config=Path('/fixed.json'))
-        command = hosted.command_line(policy, args, Path('/out'))
-        self.assertEqual(command[command.index('--cube-profile')+1], 'paper-disk')
-        self.assertNotIn('--numa-node', command)
-        self.assertEqual(hosted.default_result(policy, args).parent, Path('selected'))
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / 'review.json'
+            config.write_text(json.dumps({'review': {'validation_max_jobs': 10}}))
+            policy = dict(python=Path('/python'), runtime_root=Path('/repo'), config=config)
+            command = hosted.command_line(policy, args, Path('/out'))
+            self.assertEqual(command[command.index('--cube-profile')+1], 'paper-disk')
+            self.assertNotIn('--numa-node', command)
+            self.assertEqual(hosted.default_result(policy, args).parent, Path('selected'))
 
     def test_rejects_mixed_or_truncated_hosted_entry(self):
         variants = [[], ['--group','cube'], ['--experiment','table-02-e2b'],

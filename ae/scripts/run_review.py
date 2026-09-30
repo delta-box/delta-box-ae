@@ -1297,9 +1297,11 @@ class Review:
                 # the shared control plane to the actual lane in both layouts,
                 # and restore it only after the RAM service is clean.
                 # Keep the existing self-managed NUMA0/3 behavior unchanged.
-                from ae.scripts.cube_control_context import placement
+                from ae.scripts.cube_control_context import placement, quiesce_webui, mysql_launcher
                 control_out = service_out / 'control-plane'
                 guard = control_out / 'RECOVERY_REQUIRED.json'
+                contexts.enter_context(quiesce_webui(control_out, guard))
+                contexts.enter_context(mysql_launcher(control_out, guard))
                 contexts.enter_context(placement(node, cpus, control_out, guard))
                 service_options['recovery_guard'] = guard
             from ae.scripts.cube_memory_context import memory_service
