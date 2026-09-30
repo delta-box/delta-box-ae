@@ -113,6 +113,67 @@ class OwnedChildrenTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Refuse subreaper restore'):
             children.restore()
 
+    def test_live_reap_initial_drain_excludes_producer_and_restores_sigchld(self):
+        original=signal.getsignal(signal.SIGCHLD)
+        children=job.OwnedChildren()
+        self.addCleanup(children.stop_live_reaping)
+        self.pids.update({111,321})
+        children.register(111)
+        self.wait_results.append(SimpleNamespace(si_pid=321,si_status=0))
+        children.start_live_reaping(111)
+        self.assertEqual(self.pids,{111})
+        self.assertFalse(self.signals)
+        self.assertTrue(children.evidence[1]['reaped_during_producer'])
+        self.assertNotIn('reaped',children.evidence[0])
+        self.assertEqual(self.closed,[1321])
+        children.stop_live_reaping()
+        self.assertEqual(signal.getsignal(signal.SIGCHLD),original)
+
+    def test_live_adopted_process_is_not_killed_or_prematurely_reaped(self):
+        original=signal.getsignal(signal.SIGCHLD)
+        children=job.OwnedChildren()
+        self.addCleanup(children.stop_live_reaping)
+        self.pids.update({111,321}); children.register(111)
+        children.start_live_reaping(111)
+        self.assertEqual(self.pids,{111,321})
+        self.assertFalse(self.signals)
+        self.assertFalse(self.closed)
+        children.stop_live_reaping()
+        self.assertEqual(signal.getsignal(signal.SIGCHLD),original)
+
+    def test_tail_sigchld_reentry_is_drained_after_busy_clears(self):
+        test=self
+        class TailRace(job.OwnedChildren):
+            def __setattr__(self,name,value):
+                if name=='reap_busy' and value is False and getattr(self,'armed',False):
+                    self.armed=False
+                    test.pids.add(444)
+                    test.wait_results.append(SimpleNamespace(si_pid=444,si_status=0))
+                    self.reap_terminated(None,None)  # Reenters while still busy.
+                super().__setattr__(name,value)
+        original=signal.getsignal(signal.SIGCHLD)
+        children=TailRace()
+        self.addCleanup(children.stop_live_reaping)
+        self.pids.add(111);children.register(111)
+        children.armed=True
+        children.start_live_reaping(111)
+        self.assertEqual(self.pids,{111})
+        self.assertTrue(children.evidence[-1]['reaped_during_producer'])
+        self.assertEqual(self.closed,[1444])
+        children.stop_live_reaping()
+        self.assertEqual(signal.getsignal(signal.SIGCHLD),original)
+
+    def test_live_reap_error_restores_handler_and_remains_fail_closed(self):
+        original=signal.getsignal(signal.SIGCHLD)
+        children=job.OwnedChildren()
+        self.pids.update({111,321}); children.register(111)
+        with patch.object(job.os,'waitid',side_effect=RuntimeError('waitid failed')):
+            children.start_live_reaping(111)
+        with self.assertRaisesRegex(RuntimeError,'live reaping failed'):
+            children.stop_live_reaping()
+        self.assertEqual(signal.getsignal(signal.SIGCHLD),original)
+        self.assertFalse(self.signals)
+
     def test_preexisting_unrelated_direct_child_refuses_subreaper_setup(self):
         self.pids.add(999)
         with self.assertRaisesRegex(RuntimeError, 'unrelated asynchronous children'):

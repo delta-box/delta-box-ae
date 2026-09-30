@@ -47,6 +47,10 @@ class OwnedChildren:
         self.previous = subreaper_flag()
         self.entries = {}
         self.evidence = []
+        self.producer_pid = None
+        self.live_reap_error = None
+        self.reap_busy = False
+        self.reap_pending = False
         subreaper_flag(1)
 
     def register(self, pid):
@@ -63,6 +67,59 @@ class OwnedChildren:
         self.entries[pid] = record
         self.evidence.append(proof)
         return record
+
+    def start_live_reaping(self, producer_pid):
+        """Reap terminal adopted children while the sole producer is active.
+
+        CRIU restores an original PID. A restored orphan can become our child;
+        leaving its zombie until final cleanup would block the next restore.
+        This window contains only producer.wait, never synchronous helper calls.
+        """
+        if self.producer_pid is not None or producer_pid not in self.entries:
+            raise RuntimeError('Live reaping requires one registered producer')
+        self.producer_pid = producer_pid
+        self.previous_sigchld = signal.signal(signal.SIGCHLD, self.reap_terminated)
+        self.reap_terminated(None, None)  # Adopted exit can precede handler installation.
+
+    def reap_terminated(self, signum, frame):
+        if self.producer_pid is None:
+            return
+        if self.reap_busy:
+            self.reap_pending = True
+            return
+        self.reap_busy = True
+        try:
+            while True:
+                self.reap_pending = False
+                for pid in direct_children() - {self.producer_pid}:
+                    try:
+                        record = self.entries.get(pid) or self.register(pid)
+                        result = os.waitid(os.P_PIDFD, record['pidfd'], os.WEXITED | os.WNOHANG)
+                        if result is not None:
+                            record['proof'].update(reaped=True, reaped_during_producer=True,
+                                                   exit_status=result.si_status)
+                            os.close(self.entries.pop(pid)['pidfd'])
+                    except (FileNotFoundError, ProcessLookupError):
+                        # Process identity is rechecked before each acquisition;
+                        # a disappearing candidate is not signaled or guessed.
+                        continue
+                if not self.reap_pending:
+                    break
+        except Exception as error:
+            self.live_reap_error = f'{type(error).__name__}: {error}'
+        finally:
+            self.reap_busy = False
+        # SIGCHLD can reenter after the loop decides to break but before busy
+        # is cleared. Drain that deferred notification before returning.
+        if self.reap_pending and self.producer_pid is not None:
+            self.reap_terminated(None, None)
+
+    def stop_live_reaping(self):
+        if self.producer_pid is not None:
+            self.producer_pid = None
+            signal.signal(signal.SIGCHLD, self.previous_sigchld)
+        if self.live_reap_error:
+            raise RuntimeError('Adopted-child live reaping failed: ' + self.live_reap_error)
 
     def send(self, record, signum):
         if process_identity(record['pid']) != {key: record[key] for key in ('pid', 'start_ticks')}:
@@ -134,6 +191,7 @@ class OwnedChildren:
             time.sleep(0.05)
 
     def restore(self):
+        self.stop_live_reaping()
         if direct_children():
             raise RuntimeError('Refuse subreaper restore while owned descendants remain')
         subreaper_flag(self.previous)

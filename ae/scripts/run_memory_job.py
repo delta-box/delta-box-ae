@@ -256,6 +256,7 @@ def run(args):
         write_json(archive_status, dict(meta, status='running'))
         child = subprocess.Popen(command, env=env, start_new_session=True)
         children.register(child.pid)
+        children.start_live_reaping(child.pid)
         code = child.wait()
     except BaseException as error:
         meta['original_error'] = f'{type(error).__name__}: {error}'
@@ -266,6 +267,12 @@ def run(args):
             children_ok = True
             try:
                 if children is not None:
+                    try:
+                        children.stop_live_reaping()
+                    except BaseException as error:
+                        children_ok = False
+                        errors.append(f'live reap cleanup: {type(error).__name__}: {error}')
+                        code = 1
                     children.cleanup(child)
             except BaseException as error:
                 children_ok = False
