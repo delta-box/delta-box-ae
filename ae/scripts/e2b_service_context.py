@@ -1,4 +1,4 @@
-"""Protected NUMA0/3 placement for the existing hosted E2B fanout service.
+"""Protected fixed-NUMA placement for the existing hosted E2B fanout service.
 
 Only the registered local daemon/container/cgroup identities are changed.
 Daemon restarts give them a fresh, reversible NUMA policy. SDK credentials stay
@@ -6,6 +6,7 @@ in process memory; manifests contain identities and placement, never environment
 The caller must hold the results and NUMA leases until restoration completes.
 """
 from contextlib import contextmanager
+import datetime
 import hashlib
 import json
 import os
@@ -30,6 +31,8 @@ CG_FILES = ('cpuset.cpus', 'cpuset.cpus.effective', 'cpuset.mems', 'cpuset.mems.
             'memory.swap.max', 'memory.swap.current', 'cgroup.subtree_control', 'cgroup.events')
 GUARD = ROOT / 'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
 DROP_NAME = 'zzzz-deltabox-numa03-e2b.conf'
+API_LOG = Path('/mnt/disk2/dyp/ae-hosted-20260922/e2b/logs/api.log')
+LANE_CPUS = {0: '0-3', 1: '28-31', 2: '48-51', 3: '72-75'}
 
 
 def run(*args):
@@ -99,13 +102,13 @@ def require_results_lease():
 
 
 def require_admission(config, node, cpus):
-    if os.geteuid() != 0 or node not in (0, 3):
-        raise ValueError('E2B service placement requires root and NUMA0/3')
+    if os.geteuid() != 0 or type(node) is not int or node not in LANE_CPUS:
+        raise ValueError('E2B service placement requires root and NUMA0/1/2/3')
     settings = config.get('e2b', {})
     if settings.get('api_url', '').rstrip('/') not in ('http://127.0.0.1:3100', 'http://localhost:3100') or settings.get('sandbox_url', '').rstrip('/') not in ('http://127.0.0.1:3102', 'http://localhost:3102'):
         raise ValueError('E2B service placement requires the registered local API')
-    if not cpuset(cpus):
-        raise ValueError('E2B service placement requires a CPU mask')
+    if cpuset(cpus) != cpuset(LANE_CPUS[node]):
+        raise ValueError('E2B service placement requires the fixed CPUs for its NUMA lane')
     assert_backend_ready()
     owner = require_pinned_parent(node, cpus)
     return {'numa_lease_owner': owner, 'results_lease_owner': require_results_lease()}
@@ -297,7 +300,155 @@ def snapshot():
     return {'units': {u: unit(u) for u in UNITS}, 'containers': {n: container(n) for n in CONTAINERS}, 'vm_root': cgroup(VM_ROOT)}
 
 
-def wait_actual(config, before, node, cpus, timeout=90):
+def start_ticks(pid):
+    return int(Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19])
+
+
+class APINodeReadiness:
+    """Read only fresh status emitted by this registered API restart.
+
+    The registered API has no usable admin token (/nodes returns 401). Its
+    internal status logs call the same Node.Status() used by placement. Bind
+    the append-only log's inode/EOF before stop, then the new PID/start tick;
+    old statuses, PID reuse, log rotation and truncation cannot satisfy this
+    gate. No SDK create or timed operation is retried here.
+    """
+    def __init__(self, original):
+        self.original = {'pid': original['pid'], 'start_ticks': original['start_ticks']}
+        self.api = None
+        self.captured_at = datetime.datetime.now(datetime.timezone.utc)
+        self.startup = None
+        self.latest = None
+        self.partial = b''
+        self.fd_identity(self.original)
+        fd = os.open(API_LOG, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
+                raise RuntimeError('Registered API log is not a regular file')
+            self.device, self.inode, self.offset = info.st_dev, info.st_ino, info.st_size
+        finally:
+            os.close(fd)
+        self.initial_offset = self.offset
+        self.fd_identity(self.original)
+
+    def fd_identity(self, api):
+        if start_ticks(api['pid']) != api['start_ticks']:
+            raise RuntimeError('Registered API PID/start identity changed during readiness')
+        fd_path = Path(f"/proc/{api['pid']}/fd/1")
+        if os.readlink(fd_path) != str(API_LOG):
+            raise RuntimeError('Registered API stdout differs from its known log')
+        observed, file = fd_path.stat(), API_LOG.lstat()
+        if not stat.S_ISREG(file.st_mode) or (observed.st_dev, observed.st_ino) != (file.st_dev, file.st_ino):
+            raise RuntimeError('Registered API log identity differs from stdout')
+        if hasattr(self, 'inode') and (file.st_dev, file.st_ino) != (self.device, self.inode):
+            raise RuntimeError('Registered API log rotated during readiness')
+        if start_ticks(api['pid']) != api['start_ticks']:
+            raise RuntimeError('Registered API PID/start identity changed during readiness')
+
+    def bind(self, api):
+        value = {'pid': api['pid'], 'start_ticks': api['start_ticks']}
+        if value == self.original or value['start_ticks'] < self.original['start_ticks']:
+            raise RuntimeError('API readiness requires the new registered restart')
+        self.fd_identity(value)
+        if self.api is not None and self.api != value:
+            raise RuntimeError('API restarted again during readiness')
+        self.api = value
+
+    def before(self):
+        return {'path': str(API_LOG), 'device': self.device, 'inode': self.inode,
+                'offset': self.initial_offset, 'captured_at': self.captured_at.isoformat(),
+                'original_api': self.original}
+
+    def next_restart(self):
+        # Original daemons are now stopped. Bind a fresh EOF to the already
+        # admitted inode before starting restoration; no dead PID is read.
+        result = object.__new__(type(self))
+        result.original = self.api or self.original
+        result.api, result.startup, result.latest = None, None, None
+        result.partial = b''
+        result.captured_at = datetime.datetime.now(datetime.timezone.utc)
+        fd = os.open(API_LOG, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            if (info.st_dev, info.st_ino) != (self.device, self.inode) or info.st_size < self.offset:
+                raise RuntimeError('Registered API log changed before original-service restart')
+            result.device, result.inode = info.st_dev, info.st_ino
+            result.offset = result.initial_offset = info.st_size
+        finally:
+            os.close(fd)
+        return result
+
+    def parse(self, raw, offset):
+        # Console JSON begins after the message; never save arbitrary log text.
+        text = raw.decode('utf-8', errors='replace')
+        match = re.fullmatch(r'(\S+)\s+(?:\x1b\[[0-9;]*m)*INFO(?:\x1b\[[0-9;]*m)*\s+(Starting API service\.\.\.|API internal status)\s+(\{.*\})', text)
+        if not match:
+            return
+        try:
+            # The Go console logger writes +0800; Python 3.10's
+            # fromisoformat accepts +08:00 but rejects that compact offset.
+            timestamp = re.sub(r'([+-]\d{2})(\d{2})$', r'\1:\2', match[1])
+            at = datetime.datetime.fromisoformat(timestamp)
+            row = json.loads(match[3])
+        except (ValueError, TypeError):
+            return
+        if at.tzinfo is None or at < self.captured_at or at > datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=1):
+            return
+        if row.get('service') != 'orchestration-api' or row.get('internal') is not True or type(row.get('pid')) is not int or row['pid'] != self.api['pid']:
+            return
+        record = {'logged_at': at.isoformat(), 'offset': offset, 'bytes': len(raw),
+                  'sha256': hashlib.sha256(raw).hexdigest()}
+        if match[2] == 'Starting API service...':
+            instance = row.get('service.instance.id')
+            if not isinstance(instance, str) or not instance:
+                return
+            if self.startup is not None and self.startup['service_instance_id'] != instance:
+                raise RuntimeError('API service instance changed during readiness')
+            self.startup = dict(record, service_instance_id=instance)
+        elif self.startup is not None and at >= datetime.datetime.fromisoformat(self.startup['logged_at']):
+            # Retain the latest status, including a later transition away from
+            # ready in the same read; an earlier ready line cannot mask it.
+            nodes = row.get('nodes')
+            ready = (type(row.get('nodes_count')) is int and row['nodes_count'] == 1
+                     and isinstance(nodes, list) and len(nodes) == 1 and isinstance(nodes[0], dict)
+                     and nodes[0].get('id') == 'local' and nodes[0].get('status') == 'ready'
+                     and type(nodes[0].get('sandboxes')) is int and nodes[0]['sandboxes'] == 0)
+            self.latest = dict(record, ready=ready,
+                nodes_count=row['nodes_count'] if type(row.get('nodes_count')) is int else None,
+                local_node={'id':'local','status':'ready','sandboxes':0} if ready else None)
+
+    def poll(self, api):
+        self.bind(api)
+        fd = os.open(API_LOG, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            if (info.st_dev, info.st_ino) != (self.device, self.inode) or info.st_size < self.offset:
+                raise RuntimeError('Registered API log rotated/truncated during readiness')
+            os.lseek(fd, self.offset, os.SEEK_SET)
+            raw = os.read(fd, 1024**2)
+            cursor = self.offset - len(self.partial)
+            self.offset += len(raw)
+            lines = (self.partial + raw).split(b'\n')
+            self.partial = lines.pop()
+            if len(self.partial) > 64*1024:
+                raise RuntimeError('Unbounded API readiness log line')
+            for line in lines:
+                self.parse(line, cursor)
+                cursor += len(line) + 1
+            caught_up = self.offset == os.fstat(fd).st_size and not self.partial
+        finally:
+            os.close(fd)
+        self.fd_identity(self.api)
+        return bool(caught_up and self.latest and self.latest['ready'])
+
+    def evidence(self):
+        return {**self.before(), 'api': self.api, 'startup': self.startup,
+                'ready_status': self.latest, 'observed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                'scope': 'Fresh registered API internal status; local node ready and idle before timed SDK work'}
+
+
+def wait_actual(config, before, node, cpus, *, readiness, timeout=90):
     """Type=simple wrappers can briefly still be Python while they exec Go."""
     end = time.monotonic() + timeout
     while True:
@@ -311,6 +462,9 @@ def wait_actual(config, before, node, cpus, timeout=90):
                 assert_pinned(row, node, cpus, swap=False)
             assert_pinned({'cgroup': actual['vm_root']}, node, cpus)
             idle(config, timeout=1)
+            if not readiness.poll(actual['units']['ae-e2b-api.service']['process']):
+                raise RuntimeError('Registered API local node is not ready after restart')
+            actual['api_node_readiness'] = readiness.evidence()
             return actual
         except (OSError, RuntimeError, subprocess.CalledProcessError):
             if time.monotonic() >= end:
@@ -442,13 +596,16 @@ def assert_restored(before, restored):
                 raise RuntimeError('Original E2B container actual task placement did not restore: ' + name)
 
 
-def wait_restored(config, before, timeout=90):
+def wait_restored(config, before, *, readiness, timeout=90):
     end = time.monotonic() + timeout
     while True:
         try:
             restored = snapshot()
             assert_restored(before, restored)
             idle(config, timeout=1)
+            if readiness is None or not readiness.poll(restored['units']['ae-e2b-api.service']['process']):
+                raise RuntimeError('Original registered API local node has not become ready')
+            restored['api_node_readiness'] = readiness.evidence()
             return restored
         except (OSError, RuntimeError, subprocess.CalledProcessError):
             if time.monotonic() >= end:
@@ -457,7 +614,7 @@ def wait_restored(config, before, timeout=90):
 
 
 @contextmanager
-def service_placement(config, out, *, fanout_path):
+def service_placement(config, out, *, fanout_path, working_storage=False, source_sha256=None):
     measurement = config.get('measurement', {})
     node, cpus = measurement.get('numa_node'), measurement.get('cpus')
     admission = require_admission(config, node, cpus)
@@ -466,7 +623,14 @@ def service_placement(config, out, *, fanout_path):
         raise RuntimeError('An earlier E2B placement dropin exists')
     before = snapshot()
     idle(config)
-    save(out / 'before.json', dict(before, admission=admission))
+    readiness = APINodeReadiness(before['units']['ae-e2b-api.service']['process'])
+    storage = None
+    if working_storage:
+        from ae.scripts.e2b_working_storage import WorkingStorage
+        storage = WorkingStorage(config, out.parent/'e2b-storage', node, cpus, source_sha256,
+                                 root=ROOT, units=UNITS, vm_root=VM_ROOT)
+        storage.admit(before)
+    save(out / 'before.json', dict(before, admission=admission, api_node_readiness=readiness.before()))
     saved_controls = {}
     for name in UNITS:
         for prop in RESOURCE_PROPERTIES:
@@ -484,9 +648,14 @@ def service_placement(config, out, *, fanout_path):
         # Mark before the first mutation so a partial restart still restores.
         changed = True
         stop_owned_units(owned_units)
+        if storage is not None:
+            storage.prepare_stopped()
         for name, path in drops.items():
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text('[Service]\nCPUAffinity=\nCPUAffinity=' + cpus + '\nNUMAPolicy=bind\nNUMAMask=\nNUMAMask=' + str(node) + '\n')
+            text = '[Service]\nCPUAffinity=\nCPUAffinity=' + cpus + '\nNUMAPolicy=bind\nNUMAMask=\nNUMAMask=' + str(node) + '\n'
+            if storage is not None and name == 'ae-e2b-orchestrator.service':
+                text += 'Environment="TMPDIR=' + str(storage.ram/'tmp') + '"\n'
+            path.write_text(text)
         run('systemctl', 'daemon-reload')
         for name in UNITS:
             run('systemctl', 'set-property', '--runtime', name, 'AllowedCPUs=' + cpus, 'AllowedMemoryNodes=' + str(node), 'MemorySwapMax=0')
@@ -507,12 +676,16 @@ def service_placement(config, out, *, fanout_path):
             run('systemctl', 'start', name)
             owned_units[name] = unit(name)['process']
             save(out / 'transaction-unit-identities.json', owned_units)
-        active = wait_actual(config, before, node, cpus)
+        readiness.bind(owned_units['ae-e2b-api.service'])
+        active = wait_actual(config, before, node, cpus, readiness=readiness)
+        if storage is not None:
+            storage.verify_active(active['units']['ae-e2b-orchestrator.service'])
         save(out / 'actual.json', active)
         proof.worker.start()
         measurement_started = True
         yield {'manifest': str(out / 'actual.json'), 'node': node, 'cpus': cpus,
-               'scope': 'Registered E2B daemon cgroups, metadata containers, and /e2b VM root; not host-wide placement'}
+               'scope': 'Registered E2B daemon cgroups, metadata containers, and /e2b VM root; not host-wide placement',
+               **({'working_storage_manifest':str(storage.out/'verified.json')} if storage is not None else {})}
         proof.finish(out / 'vm-proof.json')
         save(out / 'vm-id-coverage.json', proof.verify_ids(fanout_path))
     except BaseException as error:
@@ -543,6 +716,7 @@ def service_placement(config, out, *, fanout_path):
             save(GUARD, {'reason': 'E2B resources require recovery; placement retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
             save(out / 'transaction-result.json', {'original_error': error_record(original_error), 'restoration_errors': failures, 'placement_retained': True})
             raise RuntimeError('E2B resources require recovery; placement retained') from (original_error or error)
+        restoration_readiness = None
         if changed:
             try:
                 stop_owned_units(owned_units)
@@ -551,6 +725,16 @@ def service_placement(config, out, *, fanout_path):
                 save(GUARD, {'reason': 'E2B daemon stop failed; resources retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
                 save(out / 'transaction-result.json', {'original_error': error_record(original_error), 'restoration_errors': failures, 'placement_retained': True})
                 raise RuntimeError('E2B daemon stop failed; shared resource restoration was not attempted') from (original_error or error)
+            if storage is not None:
+                try:
+                    storage.restore_stopped()
+                except BaseException as error:
+                    failures = [error_record(error)]
+                    save(GUARD, {'reason': 'E2B RAM storage restoration failed; resources retained',
+                        'evidence':str(out),'original_error':error_record(original_error),'restoration_errors':failures})
+                    save(out/'transaction-result.json', {'original_error':error_record(original_error),
+                        'restoration_errors':failures,'placement_retained':True})
+                    raise RuntimeError('E2B RAM storage restoration failed; original services were not restarted') from (original_error or error)
             def attempt(operation):
                 try:
                     operation()
@@ -574,10 +758,16 @@ def service_placement(config, out, *, fanout_path):
                 # effective inherited mask explicitly, as in the Cube context.
                 attempt(lambda b=b: run('docker', 'update', '--cpuset-cpus', b['cpus'] or b['process']['cpus'], '--cpuset-mems', b['mems'] or b['process']['mems'], b['id']))
             attempt(lambda: restore_root(before['vm_root']))
+            try:
+                restoration_readiness = readiness.next_restart()
+            except Exception as error:
+                errors.append(error_record(error))
             attempt(lambda: run('systemctl', 'start', *reversed(UNITS)))
         restored = None
         try:
-            restored = wait_restored(config, before)
+            restored = wait_restored(config, before, readiness=restoration_readiness)
+            if storage is not None:
+                storage.verify_restored(restored['units']['ae-e2b-orchestrator.service'])
         except Exception as error:
             errors.append(error_record(error))
         save(out / 'after.json', {'restored': restored, 'errors': errors,

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from ae.scripts.build_review_comparison import (
-    BOUNDARIES_ZH, ITEMS, PAPER_SHA256, brief_population, build, coverage_lines, digest, missing_details, sample_lines,
+    BOUNDARIES_ZH, ITEMS, PAPER_SHA256, brief_population, build, comparison_conditions, coverage_lines, digest, missing_details, sample_lines,
     sample_records, verify_inputs,
 )
 
@@ -118,6 +118,57 @@ class ReviewComparisonTests(unittest.TestCase):
         (self.paper / "figure-06.png").write_bytes(PIXEL + b"changed")
         with self.assertRaisesRegex(ValueError, "changed original"):
             self.verify()
+
+    def test_cube_ram_storage_retains_identity_and_marks_paper_mismatch(self):
+        result = copy.deepcopy(self.document["experiments"]["table-02"])
+        for row in result["metrics"]:
+            row.update(backend="cube", storage_mode="tmpfs-noswap", measurement_identity="ram-population")
+        rows = sample_records("table-02", result, "profile-a")
+        self.assertTrue(all(row["storage_mode"] == "tmpfs-noswap" for row in rows))
+        self.assertTrue(all(row["measurement_identity"] == "ram-population" for row in rows))
+        condition, = comparison_conditions("table-02", result)
+        self.assertEqual(condition["current_storage_modes"], ["tmpfs-noswap"])
+        self.assertFalse(condition["storage_matches_paper"])
+        self.assertIn("paper used disk-backed storage", condition["en"])
+        self.assertIn("存储条件不同", condition["zh"])
+        label = brief_population('experiment="table-02-cube";storage_mode="tmpfs-noswap"')
+        self.assertIn('storage_mode="tmpfs-noswap"', label)
+        self.assertEqual(comparison_conditions("figure-08", result), [])
+
+    def test_cube_disk_label_does_not_establish_exact_paper_conditions(self):
+        result = dict(metrics=[dict(backend="cube", storage_mode="disk-backed-xfs")])
+        condition, = comparison_conditions("table-02", result)
+        self.assertIsNone(condition["storage_matches_paper"])
+        self.assertIn("does not verify", condition["en"])
+        result["metrics"].append(dict(backend="cube"))
+        condition, = comparison_conditions("table-02", result)
+        self.assertTrue(condition["missing_storage_identity"])
+        self.assertIn("matching conditions are not verified", condition["en"])
+        result["metrics"].append(dict(backend="cube", storage_mode="tmpfs-noswap"))
+        condition, = comparison_conditions("table-02", result)
+        self.assertFalse(condition["storage_matches_paper"])
+        self.assertEqual(condition["current_storage_modes"], ["disk-backed-xfs", "tmpfs-noswap"])
+
+    @unittest.skipUnless(importlib.util.find_spec("matplotlib"), "Plotting extra is not installed")
+    def test_compact_paper_report_discloses_cube_ram_storage_in_both_languages(self):
+        for row in self.document["experiments"]["table-02"]["metrics"]:
+            row.update(backend="cube", storage_mode="tmpfs-noswap")
+        self.write_summary()
+        plots = json.loads(self.plots.read_text())
+        plots["artifacts"][0].update(layout="paper", population=None, populations=["profile-a"])
+        write(self.plots, plots)
+        output = self.root / "cube-storage-comparison"
+        manifest = build(self.summary, self.plots, coverage_path=self.coverage,
+                         output=output, paper_dir=self.paper)
+        self.assert_bilingual_pages(output, manifest)
+        item = manifest["items"][0]
+        self.assertEqual(item["layout"], "paper")
+        self.assertFalse(item["comparison_conditions"][0]["storage_matches_paper"])
+        self.assertIn("paper used disk-backed storage", (output / "README.md").read_text())
+        self.assertIn("存储条件不同", (output / "README-zh.md").read_text())
+        self.assertEqual([row["storage_mode"] for row in item["populations"][0]["samples"]],
+                         ["tmpfs-noswap", "tmpfs-noswap"])
+        self.assertEqual([row["value"] for row in self.document["experiments"]["table-02"]["metrics"]], [8, 8])
 
     def test_sample_counts_preserve_population_and_overlapping_denominators(self):
         result = copy.deepcopy(self.document["experiments"]["table-02"])

@@ -307,8 +307,8 @@ def parse_arguments(argv):
     parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
     args.cpu_layout = args.cpu_layout or 'numa12'
-    if args.cpu_layout != 'numa12' and not args.cpu_parallel:
-        parser.error('--cpu-layout numa03 requires --cpu-parallel')
+    if args.cpu_layout != 'numa12' and not (args.cpu_parallel or args.isolated_validation):
+        parser.error('--cpu-layout numa03 requires --cpu-parallel or strict isolated baseline validation')
     if args.cpu_parallel and (args.group != ['cpu'] or args.experiment or args.all or args.quick_check
             or args.numa_node is not None or args.cpus is not None or args.gpu_cases
             or args.cube_profile or args.e2b_profile or args.isolated_validation or args.reuse_completed_from):
@@ -351,10 +351,21 @@ def parse_arguments(argv):
             parser.error('--numa-node and --cpus must be supplied together')
         if args.numa_node < 0 or not re.fullmatch(r'[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*', args.cpus):
             parser.error('Invalid NUMA/CPU placement')
+    if args.isolated_validation and args.cpu_layout == 'numa03':
+        limits = {'table-02-criu': 1, 'table-02-fc-diff': 2}
+        experiment = args.experiment[0] if len(args.experiment or []) == 1 else None
+        if (experiment not in limits or args.group or args.all or args.quick_check
+                or args.list or args.cpu_parallel or args.limit != limits[experiment] or args.max_events is not None
+                or not (args.output or args.resume) or args.reuse_completed_from or args.gpu_cases
+                or args.cube_profile or args.e2b_profile or args.baseline_inputs not in (None, '44')
+                or (args.numa_node, args.cpus) not in ((0, '0-3'), (3, '72-75'))):
+            parser.error('Isolated NUMA0/3 validation requires CRIU limit1 or FC-Diff limit2, complete inputs, explicit output and exact NUMA0/3 CPUs')
     if args.isolated_validation:
         supported = {'table-02-deltabox', 'table-03-slow', 'figure-02-filesystem',
                      'figure-02-memory', 'figure-06-memory', 'figure-06-adaptive',
                      'figure-09', 'correctness'}
+        if args.cpu_layout == 'numa03':
+            supported.update(('table-02-criu', 'table-02-fc-diff'))
         if (len(args.experiment or []) != 1 or args.experiment[0] not in supported
                 or args.group or args.all or args.quick_check or args.list
                 or getattr(args, 'reuse_completed_from', None) or not (args.output or args.resume)
@@ -460,7 +471,7 @@ def command_line(policy, args, output):
     for key in ('experiment', 'group'):
         for value in getattr(args, key) or []:
             command += ['--' + key, value]
-    if args.cpu_parallel and args.cpu_layout != 'numa12':
+    if args.cpu_layout != 'numa12':
         command += ['--cpu-layout', args.cpu_layout]
     if getattr(args, 'e2b_profile', None) is not None:
         command += ['--e2b-profile', args.e2b_profile]
@@ -667,6 +678,12 @@ def verify_background_cleanup(policy, command, *, check_experiment_failure=True)
         if not path.is_file():
             continue  # A yield may occur before admission creates any record.
         record = json.loads(path.read_text())
+        if (check_experiment_failure
+                and record.get('concurrency_policy', {}).get('lane') in (
+                    'isolated-background-criu-validation', 'isolated-background-fc-diff-validation')
+                and (record.get('status') == 'failed'
+                     or any(row.get('status') == 'failed' for row in record.get('coverage', [])))):
+            raise RuntimeError('A failed baseline diagnostic cannot be retried as a reviewer handover: ' + str(path))
         if any(row.get('cleanup_timeout') for row in record.get('cpu_lanes', {}).values()):
             raise RuntimeError('A CPU lane exceeded its graceful cleanup deadline: ' + str(path))
         if any(step.get('status') == 'failed' and 'cleanup' in step.get('name', '')
@@ -878,6 +895,10 @@ def run_background_cpu(policy, caller, args, output, environment, priority, *, t
         print('NUMA0/3 validation will resume completed coverage after reviewer cleanup.', flush=True)
 
 
+def managed_cpu_execution(args):
+    return args.cpu_parallel or (args.isolated_validation and args.cpu_layout == 'numa03')
+
+
 def main(argv=None, *, service_context=None):
     lock_fd = priority_fd = None
     try:
@@ -894,7 +915,7 @@ def main(argv=None, *, service_context=None):
             caller = pwd.getpwuid(uid)
         trust = runtime_trust(policy)
         args = parse_arguments(argv)
-        if service_context is not None and (not args.cpu_parallel or args.list):
+        if service_context is not None and (not managed_cpu_execution(args) or args.list):
             raise ValueError('CPU service admission requires a CPU execution')
         runtime = trusted_path(policy['runtime_root'], directory=True, trust=trust)
         if args.checkout.resolve(strict=True) != runtime:
@@ -943,20 +964,28 @@ def main(argv=None, *, service_context=None):
                 raise ValueError('Reused and new result directories must be separate')
             args.reuse_completed_from = source
         command = command_line(policy, args, output)
+        executable = str(policy['python'])
         if service_context is not None:
             identity = cpu_service_identity(unit)
             if args.cpu_layout == 'numa03':
                 identity.update(background_cpu_binding(identity['cgroup']))
+                if args.isolated_validation:
+                    # The protected controller starts on CPU4-7. A strict
+                    # serial diagnostic must first select its permitted lane,
+                    # as the parallel lane launcher already does.
+                    command = ['/usr/bin/numactl', '--all', '--physcpubind=' + args.cpus,
+                               '--membind=' + str(args.numa_node), *command]
+                    executable = command[0]
             # HOME=/root also preserves root-owned dependency Git allowances.
             environment.update(cpu_git_environment(policy, runtime, trust))
             audit_launch(policy, caller, command, trust=trust, event='cpu-service-running', **identity)
-        elif not (args.cpu_parallel and not args.list):
+        elif not (managed_cpu_execution(args) and not args.list):
             audit_launch(policy, caller, command, trust=trust)
         print(f'Hosted AE runtime: {runtime}; caller: {caller.pw_name} (uid {caller.pw_uid})', flush=True)
         if output is not None:
             print(f'Hosted AE results: {output}', flush=True)
         os.chdir(runtime)
-        if args.cpu_parallel and not args.list and service_context is None:
+        if managed_cpu_execution(args) and not args.list and service_context is None:
             if args.cpu_layout == 'numa03':
                 return run_background_cpu(policy, caller, args, output, environment, priority, trust=trust)
             return run_cpu_service(policy, caller, command, environment, trust=trust)
@@ -964,7 +993,7 @@ def main(argv=None, *, service_context=None):
         os.set_inheritable(lock_fd, True)
         if priority_fd is not None:
             os.set_inheritable(priority_fd, True)
-        os.execve(str(policy['python']), command, environment)
+        os.execve(executable, command, environment)
         return 0
     except (OSError, ValueError, KeyError) as error:
         print(f'Hosted AE refused: {error}', file=sys.stderr)

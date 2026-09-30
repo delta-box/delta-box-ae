@@ -22,13 +22,17 @@ class CPUOnlyEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copy2(ENTRY, root / ENTRY.name)
+            (root / 'scripts').mkdir()
+            shutil.copy2(ROOT / 'ae/scripts/run_no_gpu_entry.sh', root / 'scripts/run_no_gpu_entry.sh')
             (root / 'run_all.sh').write_text(
                 '#!/usr/bin/env bash\nprintf "%s\\0" "$@"\nexit ' + str(status) + '\n')
             fake = root / 'numactl'
             fake.write_text('#!/usr/bin/env bash\nshift 3\nexec "$@"\n')
             fake.chmod(0o755)
+            environment = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH']}
+            environment.pop('AE_HOSTED_LAUNCHER', None)
             return subprocess.run(['bash', str(root / ENTRY.name), *flags], capture_output=True,
-                                  env={**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH']})
+                                  env=environment)
 
     def test_normal_options_keep_argv_and_exit_status(self):
         options = ['--output', '/path with spaces/result', '--limit', '2', '--baseline-inputs', '44']

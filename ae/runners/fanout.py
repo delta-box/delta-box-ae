@@ -16,6 +16,15 @@ from repro.fanout_sdk import fanout_python, probe_e2b_sdk
 from release.lock import from_environment
 
 
+def hosted_local_e2b(config):
+    """Select the managed local method; service admission still verifies leases."""
+    settings = config.get('e2b', {})
+    return ('AE_HOSTED_CALLER_UID' in os.environ
+            and settings.get('execution', 'ssh') == 'local'
+            and settings.get('api_url', '').rstrip('/') in ('http://127.0.0.1:3100', 'http://localhost:3100')
+            and settings.get('sandbox_url', '').rstrip('/') in ('http://127.0.0.1:3102', 'http://localhost:3102'))
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--backend',choices=['cube','e2b'],required=True);p.add_argument('--config',type=Path,required=True)
@@ -58,10 +67,11 @@ def main():
                 raise ValueError('E2B_API_KEY is missing')
         with ExitStack() as contexts:
             managed = None
-            if args.backend == 'e2b' and config.get('measurement', {}).get('numa_node') in (0, 3):
+            if args.backend == 'e2b' and hosted_local_e2b(config):
                 from ae.scripts.e2b_service_context import service_placement
                 record['e2b_service_placement'] = contexts.enter_context(service_placement(
-                    config, out/'environment/e2b-placement', fanout_path=out/'fanout.json'))
+                    config, out/'environment/e2b-placement', fanout_path=out/'fanout.json',
+                    working_storage=True,source_sha256=release['source_sha256']))
                 write_json(path, record)
             if args.backend == 'cube':
                 from ae.scripts.cube_control_context import metadata_enabled, managed_memory_service, idle, save

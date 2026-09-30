@@ -330,6 +330,34 @@ ISOLATED_VALIDATION_EXPERIMENTS = frozenset((
     'figure-09', 'correctness'))
 
 
+def isolated_background_baseline(args):
+    if not args.isolated_validation or args.cpu_layout != 'numa03':
+        return False
+    limits = {'table-02-criu': 1, 'table-02-fc-diff': 2}
+    experiment = args.experiment[0] if len(args.experiment or []) == 1 else None
+    if (experiment not in limits or args.group or args.all or args.quick_check
+            or args.available or args.analyze_existing or args.list or args.cpu_parallel
+            or args.experiment_config or args.no_pin or args.limit != limits[experiment] or args.max_events is not None
+            or not (args.output or args.resume) or args.reuse_completed_from or args.gpu_cases
+            or args.cube_profile or args.e2b_profile or args.baseline_inputs != '44'
+            or args.execute_plan or args.probe_plan or args.publish_output
+            or (args.numa_node, args.cpus) not in ((0, '0-3'), (3, '72-75'))):
+        raise ValueError('Isolated NUMA0/3 validation requires CRIU limit1 or FC-Diff limit2, complete inputs, explicit output and exact NUMA0/3 CPUs')
+    return True
+
+
+def validate_isolated_baseline_resume(args, previous, release):
+    if not isolated_background_baseline(args):
+        return
+    request = previous.get('measurement_request') or {}
+    lane = 'isolated-background-' + args.experiment[0].removeprefix('table-02-') + '-validation'
+    if (previous.get('experiments') != args.experiment
+            or (previous.get('concurrency_policy') or {}).get('lane') != lane
+            or previous.get('status') == 'ok' or previous.get('release') != release
+            or (request.get('node'), request.get('cpus')) != (args.numa_node, args.cpus)):
+        raise ValueError('Isolated baseline resume requires this unfinished diagnostic with the same source and binding')
+
+
 def validation_job_limit(config):
     limit = config.get('review', {}).get('validation_max_jobs')
     if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
@@ -369,8 +397,10 @@ def bounded_plan_limits(name, config, flags, maximum):
 
 
 def isolated_validation_output(args, config):
+    background = isolated_background_baseline(args)
+    supported = ISOLATED_VALIDATION_EXPERIMENTS | ({'table-02-criu', 'table-02-fc-diff'} if background else set())
     if (validation_job_limit(config) is None
-            or len(args.experiment or []) != 1 or args.experiment[0] not in ISOLATED_VALIDATION_EXPERIMENTS
+            or len(args.experiment or []) != 1 or args.experiment[0] not in supported
             or args.group or args.all or args.quick_check or args.available or args.analyze_existing
             or args.experiment_config or getattr(args, 'reuse_completed_from', None) or args.no_pin
             or args.limit is None or not 1 <= args.limit <= 10
@@ -542,11 +572,14 @@ def execute_review_job(index, job, plan, output, stop_event=None):
             str(REPO / 'ae/scripts/run_nvme_job.py'), '--suite', str(output),
             '--key', job['key'], '--work-root', nvme['root'], '--', *command]
     identity = plan.get('measurement_identity', {})
+    # Hosted E2B fanout may own daemon restarts and RAM mounts. Give its
+    # service restoration the same cleanup window as the other owned backends.
+    e2b_service = plan.get('e2b_managed_service')
     result = execute(command, output / 'logs' / plan.get('attempt', 'attempt-001') / job['key'], cwd=REPO,
                      timeout=budget,
                      env=dict(os.environ, AE_RUN_PURPOSE=job['run_purpose'],
                               AE_MEASUREMENT_IDENTITY=json.dumps(identity)), stop_event=stop_event,
-                     termination_grace=300 if memory or nvme or plan.get('cube_managed_metadata') else 30)
+                     termination_grace=300 if memory or nvme or plan.get('cube_managed_metadata') or e2b_service else 30)
     job.update(status=result['status'], process_manifest=str(output / 'logs' / plan.get('attempt', 'attempt-001') / job['key'] / 'process.json'))
     if result['status'] == 'ok':
         # The producer and its owned processes have fully exited. Keep
@@ -721,6 +754,10 @@ class Review:
             self.record['concurrency_policy'].update(
                 enabled=True, lane='isolated-bounded-validation',
                 resource_scope='Separate output; shared rotation barrier; exclusive selected NUMA/frequency lease')
+        if isolated_background_baseline(args):
+            self.record['concurrency_policy'].update(
+                lane='isolated-background-' + args.experiment[0].removeprefix('table-02-') + '-validation',
+                resource_scope='Separate output; exclusive results/backend admission; hosted reviewer priority; exclusive selected NUMA/frequency lease')
         self.cube_disk_manifest = None
         self.record['cube_profile'] = getattr(args, 'cube_profile', None)
         self.record['e2b_profile'] = getattr(args, 'e2b_profile', None)
@@ -731,6 +768,7 @@ class Review:
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
             self.previous_record = previous
+            validate_isolated_baseline_resume(args, previous, self.record['release'])
             if GPU in self.experiments:
                 prior_cases = previous.get('gpu_requested_cases', previous.get('gpu', {}).get('requested_cases', list(GPU_CASES)))
                 if prior_cases != self.record['gpu_requested_cases']:
@@ -1021,23 +1059,31 @@ class Review:
             plan['memory_measurement'] = dict(node=identity['node'], size_gib=job_size_gib(name, config))
         from ae.scripts.cube_control_context import metadata_enabled
         plan['cube_managed_metadata'] = name == 'figure-08-cube' and metadata_enabled(config)
+        e2b = config.get('e2b', {})
+        plan['e2b_managed_service'] = (name == 'figure-08-e2b' and 'AE_HOSTED_CALLER_UID' in os.environ
+            and e2b.get('execution', 'ssh') == 'local'
+            and e2b.get('api_url', '').rstrip('/') in ('http://127.0.0.1:3100', 'http://localhost:3100')
+            and e2b.get('sandbox_url', '').rstrip('/') in ('http://127.0.0.1:3102', 'http://localhost:3102'))
         write_json(plan_path, plan)
         budget = sum(float(job.get('timeout_s', timeout)) + 60 for job in jobs if not job.get('reused_verified')) + 120
         pending = [job for job in jobs if not job.get('reused_verified')]
         row['recorded_wait_s'] = sum(float(job['recorded_wait_s']) for job in pending) if all('recorded_wait_s' in job for job in pending) else None
         row['outer_timeout_s'] = budget
+        owned_cleanup = (plan.get('memory_measurement') or plan.get('nvme_measurement')
+                         or plan.get('cube_managed_metadata') or getattr(self.args, 'e2b_profile', None)
+                         or plan.get('e2b_managed_service'))
         command = [self.python, str(Path(__file__).resolve()), '--execute-plan', str(plan_path)]
         if pinned:
             command = [self.python, str(REPO / 'ae/scripts/run_pinned_measurement.py'),
                        '--node', str(row['measurement']['node']), '--cpus', row['measurement']['cpus'],
                        '--out', str(self.output / 'environment' / self.attempt / name), '--timeout', str(budget),
-                       '--stop-grace', '360' if plan.get('memory_measurement') or plan.get('nvme_measurement') or plan.get('cube_managed_metadata') or getattr(self.args, 'e2b_profile', None) else '30', '--', *command]
+                       '--stop-grace', '360' if owned_cleanup else '30', '--', *command]
         if pinned and measurement.get('policy_cpus'):
             command[2:2] = ['--policy-cpus', measurement['policy_cpus']]
         if pinned and frequency_khz is not None:
             command[2:2] = ['--frequency-khz', str(frequency_khz)]
         ok = self.step(name + '-run', [*self.privilege, *command], budget + 120,
-                       termination_grace=420 if plan.get('memory_measurement') or plan.get('nvme_measurement') or plan.get('cube_managed_metadata') or getattr(self.args, 'e2b_profile', None) else 30)
+                       termination_grace=420 if owned_cleanup else 30)
         row['status'] = 'partial' if ok and (row['unavailable_jobs'] or row['unavailable_arms']) else 'ok' if ok else 'failed'
         row['reasons'] += [str(item.get('arm', 'panel')) + ': ' + item['reason'] for item in row['unavailable_arms']]
         if (suite / 'suite.json').is_file():
@@ -1244,11 +1290,13 @@ class Review:
                 return
             service_out = self.output / 'environment' / self.attempt / selected[0]
             service_options = {}
-            background_placement = getattr(self.args, 'cpu_layout', 'numa12') == 'numa03'
-            if background_placement:
-                # This run owns the exclusive results/backend lease. Keep the
-                # shared control plane off reviewer NUMA1/2 throughout the RAM
-                # service, and restore it only after that service is clean.
+            control_placement = ('AE_HOSTED_CALLER_UID' in os.environ
+                                 or getattr(self.args, 'cpu_layout', 'numa12') == 'numa03')
+            if control_placement:
+                # Hosted runs own the exclusive results/backend lease. Bind
+                # the shared control plane to the actual lane in both layouts,
+                # and restore it only after the RAM service is clean.
+                # Keep the existing self-managed NUMA0/3 behavior unchanged.
                 from ae.scripts.cube_control_context import placement
                 control_out = service_out / 'control-plane'
                 guard = control_out / 'RECOVERY_REQUIRED.json'
@@ -1258,7 +1306,7 @@ class Review:
             self.cube_memory_manifest = contexts.enter_context(memory_service(
                 service_out / 'cube-memory',
                 node=node, cpus=cpus, size_gib=sizes.pop(), **service_options))
-            if background_placement:
+            if control_placement:
                 from ae.scripts.cube_control_context import proof
                 proof(node, cpus, control_out / 'placement-active.json')
                 self.record['cube_control_plane_placement'] = file_record(control_out / 'placement-active.json')
@@ -1404,8 +1452,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     try:
         validate_gpu_selection(args)
-        if args.cpu_layout != 'numa12' and not args.cpu_parallel:
-            raise ValueError('--cpu-layout requires --cpu-parallel')
+        if args.cpu_layout != 'numa12' and not (args.cpu_parallel or isolated_background_baseline(args)):
+            raise ValueError('--cpu-layout requires --cpu-parallel or strict isolated baseline validation')
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import validate
             validate(args)
@@ -1444,7 +1492,8 @@ def main(argv=None):
         apply_validation_defaults(args, config)
         if args.isolated_validation:
             isolated_validation_output(args, config)
-            with run_lock(REPO / 'ae/work/.results.lock', shared=True):
+            background = isolated_background_baseline(args)
+            with run_lock(REPO / 'ae/work/.results.lock', shared=not background, wait=background):
                 return run_selected(args, p)
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import run
