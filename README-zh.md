@@ -91,7 +91,7 @@ bash ae/run_all.sh --baseline-inputs all
 
 `--baseline-inputs` 只选择输入池，默认值为 `44`；不会绕过 `review.validation_max_jobs=10` 上限。先用 `--limit 1` 做小样本，检查后再在上限内扩大。脚本不自动截断轨迹事件。
 
-各 backend 保留自身声明的输入池和作业顺序。默认 44 条输入池包含 34 条 Django 和 10 条 Astropy，前 10 个作业均为 Astropy。每份 plan 和 `suite.json` 记录实际选中的输入。Table 2 的事件平均值保留各 backend 自身的 cohort；具体范围见[覆盖与偏差总账](ae/report/README-zh.md)。
+各 backend 保留自身声明的输入池和作业顺序。默认 44 条输入池包含 34 条 Django 和 10 条 Astropy，前 10 个作业均为 Astropy。每份 plan 和 `suite.json` 记录实际选中的输入。Table 2 的事件平均值保留各 backend 自身的 cohort；具体范围统一记录在服务器总账 `spr4numa:/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md`（[仓库副本，需访问权限](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md)）。
 
 运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。样本运行成功时状态为 `ok`，失败步骤会保留日志并返回非零退出码。
 
