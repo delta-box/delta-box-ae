@@ -330,6 +330,31 @@ ISOLATED_VALIDATION_EXPERIMENTS = frozenset((
     'figure-09', 'correctness'))
 
 
+def isolated_background_criu(args):
+    if not args.isolated_validation or args.cpu_layout != 'numa03':
+        return False
+    if (args.experiment != ['table-02-criu'] or args.group or args.all or args.quick_check
+            or args.available or args.analyze_existing or args.list or args.cpu_parallel
+            or args.experiment_config or args.no_pin or args.limit != 1 or args.max_events is not None
+            or not (args.output or args.resume) or args.reuse_completed_from or args.gpu_cases
+            or args.cube_profile or args.e2b_profile or args.baseline_inputs != '44'
+            or args.execute_plan or args.probe_plan or args.publish_output
+            or (args.numa_node, args.cpus) not in ((0, '0-3'), (3, '72-75'))):
+        raise ValueError('Isolated NUMA0/3 validation requires one complete CRIU input, limit1, explicit output and exact NUMA0/3 CPUs')
+    return True
+
+
+def validate_isolated_criu_resume(args, previous, release):
+    if not isolated_background_criu(args):
+        return
+    request = previous.get('measurement_request') or {}
+    if (previous.get('experiments') != ['table-02-criu']
+            or (previous.get('concurrency_policy') or {}).get('lane') != 'isolated-background-criu-validation'
+            or previous.get('status') == 'ok' or previous.get('release') != release
+            or (request.get('node'), request.get('cpus')) != (args.numa_node, args.cpus)):
+        raise ValueError('Isolated CRIU resume requires this unfinished diagnostic with the same source and binding')
+
+
 def validation_job_limit(config):
     limit = config.get('review', {}).get('validation_max_jobs')
     if limit is not None and (type(limit) is not int or not 1 <= limit <= 10):
@@ -369,8 +394,10 @@ def bounded_plan_limits(name, config, flags, maximum):
 
 
 def isolated_validation_output(args, config):
+    background = isolated_background_criu(args)
+    supported = ISOLATED_VALIDATION_EXPERIMENTS | ({'table-02-criu'} if background else set())
     if (validation_job_limit(config) is None
-            or len(args.experiment or []) != 1 or args.experiment[0] not in ISOLATED_VALIDATION_EXPERIMENTS
+            or len(args.experiment or []) != 1 or args.experiment[0] not in supported
             or args.group or args.all or args.quick_check or args.available or args.analyze_existing
             or args.experiment_config or getattr(args, 'reuse_completed_from', None) or args.no_pin
             or args.limit is None or not 1 <= args.limit <= 10
@@ -721,6 +748,10 @@ class Review:
             self.record['concurrency_policy'].update(
                 enabled=True, lane='isolated-bounded-validation',
                 resource_scope='Separate output; shared rotation barrier; exclusive selected NUMA/frequency lease')
+        if isolated_background_criu(args):
+            self.record['concurrency_policy'].update(
+                lane='isolated-background-criu-validation',
+                resource_scope='Separate output; exclusive results/backend admission; hosted reviewer priority; exclusive selected NUMA/frequency lease')
         self.cube_disk_manifest = None
         self.record['cube_profile'] = getattr(args, 'cube_profile', None)
         self.record['e2b_profile'] = getattr(args, 'e2b_profile', None)
@@ -731,6 +762,7 @@ class Review:
         if args.resume:
             previous = json.loads((output / 'review.json').read_text())
             self.previous_record = previous
+            validate_isolated_criu_resume(args, previous, self.record['release'])
             if GPU in self.experiments:
                 prior_cases = previous.get('gpu_requested_cases', previous.get('gpu', {}).get('requested_cases', list(GPU_CASES)))
                 if prior_cases != self.record['gpu_requested_cases']:
@@ -1404,8 +1436,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     try:
         validate_gpu_selection(args)
-        if args.cpu_layout != 'numa12' and not args.cpu_parallel:
-            raise ValueError('--cpu-layout requires --cpu-parallel')
+        if args.cpu_layout != 'numa12' and not (args.cpu_parallel or isolated_background_criu(args)):
+            raise ValueError('--cpu-layout requires --cpu-parallel or strict isolated CRIU validation')
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import validate
             validate(args)
@@ -1444,7 +1476,8 @@ def main(argv=None):
         apply_validation_defaults(args, config)
         if args.isolated_validation:
             isolated_validation_output(args, config)
-            with run_lock(REPO / 'ae/work/.results.lock', shared=True):
+            background = isolated_background_criu(args)
+            with run_lock(REPO / 'ae/work/.results.lock', shared=not background, wait=background):
                 return run_selected(args, p)
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import run
