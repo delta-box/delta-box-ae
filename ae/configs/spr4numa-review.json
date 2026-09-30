@@ -107,7 +107,7 @@
       },
       "table-02-fc-diff": {
         "baseline_storage": "tmpfs",
-        "memory_job_size_gib": 30,
+        "memory_job_size_gib": 64,
         "measurement": {
           "frequency_khz": 2101000
         }
