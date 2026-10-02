@@ -71,6 +71,7 @@ bash ae/run_all_no_gpu.sh
 
 This entry runs a shared experiment queue on NUMA1/CPU28–31 and NUMA2/CPU48–51. An idle node claims the next pending group, so a slow Replay group does not block independent baselines on the other node. Input jobs within a group remain serial; Cube/E2B service-changing groups never overlap. Configuration, job caps, fresh measurement identities and combined reporting are retained. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node. It can migrate the earlier NUMA1/2 static layout without importing another run. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume`; placement overrides are rejected.
 
+Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree to avoid page relocation during anonymous-page snapshot classification. Source and child memory checksums are verified; the original service policy is restored afterward.
 For hosted background validation on NUMA0/3, use the separate entry below. The reviewer command above keeps its NUMA1/2 placement.
 
 ```bash

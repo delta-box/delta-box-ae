@@ -21,6 +21,13 @@ def run(*args, **kw):
 def output(*args):
     return subprocess.check_output(list(map(str,args)), text=True).strip()
 
+def process_thp_enabled(pid):
+    for line in Path(f'/proc/{pid}/status').read_text().splitlines():
+        if line.startswith('THP_enabled:'):
+            return int(line.split(':', 1)[1].strip())
+    raise RuntimeError('Cannot verify Cube process THP policy')
+
+
 def sandboxes():
     with urllib.request.urlopen('http://127.0.0.1:3000/sandboxes',timeout=10) as r:
         value=json.load(r)
@@ -80,6 +87,7 @@ def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recove
             'allowed_cpus':output('systemctl','show',SERVICE,'-p','AllowedCPUs','--value'),
             'allowed_nodes':output('systemctl','show',SERVICE,'-p','AllowedMemoryNodes','--value'),
             'sandbox_cgroup':{name:(Path('/sys/fs/cgroup/cube_sandbox')/name).read_text().strip() for name in ('cpuset.cpus','cpuset.mems')}}
+    before['thp_enabled'] = process_thp_enabled(before['main_pid'])
     (out/'before.json').write_text(json.dumps(before,indent=2)+'\n')
     ram=out/'ram';ram.mkdir();mounted=stopped=override=placement=cgroup_placement=False;loop=None;volume=None;image=None
     def interrupted(signum, frame):
@@ -124,7 +132,8 @@ def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recove
         override=True
         DROP.write_text('[Service]\nPrivateMounts=yes\nBindPaths='+ ' '.join(bindings)+'\n'
             'ExecStart=\n'
-            f'ExecStart=/usr/bin/numactl --physcpubind={a.cpus} --membind={a.node} /usr/local/services/cubetoolbox/scripts/systemd/cubelet-start.sh\n'
+            f'ExecStart=/usr/bin/python3 {Path(__file__).with_name("cube_no_thp_exec.py")} '
+            f'/usr/bin/numactl --physcpubind={a.cpus} --membind={a.node} /usr/local/services/cubetoolbox/scripts/systemd/cubelet-start.sh\n'
             'ExecStartPost=\n'+f'ExecStartPost=/usr/bin/python3 {pin}\n')
         run('systemctl','daemon-reload')
         placement=True
@@ -135,10 +144,13 @@ def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recove
         (group/'cpuset.cpus').write_text(a.cpus+'\n')
         run('systemctl','start',SERVICE)
         pid=int(output('systemctl','show',SERVICE,'-p','MainPID','--value'))
+        if process_thp_enabled(pid) != 0:
+            raise RuntimeError('Private Cubelet must disable THP before snapshots')
         proof={'schema_version':1,'service_pid':pid,'service_start_ticks':Path(f'/proc/{pid}/stat').read_text().split()[21],
                'node':a.node,'cpus':a.cpus,'ram_mount':json.loads(output('findmnt','-J','-T',ram)),
                'loop':json.loads(output('losetup','--list','--json',loop)), 'paths':{},
-               'status':Path(f'/proc/{pid}/status').read_text(), 'source_image':str(source)}
+               'status':Path(f'/proc/{pid}/status').read_text(), 'source_image':str(source),
+               'thp_policy':'disabled in private service tree to avoid pagemap/PFN relocation race'}
         for path in [str(STORAGE),*PATHS]:
             proof['paths'][path]=json.loads(output('nsenter','-t',pid,'-m','findmnt','-J','-T',path))
         if sandboxes():raise ValueError('Unexpected Cube activity before measurement')
@@ -192,6 +204,9 @@ def memory_service(output_dir, *, node, cpus, size_gib=16, lease_fd=None, recove
                         int(restored['pid'])<=0 or restored['allowed_cpus']!=before['allowed_cpus'] or
                         restored['allowed_nodes']!=before['allowed_nodes']):
                     raise RuntimeError('Original Cubelet identity or placement did not restore')
+                restored['thp_enabled'] = step('verify original THP policy',lambda:process_thp_enabled(restored['pid']))
+                if restored['thp_enabled'] != before['thp_enabled']:
+                    raise RuntimeError('Original Cubelet THP policy did not restore')
                 restored['storage_device']=step('verify original mounted storage',lambda:output(
                     'nsenter','-t',restored['pid'],'-m','findmnt','-n','-o','SOURCE','-T',STORAGE))
                 if restored['storage_device'] != device:

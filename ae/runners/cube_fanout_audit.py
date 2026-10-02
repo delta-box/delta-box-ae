@@ -14,6 +14,25 @@ P = Path(__file__).resolve().parents[2]
 DRIVER = P / 'ae/vendor/finalbench/official_sandbox_fork/bench_official_fork.py'
 
 
+def validate_memory_response(text, *, token, expected_bytes, min_requests):
+    fields = dict(re.findall(r'(token|bytes|checksum|requests|pid)=([^\s]+)', text))
+    expected_checksum = sum(i % 251 for i in range(expected_bytes // 4096)) & 0xffffffff
+    try:
+        if fields['token'] != token:
+            raise ValueError('Inherited-memory token differs')
+        if int(fields['bytes']) != expected_bytes:
+            raise ValueError('Inherited-memory byte count differs')
+        if int(fields['checksum']) != expected_checksum:
+            raise ValueError(f"Inherited-memory checksum differs: expected {expected_checksum}, got {fields['checksum']}")
+        if int(fields['requests']) < min_requests:
+            raise ValueError('Inherited-memory request counter differs')
+        if int(fields['pid']) <= 0:
+            raise ValueError('Invalid inherited-memory PID')
+    except (KeyError, TypeError) as error:
+        raise ValueError('Missing inherited-memory response fields') from error
+    return fields
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', type=Path)
@@ -55,7 +74,7 @@ def run_benchmark(args, ap, client_context):
         assert all(callable(getattr(Sandbox, name)) for name in ('create_snapshot', 'kill', 'clone'))
         print('Cube probe imports and SDK method bindings verified; no API call')
         return 0
-    events, checks, readiness = [], [], []
+    events, checks, readiness, source_checks = [], [], [], []
     owned_sandboxes, owned_snapshots = {}, {}
     killed, deleted = set(), set()
     uncertain_creation = []
@@ -119,15 +138,25 @@ def run_benchmark(args, ap, client_context):
 
     def verified_shell(sb, command, timeout):
         text = command_when_ready(sb, command, timeout, original_shell, record_readiness)
-        if "s.sendall(b'touch" in command:
-            fields = dict(re.findall(r'(token|bytes|checksum|requests|pid)=([^\s]+)', text))
+        source = "s.sendall(b'warmup" in command
+        child = "s.sendall(b'touch" in command
+        if source or child:
             expected_token = re.search(r"assert 'OK token=([^']+)'", command).group(1)
-            assert fields['token'] == expected_token, fields
-            assert int(fields['bytes']) == expected_bytes, fields
-            assert int(fields['checksum']) == expected_checksum, fields
-            assert int(fields['requests']) >= 2, fields
-            with guard:
-                checks.append({'sandbox_id': sb.sandbox_id, 'response': fields})
+            record = {'sandbox_id': sb.sandbox_id, 'stage': 'source' if source else 'child', 'response': text.strip()}
+            try:
+                fields = validate_memory_response(text, token=expected_token,
+                    expected_bytes=expected_bytes, min_requests=1 if source else 2)
+                record.update(response=fields, ok=True)
+            except ValueError as error:
+                record.update(ok=False, error=str(error))
+                raise
+            finally:
+                if source:
+                    with guard:
+                        source_checks.append(record)
+            if child:
+                with guard:
+                    checks.append({'sandbox_id': sb.sandbox_id, 'response': fields})
         return text
 
     driver.cube_run_shell = verified_shell
@@ -168,12 +197,13 @@ def run_benchmark(args, ap, client_context):
                     item['error'] = str(exc)
                     time.sleep(.5)
             cleanup.append(item)
-        result.update(api_events=events, memory_checks=checks, readiness_events=readiness, cleanup=cleanup,
+        result.update(api_events=events, memory_checks=checks, source_memory_checks=source_checks, readiness_events=readiness, cleanup=cleanup,
                       owned_sandbox_ids=list(owned_sandboxes), owned_snapshot_ids=list(owned_snapshots),
                       uncertain_creation=uncertain_creation)
         result['cleanup_ok'] = all(c['ok'] for c in cleanup) and not uncertain_creation
         result['ok'] = (len(result['rows']) == len(forks) and all(r['success'] for r in result['rows'])
                         and len(checks) == sum(forks) and all(e['ok'] for e in events)
+                        and len(source_checks) == len(forks) and all(check['ok'] for check in source_checks)
                         and result['cleanup_ok'])
         for row in result['rows']:
             unique = len({c['sandbox_id'] for c in row.get('children', [])}) == row['forks']
