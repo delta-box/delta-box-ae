@@ -6,7 +6,7 @@
 
 DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
-建议先完成约 **5 分钟的快速检查**，再逐项验证。CPU 审查者入口默认每组最多 **3 条完整输入**；通用 CPU/GPU 配置仍保留 10 个作业的上限，两者默认均不启动全量 cohort。Replay、CRIU 和 Firecracker Diff 默认从固定的 **44 条完整轨迹输入池**取样；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
+建议先完成约 **5 分钟的快速检查**，再逐项验证。CPU 审查者入口默认每组**最多 3 条完整输入**。可通过 `--limit N` 增加输入数，例如 `--limit 5`；默认不遍历完整输入集。Replay、CRIU 和 Firecracker Diff 默认从固定的 **44 条完整轨迹输入池**取样；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [自建环境](#self-hosting) · [运行问题](#troubleshooting)
 
@@ -65,6 +65,14 @@ Cube 内存盘实验会临时关闭受控服务进程树的透明大页；托管
 
 审查者命令默认每组最多 3 条输入，失败且清理核验完成后最多自动续跑 3 次，无需额外参数。每次失败及复用结果均保留记录，经过续跑的成功与一次连续通过明确区分。用户中断、清理无法确认、存在恢复标记或源码/配置/二进制变化时停止。可选覆盖参数见 `--help`；显式手动续跑和自管理配置不会重新获得自动续跑预算。
 
+如需增加每组输入数，可传入 `--limit N`。例如，每组选择最多 5 条输入：
+
+```bash
+bash ae/run_all_no_gpu.sh --limit 5
+```
+
+此参数只改变输入数，保留每条输入的完整事件和等待、实验臂及 fan-out。实际数量仍受可用输入和配置中的每组作业上限约束，多实验臂组可能选取更少输入。一条输入可以产生多个作业，因此默认是**三条输入，而非三个作业**。
+
 托管服务器上的后台 NUMA0/3 验证使用下面的入口，并指定新的输出目录。两个入口共用参数解析、实验驱动、存储准备和报告代码，只区分固定 NUMA 布局与审查者优先级。上面的审查者命令继续使用原 NUMA1/2 绑定。
 
 ```bash
@@ -73,27 +81,27 @@ bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-valid
 
 这个入口在 **NUMA0/CPU0–3 和 NUMA3/CPU72–75** 上运行相同的 16 组完整输入作业，默认每组输入上限同为 3，不自动截断事件。Cube/E2B 服务跨 NUMA 节点共享，因此两轮运行对共享后端互斥。**审查者请求优先**：后台先清理自己拥有的实验并恢复服务，审查者再获准运行；审查者结束后，后台在同一输出目录核验并续跑已完成的实验组。审查者可能需要等待清理完成。手动续跑时使用 `--resume` 和原 NUMA0/3 输出目录，续跑不能更换布局。结果保存在 `/home/atc-ae/delta-box-ae/ae/results/selected/<运行目录>/`，脚本会打印准确路径。以该次运行的 `SUMMARY.md` 和退出码为准：全部 16 组为 `ok` 且退出码为 0，才表示执行成功。
 
-如需可选的顺序 CPU/GPU 验证，使用通用入口：
+如需可选的顺序 CPU/GPU 验证，使用通用入口并指定同样的三条输入上限：
 
 ```bash
-bash ae/run_all.sh
+bash ae/run_all.sh --limit 3
 ```
 
 小规模 CPU 验证按顺序执行，统一使用一个 NUMA 节点。可在启动时指定绑定：
 
 ```bash
-bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-该命令按[索引](#experiments)顺序逐组验证，每组最多执行 10 个完整作业，再分析样本结果并生成对比页。Replay、CRIU 和 Firecracker Diff 从固定 44 条输入池中取样，选中的轨迹执行到底。上限包含所有实验臂：Figure 6(b) 最多 5 条输入 × 2 模式，Figure 9 最多 3 条输入 × 3 文件系统。报告保留实际子集范围，不冒充全量覆盖。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
+该命令按[索引](#experiments)顺序逐组验证，每个 CPU 实验组最多选择 3 条完整输入，再分析样本结果并生成对比页。Replay、CRIU 和 Firecracker Diff 从固定 44 条输入池中取样，选中的轨迹执行到底。保留所有实验臂：Figure 6(b) 最多 3 条输入 × 2 模式，Figure 9 最多 3 条输入 × 3 文件系统。报告保留实际子集范围，不冒充全量覆盖。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
 
-如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
+如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的三条输入上限并运行：
 
 ```bash
-bash ae/run_all.sh --baseline-inputs all
+bash ae/run_all.sh --limit 3 --baseline-inputs all
 ```
 
-`--baseline-inputs` 只选择输入池，默认值为 `44`；不会绕过 `review.validation_max_jobs=10` 上限。先用 `--limit 1` 做小样本，检查后再在上限内扩大。脚本不自动截断轨迹事件。
+`--baseline-inputs` 只选择输入池，默认值为 `44`，不决定输入数。上面的命令每个 CPU 实验组最多选择 3 条输入；可用 `--limit N` 增加，或用 `--limit 1` 缩小，仍受配置中的作业上限约束。脚本不自动截断轨迹事件。
 
 各 backend 保留自身声明的输入池和作业顺序。默认 44 条输入池包含 34 条 Django 和 10 条 Astropy，前 10 个作业均为 Astropy。每份 plan 和 `suite.json` 记录实际选中的输入。Table 2 的事件平均值保留各 backend 自身的 cohort；具体范围统一记录在服务器总账 `spr4numa:/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md`（[仓库副本，需访问权限](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md)）。
 
@@ -119,7 +127,7 @@ bash ae/run_all.sh --experiment figure-06-adaptive --limit 1 \
 <a id="逐项实验"></a>
 <a id="5-逐项实验"></a>
 
-一键命令按每组作业上限运行下表中的 CPU 与 GPU 项目。单独评估某个结论时，按对应章节运行即可，无需先执行整套实验。
+CPU 审查者命令默认运行全部 16 个 CPU 实验组，每组最多 3 条输入；可选 GPU 项目通过上面的通用入口运行。单独评估某个结论时，按对应章节运行即可，无需先执行整套实验。
 
 | 论文项 | 评估问题 | 单项选择 | 资源 |
 | --- | --- | --- | --- |
@@ -141,7 +149,7 @@ Table 1、Figure 1,3–5 是设计说明和问题引入，无独立测量任务�
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-无需预先创建各实验输出目录。托管入口使用作者提供的配置，管理 CPU/NUMA 绑定与频率采样；完整测评、单项实验和快速检查均按顺序运行，各 CPU 实验使用统一的运行级 NUMA 绑定。实验驱动负责选择输入，命令中的 `--limit` 只用于缩小检查范围。
+无需预先创建各实验输出目录。托管入口使用作者提供的配置，管理 CPU/NUMA 绑定与频率采样；完整测评、单项实验和快速检查均按顺序运行，各 CPU 实验使用统一的运行级 NUMA 绑定。实验驱动负责选择输入，可用 `--limit N` 在配置的作业上限内增加或减少输入数。
 
 下面按论文实验逐项给出验证目标、运行方式和判断依据。并排图片展示**一键脚本的输出示例**，用于说明生成图表的形式。评估时请查看自己运行生成的对比页。
 

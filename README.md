@@ -6,7 +6,7 @@
 
 DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
 
-Start with the **approximately 5-minute quick check**, then validate experiments one at a time. The CPU reviewer entry defaults to **3 complete inputs per group**; the general CPU/GPU profile retains its configured 10-job cap. Neither launches full cohorts by default. Replay, CRIU, and Firecracker Diff draw from a fixed pool of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
+Start with the **approximately 5-minute quick check**, then validate experiments one at a time. The CPU reviewer entry defaults to **at most 3 complete inputs per group**. Use `--limit N` to increase the input count; for example, `--limit 5`. It does not launch full input cohorts by default. Replay, CRIU, and Firecracker Diff draw from a fixed pool of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
 
@@ -66,6 +66,14 @@ Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cub
 
 The reviewer command defaults to three inputs per group and up to three automatic resumes after verified cleanup. No extra parameters are needed. Each failure and any reused results remain recorded; a resumed success is distinguished from an uninterrupted pass. Interruptions, uncertain cleanup, recovery guards or changed source/configuration/binaries stop the campaign. Use `--help` for optional overrides. Explicit manual resume and self-managed configurations do not receive a new automatic retry budget.
 
+To increase the number of inputs per group, pass `--limit N`. For example, to select up to five inputs per group:
+
+```bash
+bash ae/run_all_no_gpu.sh --limit 5
+```
+
+This changes the input count while preserving each input's complete events and waits, experiment arms and fan-out. Available inputs and the configured per-group job cap still apply; groups with multiple arms may select fewer inputs. An input can produce multiple jobs, so the default is **three inputs, not three jobs**.
+
 For hosted background validation on NUMA0/3, use the entry below with a new output directory. Both entries share the same option parser, experiment drivers, storage preparation and reporting core; their fixed NUMA placement and reviewer priority differ. The reviewer command above keeps its NUMA1/2 placement.
 
 ```bash
@@ -74,27 +82,27 @@ bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-valid
 
 This entry runs the same 16 groups and complete input jobs on **NUMA0/CPU0–3 and NUMA3/CPU72–75**, with the same default input limit of 3 and no automatic event truncation. Cube/E2B services are shared across NUMA nodes, so the two runs hold mutually exclusive access to those backends. **Reviewer requests take priority**: the background run cleans up its owned experiment and restores services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume. Results are saved under `/home/atc-ae/delta-box-ae/ae/results/selected/<run-directory>/`; the script prints the exact directory. Check that run's `SUMMARY.md` and exit code: success requires all 16 groups to report `ok` and exit code 0.
 
-For optional sequential CPU/GPU validation, use the general entry:
+For optional sequential CPU/GPU validation, use the general entry with the same three-input limit:
 
 ```bash
-bash ae/run_all.sh
+bash ae/run_all.sh --limit 3
 ```
 
 Sampled CPU experiments run in sequence with one shared NUMA placement. Runtime placement can be selected for the bounded run:
 
 ```bash
-bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
+bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-This command visits the experiment groups in the [index](#experiments) sequentially, runs at most 10 complete jobs per group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. The cap covers all arms together: Figure 6(b) uses at most five inputs × two arms, and Figure 9 at most three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+This command visits the experiment groups in the [index](#experiments) sequentially, selects at most three complete inputs per CPU group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. All experiment arms are retained: Figure 6(b) uses up to three inputs × two arms, and Figure 9 up to three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
 
-To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
+To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same three-input limit and run:
 
 ```bash
-bash ae/run_all.sh --baseline-inputs all
+bash ae/run_all.sh --limit 3 --baseline-inputs all
 ```
 
-`--baseline-inputs` selects the input pool, not the sample size. Its default is `44`; the supplied `review.validation_max_jobs=10` cap still applies. `--limit 1` starts a pilot and may be increased within the cap after checking its result. No implicit `--max-events` truncation is added.
+`--baseline-inputs` selects the input pool, not the sample size; its default is `44`. The commands above select at most three inputs per CPU group. Increase this with `--limit N`, or use `--limit 1` for a smaller run, within the configured job cap. No implicit `--max-events` truncation is added.
 
 Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; these scopes are recorded in the canonical ledger on the host: `spr4numa:/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md` ([repository copy; access required](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md)).
 
@@ -122,7 +130,7 @@ This opt-in mode is restricted to supported VM experiments, preserves the result
 <a id="experiment-index"></a>
 <a id="individual-experiments"></a>
 
-The one-click command selects the CPU and GPU entries below within the configured per-group job cap. To evaluate one claim, run its section directly; you do not need to run the entire suite first.
+The CPU reviewer command runs all 16 CPU groups with at most three inputs per group by default; optional GPU groups use the general entry described above. To evaluate one claim, run its section directly; you do not need to run the entire suite first.
 
 | Paper experiment | Evaluation question | Selection | Resources |
 | --- | --- | --- | --- |
@@ -144,7 +152,7 @@ Individual commands below share an output prefix. **Define it once in your curre
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full evaluations, selected experiments and quick checks sequentially; all selected CPU experiments use the run-level NUMA placement. The drivers select their inputs; use `--limit` only for a smaller check.
+Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full evaluations, selected experiments and quick checks sequentially; all selected CPU experiments use the run-level NUMA placement. The drivers select their inputs; use `--limit N` to increase or reduce the input count within the configured job cap.
 
 Each section keeps the evaluation goal, command, output, and interpretation together. The side-by-side images are **examples of the one-click script's output**, illustrating the generated figures. Use the comparison pages from your own run for evaluation.
 
