@@ -20,6 +20,7 @@ import socket
 import stat
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 
 REPO = Path(__file__).resolve().parents[2]
@@ -196,6 +197,30 @@ def default_output(args):
     if not complete_selection(args):
         return root / 'selected' / timestamp()
     return root
+
+
+def write_effective_config(path, config):
+    """Keep execution credentials private and publish a readable review snapshot."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    public = public_config(config)
+    fd, temporary = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(config, stream, indent=2, ensure_ascii=False, allow_nan=False)
+            stream.write('\n')
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    if public == config:
+        path.chmod(0o644)
+        return path
+    # mkstemp publishes the raw execution file with mode 0600, never a
+    # briefly world-readable copy. Existing resume hashes still bind it.
+    public_path = path.with_name(path.stem + '.public.json')
+    write_json(public_path, public)
+    public_path.chmod(0o644)
+    return public_path
 
 
 def make_output_accessible(root):
@@ -736,8 +761,10 @@ class Review:
         self.attempt = 'attempt-001'
         self.record = dict(schema_version=2, status='running', experiments=self.experiments,
                            selection_mode='available' if self.available else 'required',
-                           run_purpose='quick-check' if self.limits else 'available-cohorts' if self.available else 'ae-cohorts' if args.baseline_inputs == '44' else 'full-cohorts',
+                           run_purpose='quick-check' if args.quick_check else 'available-cohorts' if self.available else 'ae-cohorts' if args.baseline_inputs == '44' else 'full-cohorts',
                            baseline_inputs=args.baseline_inputs,
+                           input_limit=1 if args.quick_check else args.limit,
+                           event_limit=3 if args.quick_check else args.max_events,
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
@@ -947,11 +974,11 @@ class Review:
                 path = Path(value).expanduser()
                 images[instance] = str((path if path.is_absolute() else Path(config['_config_dir']) / path).resolve())
         config_path = self.output / 'configs' / self.attempt / (name + '.json')
-        write_json(config_path, config)
-        config_path.chmod(0o600)
+        public_config_path = write_effective_config(config_path, config)
         timeout = check_timeout(config)
         select = ['--config', str(config_path), '--experiment', name]
         row = dict(experiment=name, config=str(config_path), config_source=file_record(source_config), effective_config=file_record(config_path), config_sha256=config_identity(config),
+                   public_config=file_record(public_config_path),
                    status='checking', reasons=[], unavailable_jobs=[],
                    unavailable_arms=[item for item in self.record['declared_unavailable'] if item['experiment'] == name])
         self.record['coverage'].append(row)
