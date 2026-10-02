@@ -818,8 +818,12 @@ class Review:
         lines += ['', '| Step | Status | Log |', '|---|---|---|']
         for step in self.record['steps']:
             lines.append(f'| {step["name"]} | {step["status"]} | [log]({step["log"]}) |')
-        lines += ['', 'Figure 8(b) uses automatic remote GPU admission; Figure 8(c) is derived when complete fresh CPU/GPU inputs are available. Unavailable jobs are not passes.',
-                  'Only successful fresh manifests and their hash-bound measurements are analyzed.',
+        gpu_selected = GPU in self.record['experiments']
+        if gpu_selected:
+            lines += ['', 'Figure 8(b) uses automatic remote GPU admission; Figure 8(c) is derived when complete fresh CPU/GPU inputs are available. Unavailable jobs are not passes.']
+        else:
+            lines += ['', 'GPU experiments (Figure 8(b)(c)) were not selected and are outside the scope of this run.']
+        lines += ['Only successful fresh manifests and their hash-bound measurements are analyzed.',
                   'Missing panels remain unavailable; archived values never fill a measurement gap.', '']
         comparison_pages = []
         for filename, label in (('README.md', 'English'), ('README-zh.md', '简体中文')):
@@ -828,8 +832,9 @@ class Review:
                 comparison_pages.append(f'[{label}]({path.as_posix()})')
         if comparison_pages:
             lines += ['Paper comparison / 论文对比：' + ' · '.join(comparison_pages), '']
-        from ae.scripts.figure08_remote import report_lines
-        lines += report_lines(self.record['gpu'], self.record.get('gpu_output'))
+        if gpu_selected:
+            from ae.scripts.figure08_remote import report_lines
+            lines += report_lines(self.record['gpu'], self.record.get('gpu_output'))
         for name in ('SUMMARY.md', 'result.md'):
             (self.output / name).write_text('\n'.join(lines))
 
