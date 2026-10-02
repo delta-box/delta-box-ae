@@ -94,5 +94,59 @@ class CPUOnlyEntryTests(unittest.TestCase):
             self.assertFalse((runner.output / 'gpu').exists())
 
 
+class CPUReportScopeTests(unittest.TestCase):
+    def runner(self, output, flags):
+        config_path = output / 'config.json'
+        config_path.write_text(json.dumps({'review': {'validation_max_jobs': 10}}))
+        args = review.parser().parse_args(['--config', str(config_path), *flags])
+        with patch.object(review, 'current_source', return_value={}):
+            return review.Review(args, review.load_config(config_path), output)
+
+    def test_unselected_gpu_is_out_of_scope_in_both_report_files(self):
+        selections = [
+            ['--group', 'cpu', '--cpu-parallel'],
+            ['--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03'],
+            ['--experiment', 'table-02-deltabox'],
+        ]
+        for flags in selections:
+            for status in ('ok', 'failed'):
+                with self.subTest(flags=flags, status=status), tempfile.TemporaryDirectory() as directory:
+                    runner = self.runner(Path(directory), flags)
+                    # Legacy records also carry the ambiguous skipped GPU placeholder.
+                    runner.record['status'] = status
+                    original_record = json.loads(json.dumps(runner.record))
+                    with patch('ae.scripts.figure08_remote.report_lines', side_effect=AssertionError('GPU report rendered')):
+                        runner.save()
+                    self.assertEqual(json.loads((runner.output / 'review.json').read_text()), original_record)
+                    summary = (runner.output / 'SUMMARY.md').read_text()
+                    self.assertEqual(summary, (runner.output / 'result.md').read_text())
+                    self.assertIn('outside the scope of this run', summary)
+                    self.assertIn('Status: **' + status + '**', summary)
+                    for text in ('automatic remote GPU', '0/8', 'Full GPU coverage requires', 'Host: `allinai2plus`'):
+                        self.assertNotIn(text, summary)
+
+    def test_selected_gpu_keeps_missing_coverage_and_failure_details(self):
+        for status in ('skipped', 'failed'):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                runner = self.runner(Path(directory), ['--group', 'gpu'])
+                runner.record['gpu'].update(status=status, reason='original admission or measurement failure')
+                runner.save()
+                summary = (runner.output / 'SUMMARY.md').read_text()
+                self.assertIn('automatic remote GPU measurement', summary)
+                self.assertIn('Status: **' + status + '**; successful cases: 0/8.', summary)
+                self.assertIn('Full GPU coverage requires all eight cases', summary)
+                self.assertIn('original admission or measurement failure', summary)
+                self.assertNotIn('outside the scope of this run', summary)
+
+    def test_selected_gpu_success_keeps_coverage_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = self.runner(Path(directory), ['--group', 'gpu'])
+            runner.record['gpu'].update(status='complete', successful_cases=8, reason='all cases passed')
+            runner.save()
+            summary = (runner.output / 'SUMMARY.md').read_text()
+            self.assertIn('Status: **complete**; successful cases: 8/8.', summary)
+            self.assertNotIn('outside the scope of this run', summary)
+
+
 if __name__ == '__main__':
     unittest.main()
