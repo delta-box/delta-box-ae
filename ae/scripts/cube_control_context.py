@@ -100,6 +100,32 @@ def save(path, data):
     path.write_text(json.dumps(data, indent=2) + '\n')
 
 
+def canonical_independent_binds(binds):
+    """Ignore only the order of unambiguous, disjoint Docker bind targets.
+
+    Preserve exact source/mode strings and multiplicity. Duplicate, nested,
+    non-canonical or unsupported declarations keep their original order.
+    """
+    if not isinstance(binds, list):
+        return binds
+    targets = []
+    for item in binds:
+        if not isinstance(item, str) or '\0' in item:
+            return binds
+        fields = item.split(':')
+        if len(fields) != 3 or not all(fields):
+            return binds
+        target = fields[1]
+        if (not target.startswith('/') or target == '/' or
+                any(part in ('', '.', '..') for part in target[1:].split('/'))):
+            return binds
+        if any(target == other or target.startswith(other + '/') or
+                other.startswith(target + '/') for other in targets):
+            return binds
+        targets.append(target)
+    return sorted(binds)
+
+
 def inspect(name):
     j = json.loads(output('docker', 'inspect', name))[0]
     config = dict(j['Config'])
@@ -115,6 +141,9 @@ def inspect(name):
             config['Env'] = sorted(env, key=lambda item: item.split('=', 1)[0])
     host = {key: value for key, value in j['HostConfig'].items()
             if key not in ('CpusetCpus', 'CpusetMems')}
+    host_binds = host.get('Binds')
+    if 'Binds' in host:
+        host['Binds'] = canonical_independent_binds(host_binds)
     config_digest = hashlib.sha256(json.dumps({'Config': config, 'HostConfig': host},
         sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     effective = {}
@@ -127,7 +156,9 @@ def inspect(name):
             'finished_at': j['State']['FinishedAt'],
             'cpus': j['HostConfig']['CpusetCpus'], 'mems': j['HostConfig']['CpusetMems'],
             'mounts': j['Mounts'], 'image_id': j['Image'],
-            'config_sha256': config_digest, **effective}
+            'config_sha256': config_digest,
+            'config_digest_schema': 'unique-env-independent-binds-v3',
+            'host_binds': host_binds, **effective}
 
 
 def mysql_volume_removal_disabled():
@@ -159,11 +190,22 @@ def mysql_preserve_launcher(container_id):
 
 def verify_mysql_container(before, *, same_id):
     after = inspect(MYSQL)
-    fields = ['mounts', 'image_id', 'config_sha256', 'effective_cpus', 'effective_mems']
+    fields = ['image_id', 'config_sha256', 'effective_cpus', 'effective_mems']
+    # Docker may reorder Mounts when the original supervisor recreates MySQL.
+    # Compare every mount field and retain multiplicity without relying on order.
+    mounts = lambda rows: sorted(json.dumps(row, sort_keys=True) for row in rows)
     if same_id:
         fields.append('id')
-    if not after['running'] or any(after[key] != before[key] for key in fields):
+    if (not after['running'] or any(after[key] != before[key] for key in fields)
+            or mounts(after['mounts']) != mounts(before['mounts'])):
         raise RuntimeError('MySQL image, configuration, storage or placement did not restore')
+    if after['mounts'] != before['mounts']:
+        print('[restore-equivalence] ' + json.dumps({'check': 'mysql-mount-order',
+            'before': before['mounts'], 'after': after['mounts'], 'accepted': True}), flush=True)
+    if after.get('host_binds') != before.get('host_binds'):
+        print('[restore-equivalence] ' + json.dumps({'check': 'mysql-independent-bind-order',
+            'before': before.get('host_binds'), 'after': after.get('host_binds'),
+            'accepted': True}), flush=True)
     return after
 
 
@@ -175,8 +217,10 @@ def restore_masks(before):
 
 def variables():
     sql = "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('innodb_flush_log_at_trx_commit','sync_binlog','log_bin');"
-    return output('docker', 'exec', MYSQL, 'sh', '-c',
+    raw = output('docker', 'exec', MYSQL, 'sh', '-c',
         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B -e "$1"', 'read-vars', sql)
+    # SHOW result ordering is not part of the durability-settings contract.
+    return '\n'.join(sorted(raw.splitlines()))
 
 
 def idle(timeout=45):
@@ -307,8 +351,13 @@ def mysql_launcher(out, recovery_guard):
                 if errors:
                     save(recovery_guard, {'reason': 'Original MySQL supervisor restoration failed', 'errors': errors})
                     raise RuntimeError('; '.join(errors))
-            restored = verify_mysql_container(original, same_id=False)
-            restore_service_cgroup_masks(MYSQL_UNIT, original_masks)
+            try:
+                restored = verify_mysql_container(original, same_id=False)
+                restore_service_cgroup_masks(MYSQL_UNIT, original_masks)
+            except Exception as error:
+                save(recovery_guard, {'reason': 'MySQL restoration verification failed',
+                    'error': f'{type(error).__name__}: {error}'})
+                raise
             save(out / 'mysql-launcher-restored.json', {'override_removed': not drop.exists(), 'container': restored})
         recovery_guard.unlink()
 
@@ -331,7 +380,8 @@ def restore_service_cgroup_masks(unit, expected):
     # kernel cpuset. Restore its exact prior raw masks, then check effective
     # masks rather than treating the declarative property as proof.
     for name in ('cpuset.mems', 'cpuset.cpus'):
-        (group / name).write_text(expected[name] + '\n')
+        if actual[name] != expected[name]:
+            (group / name).write_text(expected[name] + '\n')
     restored = service_cgroup_masks(unit)
     if restored != expected:
         raise RuntimeError('Cube service effective cgroup masks did not restore: ' + unit)

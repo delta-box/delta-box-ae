@@ -10,6 +10,7 @@ case "$layout" in
 esac
 shift
 args=(--group cpu --cpu-parallel)
+resume_failures=0
 if [[ $layout == numa03 ]]; then args+=(--cpu-layout numa03); fi
 while (($#)); do
     case "$1" in
@@ -26,6 +27,7 @@ Options forwarded unchanged to the normal entry:
   --output PATH         New result directory
   --resume PATH         Resume a previous two-lane run
   --limit N             Input limit; configured job cap still applies
+  --resume-failures N   Hosted NUMA1/2 only: 0..2 resumes after verified cleanup
   --max-events N        Explicit event prefix
   --baseline-inputs 44|all
   --list                Show the shared experiment catalogue without running
@@ -46,6 +48,18 @@ HELP
             fi
             echo 'Placement and experiment selection are fixed. Use ae/run_test.sh for a quick test.'
             exit 0
+            ;;
+        --resume-failures|--resume-failures=*)
+            if [[ $1 == *=* ]]; then value=${1#*=}; shift
+            else
+                if (($# < 2)); then echo 'Missing --resume-failures value' >&2; exit 2; fi
+                value=$2; shift 2
+            fi
+            if [[ $layout != numa12 || ! $value =~ ^[0-2]$ ]]; then
+                echo '--resume-failures requires hosted NUMA1/2 and a value 0..2' >&2; exit 2
+            fi
+            if (( value > 0 )); then args+=(--resume-failures "$value"); fi
+            resume_failures=$value
             ;;
         --config|--config=*|--runtime-repo)
             if [[ $layout != numa12 ]]; then
@@ -74,6 +88,12 @@ HELP
     esac
 done
 launcher=${AE_HOSTED_LAUNCHER:-}
+if (( resume_failures > 0 )); then
+    if [[ -n $launcher && $launcher != /usr/local/sbin/deltabox-ae-run ]]; then
+        echo 'Failure resumes require the protected hosted launcher' >&2; exit 2
+    fi
+    launcher=/usr/local/sbin/deltabox-ae-run
+fi
 if [[ $layout == numa03 ]]; then
     launcher=${launcher:-/usr/local/sbin/deltabox-ae-run}
     if [[ $launcher != /usr/local/sbin/deltabox-ae-run ]]; then
@@ -84,7 +104,7 @@ fi
 command=(bash "$ae_dir/run_all.sh")
 # Preserve the reviewer's existing root/self-managed dispatch. The background
 # entry always takes the protected launcher, including explicit root invocations.
-if [[ $layout == numa03 ]] || { [[ -n $launcher ]] && (( EUID != 0 )); }; then
+if [[ $layout == numa03 ]] || (( resume_failures > 0 )) || { [[ -n $launcher ]] && (( EUID != 0 )); }; then
     repo=$(cd "$ae_dir/.." && pwd)
     command=(sudo -n -- "$launcher" --checkout "$repo")
 fi

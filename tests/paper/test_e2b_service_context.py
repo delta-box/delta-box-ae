@@ -53,11 +53,23 @@ def fixture():
 
 
 class FakeProof:
-    def __init__(self, node, cpus):
+    def __init__(self, node, cpus, *, observer=None):
         self.stop = threading.Event()
         self.worker = Mock(ident=None)
         self.worker.is_alive.return_value = False
         self.rows, self.errors = {}, []
+        self.discarded_cgroups, self.discarded_processes = [], []
+        self.observer = observer
+
+    def start(self):
+        self.worker.start()
+
+    def stop_worker(self):
+        self.stop.set()
+        return False
+
+    def evidence(self):
+        return {'samples': [], 'errors': self.errors, 'observer': {}}
 
     def finish(self, path):
         m.save(path, {'samples': [], 'errors': []})
@@ -258,6 +270,7 @@ class E2BServiceTests(unittest.TestCase):
                 stack.enter_context(patch.object(m, name, value))
             for name, kwargs in [
                 ('require_admission',dict(return_value={'results_lease_owner':77,'numa_lease_owner':77})),
+                ('observer_placement',dict(return_value=Mock())),
                 ('snapshot',dict(return_value=copy.deepcopy(before))), ('idle',dict(return_value=group())),
                 ('cgroup',dict(return_value=copy.deepcopy(before['vm_root']))),
                 ('run',dict(side_effect=run)), ('unit',dict(side_effect=unit)), ('container',dict(side_effect=container)),

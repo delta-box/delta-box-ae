@@ -19,6 +19,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'ae')]
+from ae.scripts.job_mount_namespace import release_inherited_cube_mounts
 from repro.common import configured_path, load_config, write_json
 from repro.staging_cleanup import cleanup_reconstructable_staging
 from vendor.finalbench.fc_diff_dm.fc_capacity import GIB, check_capacity, job_size_gib
@@ -213,6 +214,7 @@ def run(args):
 
     previous_handler = signal.signal(signal.SIGTERM, interrupted)
     try:
+        meta['inherited_cube_mounts'] = release_inherited_cube_mounts(ROOT)
         children = OwnedChildren()
         # Explicit directory ownership avoids TemporaryDirectory's recursive
         # finalizer following an archive bind whose unmount failed.
@@ -245,7 +247,7 @@ def run(args):
         env['AE_MEASUREMENT_IDENTITY'] = json.dumps(identity)
         # Keep invocation-specific recovery paths out of measured backing metadata.
         env['AE_MEMORY_JOB'] = json.dumps({key: value for key, value in meta.items()
-            if key not in ('suite', 'suite_identity', 'archive_path', 'archive_identity')})
+            if key not in ('suite', 'suite_identity', 'archive_path', 'archive_identity', 'inherited_cube_mounts')})
         temporary_root = suite / '.tmp'
         temporary_root.mkdir()
         # Keep E2B socket paths short without changing their RAM backing.

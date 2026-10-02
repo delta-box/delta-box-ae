@@ -52,6 +52,7 @@ import signal
 import time
 import ctypes
 import select
+from contextlib import contextmanager
 
 # Import once before the checkpointed event loop starts. Loading pathlib and
 # resource helpers separately in every disposable child adds avoidable latency
@@ -410,7 +411,7 @@ def _handle_template_message(read_fd: int, write_path: str,
 
     op = msg.get("op")
     if op not in ("fork", "stash_template", "reap_children",
-                  "reap_pid", "probe_digest"):
+                  "reap_pid", "probe_digest", "checkpoint_pause"):
         return None
 
     n_threads = _assert_single_threaded()
@@ -421,6 +422,15 @@ def _handle_template_message(read_fd: int, write_path: str,
                                          if n_threads < 0
                                          else f"multithread ({n_threads})")})
         return None
+
+    if op == "checkpoint_pause":
+        # Reached through the event loop, after task and diagnostic file I/O
+        # has closed. The controller waits for the stopped state, not just
+        # this acknowledgement, before inspecting descriptors or changing FS.
+        _write_response(write_path, {"ok": True, "mode": "checkpoint_pause",
+                                     "token": msg.get("token")})
+        os.kill(os.getpid(), signal.SIGSTOP)
+        return "parent_resumed"
 
     if op == "reap_children":
         reaped: list[int] = []
@@ -1719,6 +1729,63 @@ class TemplatePool:
         if snapshot_id is not None:
             self.templates[snapshot_id] = template_pid
         return template_pid
+
+    @contextmanager
+    def quiesce_for_checkpoint(self, source_pid: int, timeout: float = 2.0):
+        """Hold the owned active worker at a cooperative resource boundary.
+
+        The caller keeps its command gate. A reply to a workload command is
+        not a quiescence barrier: the worker can still be closing trace files.
+        PID-ns init must have been bootstrapped before using this operation.
+        """
+        try:
+            from .async_checkpoint import open_pidfd, send_pidfd_signal
+        except ImportError:
+            from async_checkpoint import open_pidfd, send_pidfd_signal
+        pidfd = open_pidfd(source_pid)
+        stopped = False
+        deadline = time.monotonic() + timeout
+        token = str(time.monotonic_ns())
+        try:
+            self._drain_pending()
+            self._drain_pending_commands()
+            fd = os.open(self.ctrl_in_path, os.O_WRONLY | os.O_NONBLOCK)
+            try:
+                _write_all(fd, (json.dumps({"op": "checkpoint_pause",
+                                            "token": token}) + "\n").encode(), timeout)
+            finally:
+                os.close(fd)
+            line = self._read_response_line(
+                max(0.0, deadline - time.monotonic()),
+                expected_modes={"checkpoint_pause"})
+            if line is None:
+                raise TimeoutError("checkpoint quiescence reply timed out")
+            response = json.loads(line)
+            if response.get("ok") is not True or response.get("token") != token:
+                raise RuntimeError("checkpoint quiescence refused or stale reply")
+            while True:
+                if select.select([pidfd], [], [], 0)[0]:
+                    raise ProcessLookupError("checkpoint worker exited before quiescence")
+                with open(f"/proc/{source_pid}/stat") as stream:
+                    state = stream.read().rpartition(")")[2].split()[0]
+                if state == "T":
+                    stopped = True
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("checkpoint worker failed to stop")
+                time.sleep(0.001)
+            yield
+        finally:
+            try:
+                if stopped:
+                    # Address the original process even if it exits during
+                    # validation. Never signal a subsequently reused PID.
+                    try:
+                        send_pidfd_signal(pidfd, signal.SIGCONT)
+                    except ProcessLookupError:
+                        pass
+            finally:
+                os.close(pidfd)
 
     def request_reap_children(self, source_pid: int,
                               timeout: float = 1.0) -> list[int] | None:

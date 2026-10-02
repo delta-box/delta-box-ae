@@ -76,6 +76,14 @@ On the hosted machine, this entry runs in its own managed systemd unit. Direct A
 
 Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree to avoid page relocation during anonymous-page snapshot classification. Source and child memory checksums are verified; the original service policy is restored afterward.
 
+For an explicitly bounded campaign that may resume after failures, use a fresh output:
+
+```bash
+bash ae/run_all_no_gpu.sh --limit 3 --resume-failures 2 --output "$PWD/ae/results/selected/numa12-validation"
+```
+
+`--resume-failures 2` allows at most two resumes after a failed workload and verified cleanup. Interruptions, uncertain cleanup, recovery guards, or source/configuration/binary changes stop the campaign. Completed artifacts are revalidated by the existing resume path; failed jobs run again. `cpu-resume-history.json` retains each return code and prior control records, while the existing attempt directories retain failed job logs. A successful resumed campaign is not an uninterrupted pass. Without this option, workload failures still stop immediately.
+
 For hosted background validation on NUMA0/3, use the entry below with a new output directory. Both entries share the same option parser, experiment drivers, storage preparation and reporting core; their fixed NUMA placement and reviewer priority differ. The reviewer command above keeps its NUMA1/2 placement.
 
 ```bash

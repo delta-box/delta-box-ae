@@ -8,6 +8,7 @@ The caller must hold the results and NUMA leases until restoration completes.
 from contextlib import contextmanager
 import datetime
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
@@ -16,11 +17,13 @@ import stat
 import subprocess
 import threading
 import time
+import traceback
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 CGROUP = Path('/sys/fs/cgroup')
 VM_ROOT = CGROUP / 'e2b'
+PROC = Path('/proc')
 SYSTEMD_RUNTIME = Path('/run/systemd/system')
 SYSTEMD_CONTROL = Path('/run/systemd/system.control')
 UNITS = ('ae-e2b-api.service', 'ae-e2b-client-proxy.service', 'ae-e2b-orchestrator.service')
@@ -127,7 +130,9 @@ def file_digest(path):
     return digest.hexdigest()
 
 
-def process(pid):
+def process(pid, *, before_numa_maps=None):
+    if before_numa_maps is not None:
+        return observed_process(pid, before_numa_maps)
     base = Path('/proc') / str(pid)
     fields = (base / 'stat').read_text().rsplit(')', 1)[1].split()
     status = dict(line.split(':', 1) for line in (base / 'status').read_text().splitlines() if ':' in line)
@@ -144,6 +149,91 @@ def process(pid):
             'cpus': status['Cpus_allowed_list'].strip(), 'mems': status['Mems_allowed_list'].strip(),
             'cgroup': (base / 'cgroup').read_text().strip(), 'numa_policies': policies,
             'resident_pages_by_node': resident}
+
+
+class VMProcessReadGone(RuntimeError):
+    """ESRCH at one exact VM /proc read; never sufficient as exit proof."""
+    def __init__(self, row, path):
+        super().__init__('ESRCH reading VM proc file: ' + str(path))
+        self.row, self.path, self.observed_at = dict(row), str(path), time.time()
+        self.operation = Path(path).name
+
+
+class NumaMapsProcessGone(VMProcessReadGone):
+    """Retained name for the original, prevalidated numa_maps read."""
+
+
+@contextmanager
+def vm_proc_read(path, row):
+    # Only VM observer reads enter here. Root/cgroup, service-main and observer
+    # identity reads remain strict, as do permission/I/O and semantic failures.
+    try:
+        yield
+    except OSError as error:
+        if error.errno != errno.ESRCH:
+            raise
+        raise VMProcessReadGone(row, path) from error
+
+
+class CgroupChildDisappeared(RuntimeError):
+    """Only an exact child.lstat ENOENT after validating known process fields."""
+    def __init__(self, task, owner_pid, owner_start, child, identity, root_identity, stage):
+        self.observation = {
+            'operation': 'child.lstat', 'errno': errno.ENOENT, 'stage': stage,
+            'error_observed_at': time.time(), 'target': dict(task),
+            'owner_pid': owner_pid, 'owner_start_ticks': owner_start,
+            'child': {'path': str(child), 'device': identity.st_dev, 'inode': identity.st_ino},
+            'root': {'path': str(VM_ROOT), 'device': root_identity[0], 'inode': root_identity[1]},
+        }
+        super().__init__('E2B VM child disappeared during ' + stage + ': ' + str(child))
+
+
+def proc_start(base):
+    return int((base / 'stat').read_text().rsplit(')', 1)[1].split()[19])
+
+
+def observed_process(pid, validate):
+    base = PROC / str(pid)
+    row = {'pid': pid}
+    with vm_proc_read(base / 'stat', row):
+        started = proc_start(base)
+    row['start_ticks'] = started
+    with vm_proc_read(base / 'status', row):
+        status = dict(line.split(':', 1) for line in (base / 'status').read_text().splitlines() if ':' in line)
+    row.update(tgid=int(status['Tgid']), cpus=status['Cpus_allowed_list'].strip(),
+               mems=status['Mems_allowed_list'].strip(), numa_policies={}, resident_pages_by_node={})
+    validate(row, metadata_only=True)
+    with vm_proc_read(base / 'cgroup', row):
+        row['cgroup'] = (base / 'cgroup').read_text().strip()
+    # Validate known placement/ownership before a later read can disappear.
+    validate(row, stage='pre-numa_maps')
+    with vm_proc_read(base / 'exe', row):
+        row['exe'] = str((base / 'exe').resolve())
+    with vm_proc_read(base / 'stat', row):
+        if proc_start(base) != started:
+            raise RuntimeError('E2B VM PID was reused before numa_maps')
+    path = base / 'numa_maps'
+    try:
+        text = path.read_text()
+    except OSError as error:
+        if error.errno != errno.ESRCH:
+            raise
+        raise NumaMapsProcessGone(row, path) from error
+    for line in text.splitlines():
+        values = line.split()
+        if len(values) > 1:
+            policy = values[1]
+            row['numa_policies'][policy] = row['numa_policies'].get(policy, 0) + 1
+        for value in values[2:]:
+            match = re.fullmatch(r'N(\d+)=(\d+)', value)
+            if match:
+                node = match[1]
+                row['resident_pages_by_node'][node] = row['resident_pages_by_node'].get(node, 0) + int(match[2])
+    validate(row, stage='post-numa_maps')
+    with vm_proc_read(base / 'stat', row):
+        if proc_start(base) != started:
+            raise RuntimeError('E2B VM PID was reused during observation')
+    return row
 
 
 def cgroup(path):
@@ -166,8 +256,25 @@ def cgroup_processes(path):
     return sorted(pids)
 
 
-def threads(pid):
-    return [process(int(p.name)) for p in (Path('/proc') / str(pid) / 'task').iterdir()]
+def live_snapshot_processes(pids):
+    """A child exiting between enumeration and /proc reads is an observation gap."""
+    rows = []
+    for pid in pids:
+        try:
+            rows.append(process(pid))
+        except OSError as error:
+            if error.errno not in (errno.ENOENT, errno.ESRCH):
+                raise
+            print('[snapshot-transient] ' + json.dumps({'pid': pid,
+                'reason': 'process-exited-during-read', 'errno': error.errno}), flush=True)
+    return rows
+
+
+def threads(pid, *, before_numa_maps=None):
+    if before_numa_maps is not None:
+        with vm_proc_read(PROC / str(pid) / 'task', {'pid': pid}):
+            return [process(int(p.name), before_numa_maps=before_numa_maps) for p in (PROC / str(pid) / 'task').iterdir()]
+    return live_snapshot_processes([int(p.name) for p in (Path('/proc') / str(pid) / 'task').iterdir()])
 
 
 def unit(name):
@@ -185,7 +292,7 @@ def unit(name):
     if row['process']['cgroup'] != '0::' + expected:
         raise RuntimeError('E2B daemon escaped its registered unit')
     row['cgroup'] = cgroup(CGROUP / expected.lstrip('/'))
-    row['tasks'] = [process(p) for p in cgroup_processes(CGROUP / expected.lstrip('/'))]
+    row['tasks'] = live_snapshot_processes(cgroup_processes(CGROUP / expected.lstrip('/')))
     row['threads'] = threads(pid)
     row['dropins'] = {}
     for filename in [row['FragmentPath'], *row['DropInPaths'].split()]:
@@ -194,6 +301,8 @@ def unit(name):
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
             raise RuntimeError('E2B unit configuration is not root trusted')
         row['dropins'][filename] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if proc_start(Path('/proc') / str(pid)) != row['process']['start_ticks']:
+        raise RuntimeError('E2B daemon changed during snapshot: ' + name)
     return row
 
 
@@ -209,8 +318,10 @@ def container(name):
     if row['process']['cgroup'] != '0::' + expected:
         raise RuntimeError('Unexpected E2B container cgroup')
     row['cgroup'] = cgroup(CGROUP / expected.lstrip('/'))
-    row['tasks'] = [process(p) for p in cgroup_processes(CGROUP / expected.lstrip('/'))]
+    row['tasks'] = live_snapshot_processes(cgroup_processes(CGROUP / expected.lstrip('/')))
     row['threads'] = [thread for task in row['tasks'] for thread in threads(task['pid'])]
+    if proc_start(Path('/proc') / str(pid)) != row['process']['start_ticks']:
+        raise RuntimeError('E2B container changed during snapshot: ' + name)
     return row
 
 
@@ -472,59 +583,314 @@ def wait_actual(config, before, node, cpus, *, readiness, timeout=90):
             time.sleep(.2)
 
 
+def observer_placement(node, cpus, admission):
+    from ae.scripts.e2b_observer_placement import ThreadPlacement, admit
+    return ThreadPlacement(admit(ROOT, node, cpus, admission))
+
+
 class VMProof:
-    def __init__(self, node, cpus):
+    def __init__(self, node, cpus, *, observer=None):
         self.node, self.cpus = node, cpus
         self.stop = threading.Event()
+        self.ready = threading.Event()
+        self.observer = observer
         self.rows, self.errors = {}, []
+        self.discarded_cgroups = []
+        self.discarded_processes = []
         self.worker = threading.Thread(target=self.watch, daemon=True)
+
+    def _child_inputs(self, child, root_identity):
+        # Kernfs may return ENODEV during removal; require independent deletion proof.
+        # Keep this catch around cgroup reads, never around /proc or root reads.
+        try:
+            identity = child.lstat()
+        except FileNotFoundError:
+            self._discard_deleted_child(child, None, root_identity, 'lstat', errno.ENOENT)
+            return None
+        if not stat.S_ISDIR(identity.st_mode) or identity.st_uid != 0 or identity.st_mode & 0o022:
+            raise RuntimeError('Unexpected E2B cgroup ownership')
+        operation = 'cgroup-files'
+        try:
+            group = cgroup(child)
+            if group['inode'] != identity.st_ino:
+                raise RuntimeError('E2B VM cgroup identity changed during observation')
+            # A later disappearance must not hide a violation already observed.
+            assert_pinned({'cgroup': group}, self.node, self.cpus, swap=False)
+            if group['memory.swap.current'] != '0':
+                raise RuntimeError('E2B VM has existing swap despite the ancestor limit')
+            operation = 'cgroup.procs'
+            pids = cgroup_processes(child)
+        except OSError as error:
+            if error.errno not in (errno.ENODEV, errno.ENOENT):
+                raise
+            self._discard_deleted_child(child, identity, root_identity, operation, error.errno)
+            return None
+        try:
+            current = child.lstat()
+        except FileNotFoundError:
+            self._discard_deleted_child(child, identity, root_identity, 'identity-recheck', errno.ENOENT)
+            return None
+        if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+            raise RuntimeError('E2B VM cgroup identity changed during observation')
+        return group, pids, identity
+
+    def _discard_deleted_child(self, child, identity, root_identity, operation, error_number):
+        try:
+            current = child.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            if identity is not None and (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+                raise RuntimeError('E2B VM cgroup was replaced during observation')
+            raise RuntimeError('E2B VM cgroup read failed while the observed leaf remains present')
+        current_root = VM_ROOT.lstat()
+        if (current_root.st_dev, current_root.st_ino) != root_identity:
+            raise RuntimeError('E2B VM root identity changed during observation')
+        root = cgroup(VM_ROOT)
+        if root['inode'] != root_identity[1]:
+            raise RuntimeError('E2B VM root identity changed during observation')
+        assert_pinned({'cgroup': root}, self.node, self.cpus)
+        # Do not turn a same-name replacement into deletion evidence.
+        try:
+            child.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise RuntimeError('E2B VM cgroup reappeared during deletion verification')
+        self.discarded_cgroups.append({'path': str(child), 'device': identity.st_dev if identity is not None else None,
+            'inode': identity.st_ino if identity is not None else None, 'operation': operation,
+            'errno': error_number, 'observed_at': time.time(), 'reason': 'child absent; incomplete observation discarded'})
+
+    def _validate_process(self, task, owner_pid, owner_start, child, identity, root_identity, group, *, metadata_only=False, stage='pre-numa_maps'):
+        if task['pid'] == owner_pid and task['start_ticks'] != owner_start:
+            raise RuntimeError('E2B VM owner PID was reused before numa_maps validation')
+        if task['tgid'] != owner_pid:
+            raise RuntimeError('E2B VM thread belongs to a different process')
+        assert_pinned({'cgroup': group, 'tasks': [task]}, self.node, self.cpus, swap=False)
+        if metadata_only:
+            return
+        expected = '0::/e2b/' + child.name
+        if task['cgroup'] != expected and not task['cgroup'].startswith(expected + '/'):
+            raise RuntimeError('E2B VM process escaped its observed cgroup')
+        with vm_proc_read(PROC / str(owner_pid) / 'stat', {'pid': owner_pid, 'start_ticks': owner_start}):
+            if proc_start(PROC / str(owner_pid)) != owner_start:
+                raise RuntimeError('E2B VM owner PID was reused during observation')
+        # Check already-readable leader/TID identity before a child can disappear.
+        with vm_proc_read(PROC / str(owner_pid) / 'task' / str(task['pid']) / 'stat', task):
+            if proc_start(PROC / str(owner_pid) / 'task' / str(task['pid'])) != task['start_ticks']:
+                raise RuntimeError('E2B VM thread identity changed during observation')
+        if stage not in ('pre-numa_maps', 'post-numa_maps'):
+            raise RuntimeError('Unexpected E2B VM process validation stage')
+        try:
+            root_now = VM_ROOT.lstat()
+        except FileNotFoundError as error:
+            raise RuntimeError('E2B VM root missing during ' + stage) from error
+        if (root_now.st_dev, root_now.st_ino) != root_identity:
+            raise RuntimeError('E2B VM root identity changed during process observation')
+        # Catch only this child lstat; proc/root and other errno stay strict.
+        try:
+            child_now = child.lstat()
+        except FileNotFoundError as error:
+            raise CgroupChildDisappeared(task, owner_pid, owner_start, child,
+                                         identity, root_identity, stage) from error
+        if (child_now.st_dev, child_now.st_ino) != (identity.st_dev, identity.st_ino):
+            raise RuntimeError('E2B VM cgroup identity changed during process observation')
+
+    def _discard_exited_process(self, error, owner_pid, owner_start, child, identity, root_identity):
+        task = error.row
+        def absent_target():
+            try:
+                (PROC / str(task['pid'])).lstat()
+            except FileNotFoundError:
+                return
+            # Present, reused, inaccessible, and zombie targets are all fatal.
+            raise RuntimeError('E2B VM proc-read ESRCH target remains present or was reused')
+        def owner_state():
+            owner = PROC / str(owner_pid)
+            try:
+                owner.lstat()
+            except FileNotFoundError:
+                return 'absent'
+            try:
+                if proc_start(owner) != owner_start:
+                    raise RuntimeError('E2B VM owner PID was reused after proc-read ESRCH')
+                expected = '0::/e2b/' + child.name
+                member = (owner / 'cgroup').read_text().strip()
+                if member != expected and not member.startswith(expected + '/'):
+                    raise RuntimeError('E2B VM owner escaped its observed cgroup')
+                try:
+                    (owner / 'task' / str(task['pid'])).lstat()
+                except FileNotFoundError:
+                    return 'same owner; target thread absent'
+            except OSError as read_error:
+                if read_error.errno not in (errno.ENOENT, errno.ESRCH):
+                    raise
+                try:
+                    owner.lstat()
+                except FileNotFoundError:
+                    return 'absent'
+                raise
+            raise RuntimeError('E2B VM target remains in its owner task directory')
+        absent_target()
+        owner_observation = owner_state()
+        root_now = VM_ROOT.lstat()
+        if (root_now.st_dev, root_now.st_ino) != root_identity:
+            raise RuntimeError('E2B VM root identity changed after proc-read ESRCH')
+        root = cgroup(VM_ROOT)
+        if root['inode'] != root_identity[1]:
+            raise RuntimeError('E2B VM root identity changed after proc-read ESRCH')
+        assert_pinned({'cgroup': root}, self.node, self.cpus)
+        try:
+            child_now = child.lstat()
+        except FileNotFoundError:
+            self._discard_deleted_child(child, identity, root_identity, 'numa_maps-exit-recheck', errno.ENOENT)
+        else:
+            if (child_now.st_dev, child_now.st_ino) != (identity.st_dev, identity.st_ino):
+                raise RuntimeError('E2B VM child was replaced after proc-read ESRCH')
+            group = cgroup(child)
+            if group['inode'] != identity.st_ino:
+                raise RuntimeError('E2B VM child identity changed after proc-read ESRCH')
+            assert_pinned({'cgroup': group}, self.node, self.cpus, swap=False)
+            if group['memory.swap.current'] != '0':
+                raise RuntimeError('E2B VM has existing swap despite the ancestor limit')
+        absent_target()
+        owner_after = owner_state()
+        if owner_after != owner_observation and owner_after != 'absent':
+            raise RuntimeError('E2B VM owner changed during disappearance verification')
+        self.discarded_processes.append({'operation': error.operation, 'path': error.path, 'errno': errno.ESRCH,
+            'error_observed_at': error.observed_at, 'verified_at': time.time(),
+            'target': task, 'owner_pid': owner_pid, 'owner_start_ticks': owner_start,
+            'owner_after': owner_after, 'owner_before_recheck': owner_observation, 'child': {'path': str(child), 'device': identity.st_dev, 'inode': identity.st_ino},
+            'root': {'path': str(VM_ROOT), 'device': root_identity[0], 'inode': root_identity[1]},
+            'reason': 'bound target independently absent; incomplete child sample (all tasks and threads) discarded'})
 
     def sample(self):
         root = cgroup(VM_ROOT)
         assert_pinned({'cgroup': root}, self.node, self.cpus)
+        root_info = VM_ROOT.lstat()
+        if root_info.st_ino != root['inode']:
+            raise RuntimeError('E2B VM root identity changed during observation')
+        root_identity = (root_info.st_dev, root_info.st_ino)
         for child in VM_ROOT.iterdir():
             if not child.is_dir():
                 continue
             if not re.fullmatch(r'sbx-[A-Za-z0-9]+-[A-Za-z0-9]+', child.name):
                 raise RuntimeError('Unexpected E2B VM cgroup name')
-            row = {'cgroup': cgroup(child), 'tasks': []}
-            for pid in cgroup_processes(child):
+            inputs = self._child_inputs(child, root_identity)
+            if inputs is None:
+                continue
+            group, pids, identity = inputs
+            row = {'cgroup': group, 'tasks': []}
+            incomplete = False
+            for pid in pids:
+                started = None
                 try:
-                    task = process(pid)
+                    with vm_proc_read(PROC / str(pid) / 'stat', {'pid': pid}):
+                        started = start_ticks(pid)
+                    validate = lambda task, **kwargs: self._validate_process(task, pid, started, child, identity, root_identity, group, **kwargs)
+                    task = process(pid, before_numa_maps=validate)
+                    if task['start_ticks'] != started:
+                        raise RuntimeError('E2B VM PID was reused during observation')
                     if not task['cgroup'].startswith('0::/e2b/' + child.name):
                         raise RuntimeError('E2B VM process escaped its observed cgroup')
+                    assert_pinned({'cgroup': group, 'tasks': [task]}, self.node, self.cpus, swap=False)
+                    observed_threads = threads(pid, before_numa_maps=validate)
+                    assert_pinned({'cgroup': group, 'threads': observed_threads}, self.node, self.cpus, swap=False)
+                    with vm_proc_read(PROC / str(pid) / 'stat', task):
+                        if start_ticks(pid) != started:
+                            raise RuntimeError('E2B VM PID was reused during observation')
+                    # Append only after all thread reads finish. A disappearing
+                    # task must not leave a successful row with missing threads.
                     row['tasks'].append(task)
-                    row.setdefault('threads', []).extend(threads(pid))
+                    row.setdefault('threads', []).extend(observed_threads)
+                except CgroupChildDisappeared as error:
+                    self._discard_deleted_child(child, identity, root_identity,
+                                                'process-validation-' + error.observation['stage'], errno.ENOENT)
+                    self.discarded_cgroups[-1]['process_observation'] = error.observation
+                    incomplete = True
+                    break
+                except VMProcessReadGone as error:
+                    self._discard_exited_process(error, pid, started, child, identity, root_identity)
+                    incomplete = True
+                    break
                 except FileNotFoundError:
                     continue
+            if incomplete:
+                continue
             # Children default to swap.max=max, but the verified /e2b parent
             # cap of zero is the effective upper bound for every descendant.
             assert_pinned(row, self.node, self.cpus, swap=False)
             if row['cgroup']['memory.swap.current'] != '0':
                 raise RuntimeError('E2B VM has existing swap despite the ancestor limit')
+            try:
+                current = child.lstat()
+            except FileNotFoundError:
+                self._discard_deleted_child(child, identity, root_identity, 'completed-sample-recheck', errno.ENOENT)
+                continue
+            if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+                raise RuntimeError('E2B VM cgroup identity changed during observation')
             row['effective_swap_limit_source'] = '/e2b/memory.swap.max=0'
             for task in row['tasks']:
                 token = child.name + ':' + str(task['pid']) + ':' + str(task['start_ticks'])
                 self.rows.setdefault(token, dict(row, sampled_at=time.time()))
 
+    def start(self):
+        self.worker.start()
+        if not self.ready.wait(timeout=10):
+            self.errors.append('Observer thread placement readiness timed out')
+            raise RuntimeError('E2B observer placement was not ready')
+        if self.errors:
+            raise RuntimeError('E2B observer placement setup failed')
+        self.observer.check_main()
+
     def watch(self):
-        while not self.stop.is_set():
-            try:
+        phase = 'setup'
+        try:
+            if self.observer is None:
+                raise RuntimeError('E2B observer placement admission is missing')
+            self.observer.setup()
+            self.ready.set()
+            while not self.stop.is_set():
+                phase = 'observer-before-sample'
+                self.observer.check()
+                phase = 'vm-sample'
                 self.sample()
-            except FileNotFoundError:
-                pass  # A child may be removed after its SDK-owned cleanup.
-            except Exception as error:
+                phase = 'observer-after-sample'
+                self.observer.check()
+                self.stop.wait(.025)
+        except BaseException as error:
+            self.errors.append(type(error).__name__ + ': ' + str(error))
+            if self.observer is not None:
+                self.observer.receipt['error'] = error_record(error)
+                self.observer.receipt['error_context'] = {'phase': phase,
+                    'errno': getattr(error, 'errno', None), 'filename': getattr(error, 'filename', None),
+                    'frames': [{'file': f.filename, 'line': f.lineno, 'function': f.name}
+                               for f in traceback.extract_tb(error.__traceback__)]}
+        finally:
+            self.ready.set()
+
+    def stop_worker(self):
+        self.stop.set()
+        if self.worker.ident is not None:
+            self.worker.join(timeout=10)
+        if self.worker.is_alive() and 'VM sampling did not terminate' not in self.errors:
+            self.errors.append('VM sampling did not terminate')
+        if self.observer is not None:
+            try:
+                self.observer.check_main()
+            except BaseException as error:
                 self.errors.append(type(error).__name__ + ': ' + str(error))
-                return
-            self.stop.wait(.025)
+        return self.worker.is_alive()
+
+    def evidence(self):
+        return {'samples': list(self.rows.values()), 'errors': self.errors,
+                'discarded_cgroups': self.discarded_cgroups, 'discarded_processes': self.discarded_processes,
+                'observer': self.observer.receipt if self.observer is not None else None,
+                'scope': 'Observed SDK VM cgroups and all observed process threads; constraints also apply between samples'}
 
     def finish(self, path):
-        self.stop.set()
-        self.worker.join(timeout=10)
-        if self.worker.is_alive():
-            self.errors.append('VM sampling did not terminate')
-        save(path, {'samples': list(self.rows.values()), 'errors': self.errors,
-                    'scope': 'Observed SDK VM cgroups and all observed process threads; constraints also apply between samples'})
+        self.stop_worker()
+        save(path, self.evidence())
         if self.errors:
             raise RuntimeError('E2B VM placement verification failed')
 
@@ -551,8 +917,13 @@ def restore_root(before):
         (VM_ROOT / 'cgroup.subtree_control').write_text(' '.join(changes) + '\n')
     after = cgroup(VM_ROOT)
     for name in ('cpuset.mems', 'cpuset.cpus', 'cpuset.mems.effective', 'cpuset.cpus.effective', 'memory.swap.max', 'cgroup.subtree_control'):
-        if after[name] != before[name]:
+        equal = (set(after[name].split()) == set(before[name].split())
+                 if name == 'cgroup.subtree_control' else after[name] == before[name])
+        if not equal:
             raise RuntimeError('E2B VM root did not restore: ' + name)
+        if after[name] != before[name]:
+            print('[restore-equivalence] ' + json.dumps({'check': name,
+                'before': before[name], 'after': after[name], 'accepted': True}), flush=True)
 
 
 def restore_stopped_unit_cgroups(before):
@@ -618,6 +989,7 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
     measurement = config.get('measurement', {})
     node, cpus = measurement.get('numa_node'), measurement.get('cpus')
     admission = require_admission(config, node, cpus)
+    observer = observer_placement(node, cpus, admission)
     drops = {u: SYSTEMD_RUNTIME / (u + '.d') / DROP_NAME for u in UNITS}
     if any(path.exists() or path.is_symlink() for path in drops.values()):
         raise RuntimeError('An earlier E2B placement dropin exists')
@@ -630,6 +1002,14 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
         storage = WorkingStorage(config, out.parent/'e2b-storage', node, cpus, source_sha256,
                                  root=ROOT, units=UNITS, vm_root=VM_ROOT)
         storage.admit(before)
+    diagnostic = None
+    diagnostic_request = os.environ.get('AE_E2B_UFFD_AGGREGATE_REQUEST')
+    if diagnostic_request is not None:
+        if storage is None:
+            raise ValueError('Owned UFFD diagnostics require the original working storage')
+        from ae.scripts.e2b_uffd_diagnostic import Session
+        diagnostic = Session(diagnostic_request, root=ROOT, out=out,
+            source_sha256=source_sha256, node=node, cpus=cpus, before=before, admission=admission)
     save(out / 'before.json', dict(before, admission=admission, api_node_readiness=readiness.before()))
     saved_controls = {}
     for name in UNITS:
@@ -642,8 +1022,25 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
             saved_controls[path] = (path.read_bytes(), path.stat().st_mode & 0o777) if path.exists() else None
     changed, active, measurement_started, original_error = False, None, False, None
     owned_units = {name: row['process'] for name, row in before['units'].items()}
-    proof = VMProof(node, cpus)
+    proof = VMProof(node, cpus, observer=observer)
     save(GUARD, {'reason': 'E2B placement transaction in progress', 'evidence': str(out)})
+    if diagnostic is not None:
+        try:
+            diagnostic.bind_guard()
+        except BaseException as error:
+            diagnostic.note_pending('guard-admission', error)
+            save(out / 'original-error.json', {'error': error_record(error), 'phase': 'preparation'})
+            save(out / 'transaction-result.json', {'original_error': error_record(error),
+                'restoration_errors': [], 'placement_retained': True, 'services_changed': False})
+            raise
+    def save_recovery_guard(value):
+        if diagnostic is not None:
+            try:
+                diagnostic.check_guard()
+            except Exception as error:
+                diagnostic.note_pending('guard-retained', error)
+                return
+        save(GUARD, value)
     try:
         # Mark before the first mutation so a partial restart still restores.
         changed = True
@@ -655,6 +1052,8 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
             text = '[Service]\nCPUAffinity=\nCPUAffinity=' + cpus + '\nNUMAPolicy=bind\nNUMAMask=\nNUMAMask=' + str(node) + '\n'
             if storage is not None and name == 'ae-e2b-orchestrator.service':
                 text += 'Environment="TMPDIR=' + str(storage.ram/'tmp') + '"\n'
+            if diagnostic is not None and name == 'ae-e2b-orchestrator.service':
+                text += diagnostic.dropin()
             path.write_text(text)
         run('systemctl', 'daemon-reload')
         for name in UNITS:
@@ -681,7 +1080,9 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
         if storage is not None:
             storage.verify_active(active['units']['ae-e2b-orchestrator.service'])
         save(out / 'actual.json', active)
-        proof.worker.start()
+        if diagnostic is not None:
+            diagnostic.publish(active, storage)
+        proof.start()
         measurement_started = True
         yield {'manifest': str(out / 'actual.json'), 'node': node, 'cpus': cpus,
                'scope': 'Registered E2B daemon cgroups, metadata containers, and /e2b VM root; not host-wide placement',
@@ -694,11 +1095,12 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
              'phase': 'measurement' if measurement_started else 'preparation'})
         raise
     finally:
-        proof.stop.set()
-        if proof.worker.ident is not None:
-            proof.worker.join(timeout=10)
-            save(out / 'vm-proof.json', {'samples': list(proof.rows.values()), 'errors': proof.errors})
-        errors = []
+        observer_alive = proof.stop_worker()
+        save(out / 'vm-proof.json', proof.evidence())
+        # Finish the original service/storage restoration even if an observer
+        # failed to join, then retain a real recovery guard and both errors.
+        errors = ([error_record(RuntimeError('VM observer remains alive after owned join'))]
+                  if observer_alive else [])
         try:
             if measurement_started:
                 idle(config)
@@ -713,7 +1115,7 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
                     raise RuntimeError('E2B metadata container identity changed during measurement')
         except Exception as error:
             failures = [error_record(error)]
-            save(GUARD, {'reason': 'E2B resources require recovery; placement retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
+            save_recovery_guard({'reason': 'E2B resources require recovery; placement retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
             save(out / 'transaction-result.json', {'original_error': error_record(original_error), 'restoration_errors': failures, 'placement_retained': True})
             raise RuntimeError('E2B resources require recovery; placement retained') from (original_error or error)
         restoration_readiness = None
@@ -722,15 +1124,20 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
                 stop_owned_units(owned_units)
             except Exception as error:
                 failures = [error_record(error)]
-                save(GUARD, {'reason': 'E2B daemon stop failed; resources retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
+                save_recovery_guard({'reason': 'E2B daemon stop failed; resources retained', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': failures})
                 save(out / 'transaction-result.json', {'original_error': error_record(original_error), 'restoration_errors': failures, 'placement_retained': True})
                 raise RuntimeError('E2B daemon stop failed; shared resource restoration was not attempted') from (original_error or error)
+            if diagnostic is not None:
+                try:
+                    diagnostic.seal()
+                except BaseException as error:
+                    diagnostic.note_pending('seal', error)
             if storage is not None:
                 try:
                     storage.restore_stopped()
                 except BaseException as error:
                     failures = [error_record(error)]
-                    save(GUARD, {'reason': 'E2B RAM storage restoration failed; resources retained',
+                    save_recovery_guard({'reason': 'E2B RAM storage restoration failed; resources retained',
                         'evidence':str(out),'original_error':error_record(original_error),'restoration_errors':failures})
                     save(out/'transaction-result.json', {'original_error':error_record(original_error),
                         'restoration_errors':failures,'placement_retained':True})
@@ -768,12 +1175,22 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
             restored = wait_restored(config, before, readiness=restoration_readiness)
             if storage is not None:
                 storage.verify_restored(restored['units']['ae-e2b-orchestrator.service'])
+            if diagnostic is not None:
+                diagnostic.verify_restored(restored)
         except Exception as error:
             errors.append(error_record(error))
+        guard_changed = False
+        if diagnostic is not None:
+            try:
+                diagnostic.check_guard()
+            except Exception as error:
+                guard_changed = True
+                errors.append(error_record(error))
         save(out / 'after.json', {'restored': restored, 'errors': errors,
              'container_empty_masks': 'Original empty Docker masks are restored as their explicitly recorded effective masks'})
         save(out / 'transaction-result.json', {'original_error': error_record(original_error), 'restoration_errors': errors, 'placement_retained': bool(errors)})
         if errors:
-            save(GUARD, {'reason': 'E2B service restoration failed', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': errors})
+            if not guard_changed:
+                save(GUARD, {'reason': 'E2B service restoration failed', 'evidence': str(out), 'original_error': error_record(original_error), 'restoration_errors': errors})
             raise RuntimeError('E2B service restoration failed: ' + '; '.join(row['type'] + ': ' + row['message'] for row in errors)) from original_error
         GUARD.unlink()

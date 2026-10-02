@@ -1,0 +1,67 @@
+--- a/ae/scripts/cube_control_context.py
++++ b/ae/scripts/cube_control_context.py
+@@ -100,6 +100,32 @@
+     path.write_text(json.dumps(data, indent=2) + '\n')
+ 
+ 
++def canonical_independent_binds(binds):
++    """Ignore only the order of unambiguous, disjoint Docker bind targets.
++
++    Preserve exact source/mode strings and multiplicity. Duplicate, nested,
++    non-canonical or unsupported declarations keep their original order.
++    """
++    if not isinstance(binds, list):
++        return binds
++    targets = []
++    for item in binds:
++        if not isinstance(item, str) or '\0' in item:
++            return binds
++        fields = item.split(':')
++        if len(fields) != 3 or not all(fields):
++            return binds
++        target = fields[1]
++        if (not target.startswith('/') or target == '/' or
++                any(part in ('', '.', '..') for part in target[1:].split('/'))):
++            return binds
++        if any(target == other or target.startswith(other + '/') or
++                other.startswith(target + '/') for other in targets):
++            return binds
++        targets.append(target)
++    return sorted(binds)
++
++
+ def inspect(name):
+     j = json.loads(output('docker', 'inspect', name))[0]
+     config = dict(j['Config'])
+@@ -115,6 +141,9 @@
+             config['Env'] = sorted(env, key=lambda item: item.split('=', 1)[0])
+     host = {key: value for key, value in j['HostConfig'].items()
+             if key not in ('CpusetCpus', 'CpusetMems')}
++    host_binds = host.get('Binds')
++    if 'Binds' in host:
++        host['Binds'] = canonical_independent_binds(host_binds)
+     config_digest = hashlib.sha256(json.dumps({'Config': config, 'HostConfig': host},
+         sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+     effective = {}
+@@ -127,7 +156,9 @@
+             'finished_at': j['State']['FinishedAt'],
+             'cpus': j['HostConfig']['CpusetCpus'], 'mems': j['HostConfig']['CpusetMems'],
+             'mounts': j['Mounts'], 'image_id': j['Image'],
+-            'config_sha256': config_digest, **effective}
++            'config_sha256': config_digest,
++            'config_digest_schema': 'unique-env-independent-binds-v3',
++            'host_binds': host_binds, **effective}
+ 
+ 
+ def mysql_volume_removal_disabled():
+@@ -171,6 +202,10 @@
+     if after['mounts'] != before['mounts']:
+         print('[restore-equivalence] ' + json.dumps({'check': 'mysql-mount-order',
+             'before': before['mounts'], 'after': after['mounts'], 'accepted': True}), flush=True)
++    if after.get('host_binds') != before.get('host_binds'):
++        print('[restore-equivalence] ' + json.dumps({'check': 'mysql-independent-bind-order',
++            'before': before.get('host_binds'), 'after': after.get('host_binds'),
++            'accepted': True}), flush=True)
+     return after
+ 
+ 

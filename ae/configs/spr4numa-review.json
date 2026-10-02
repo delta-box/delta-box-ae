@@ -37,7 +37,7 @@
     "template": "ae-e2b-base-20260922",
     "execution": "local",
     "sidecar_ip": "192.168.12.79",
-    "resume_binary": "/home/dyp/infra/.local-finalbench-62-e2b-lw12/bin/resume-build",
+    "resume_binary": "/home/atc-ae/delta-box-ae/ae/work/hosted/e2b-table2-bin/resume-build",
     "sandbox_dir": "/home/dyp/infra/.local-finalbench-62-e2b-lw12/sandbox",
     "gocache": "/home/dyp/infra/.cache-go-build",
     "gomodcache": "/home/dyp/infra/.cache-go/pkg/mod",

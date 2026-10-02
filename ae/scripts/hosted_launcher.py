@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import errno
 import fcntl
 import grp
+import hashlib
 import importlib.util
 import json
 import os
@@ -28,6 +29,8 @@ import uuid
 CPU_STOP_GRACE = 700  # Existing lane cleanup may wait 600 seconds.
 CPU_UNIT_PATTERN = r'deltabox-ae-cpu-[0-9a-f]{32}\.service'
 CPU_REVIEWER_YIELD = 125
+CPU_SYSTEMD_RUNTIME = Path('/run/systemd/system')
+CPU_NUMA_DROPIN = '60-deltabox-numa.conf'
 CPU_LAYOUT_PROPERTIES = {
     'numa12': {'AllowedCPUs': '24-71', 'AllowedMemoryNodes': '1-2',
                'CPUAffinity': '32-35', 'NUMAPolicy': 'bind', 'NUMAMask': '1'},
@@ -295,6 +298,8 @@ def parse_arguments(argv):
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
                         help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
+    parser.add_argument('--resume-failures', type=int, choices=range(3), action=Once,
+                        help='Opt in to at most 2 verified-cleanup resumes of a fresh hosted NUMA1/2 CPU run')
     parser.add_argument('--isolated-validation', action='store_true', help='Small selected VM validation with separate output and explicit placement')
     parser.add_argument('--max-events', type=positive_integer, action=Once)
     output = parser.add_mutually_exclusive_group()
@@ -307,12 +312,16 @@ def parse_arguments(argv):
     parser.add_argument('--cpus', action=Once, help='CPU list inside the selected NUMA node')
     args = parser.parse_args(argv)
     args.cpu_layout = args.cpu_layout or 'numa12'
+    args.resume_failures = args.resume_failures or 0
     if args.cpu_layout != 'numa12' and not (args.cpu_parallel or args.isolated_validation):
         parser.error('--cpu-layout numa03 requires --cpu-parallel or strict isolated baseline validation')
     if args.cpu_parallel and (args.group != ['cpu'] or args.experiment or args.all or args.quick_check
             or args.numa_node is not None or args.cpus is not None or args.gpu_cases
             or args.cube_profile or args.e2b_profile or args.isolated_validation or args.reuse_completed_from):
         parser.error('--cpu-parallel requires --group cpu with a fixed CPU layout')
+    if args.resume_failures and (not args.cpu_parallel or args.cpu_layout != 'numa12'
+            or args.list or args.resume or args.output is None):
+        parser.error('--resume-failures requires a fresh hosted NUMA1/2 CPU run with --output')
     if args.e2b_profile is not None:
         if (args.experiment != ['table-02-e2b'] or args.group or args.all or args.quick_check
                 or args.list or args.limit is not None or args.max_events is not None
@@ -707,7 +716,7 @@ def retain_backend_recovery(policy, command, error):
     except FileExistsError:
         return
     with os.fdopen(fd, 'w') as stream:
-        json.dump({'reason': 'NUMA0/3 shared backend cleanup could not be verified',
+        json.dump({'reason': 'CPU shared backend cleanup could not be verified',
                    'error': f'{type(error).__name__}: {error}', 'command': command,
                    'recorded_at': datetime.now(timezone.utc).isoformat()}, stream, indent=2)
         stream.write('\n')
@@ -745,7 +754,86 @@ def finish_background_transaction(transaction, unit):
     path.unlink()
 
 
-def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_requested=None):
+def prepare_cpu_numa_dropin(unit, command, record):
+    """Persist the exact owned unit policy that systemd 249 omits from its fragment."""
+    if os.geteuid() != 0 or not re.fullmatch(CPU_UNIT_PATTERN, unit):
+        raise ValueError('CPU NUMA dropin requires a root-owned CPU service')
+    properties = CPU_LAYOUT_PROPERTIES[cpu_command_layout(command)]
+    if properties['NUMAPolicy'] != 'bind' or not re.fullmatch(r'\d+', properties['NUMAMask']):
+        raise ValueError('CPU NUMA dropin requires the fixed hosted bind policy')
+    root = trusted_path(CPU_SYSTEMD_RUNTIME, directory=True)
+    directory = root / (unit + '.d')
+    path = directory / CPU_NUMA_DROPIN
+    body = '[Service]\nNUMAPolicy=bind\nNUMAMask=' + properties['NUMAMask'] + '\n'
+    record.update(unit=unit, path=str(path), directory=str(directory), content=body,
+                  directory_created=False, file_created=False, written='', removed=False,
+                  sha256=hashlib.sha256(body.encode()).hexdigest(), bytes=len(body.encode()))
+    directory.mkdir(mode=0o755)  # Never adopt an existing directory or dropin.
+    info = directory.lstat()
+    record.update(directory_created=True, directory_identity=[info.st_dev, info.st_ino])
+    require_root_owned(directory, info)
+    if not stat.S_ISDIR(info.st_mode):
+        raise RuntimeError('CPU NUMA dropin directory changed before writing')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        info = os.fstat(fd)
+        record.update(file_created=True, file_identity=[info.st_dev, info.st_ino])
+        require_root_owned(path, info)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('CPU NUMA dropin must be one owned regular file')
+        data = body.encode()
+        while len(record['written']) < len(data):
+            offset = len(record['written'])
+            count = os.write(fd, data[offset:])
+            if count <= 0:
+                raise OSError('Short CPU NUMA dropin write')
+            record['written'] += data[offset:offset + count].decode()
+        os.fsync(fd)
+    finally:
+        record['written_sha256'] = hashlib.sha256(record['written'].encode()).hexdigest()
+        os.close(fd)
+
+
+def finish_cpu_numa_dropin(record, unit, state):
+    """Remove only our exact files after the existing unit/cgroup cleanup proof."""
+    if not record.get('directory_created'):
+        return
+    expected = CPU_SYSTEMD_RUNTIME / (unit + '.d')
+    if (not re.fullmatch(CPU_UNIT_PATTERN, unit) or record['unit'] != unit or
+            record['directory'] != str(expected) or record['path'] != str(expected / CPU_NUMA_DROPIN) or
+            state.get('cgroup') != str(Path('/sys/fs/cgroup/system.slice') / unit) or
+            not (state.get('cgroup_absent') is True or state.get('cgroup_populated') == '0') or
+            (state.get('LoadState') != 'not-found' and
+             (state.get('ActiveState') not in ('inactive', 'failed') or state.get('MainPID') != '0'))):
+        raise RuntimeError('CPU NUMA dropin cleanup lacks the owned empty service proof')
+    trusted_path(CPU_SYSTEMD_RUNTIME, directory=True)
+    info = expected.lstat()
+    require_root_owned(expected, info)
+    if not stat.S_ISDIR(info.st_mode) or [info.st_dev, info.st_ino] != record['directory_identity']:
+        raise RuntimeError('CPU NUMA dropin directory identity changed; retained')
+    path = expected / CPU_NUMA_DROPIN
+    if set(expected.iterdir()) != ({path} if record['file_created'] else set()):
+        raise RuntimeError('CPU NUMA dropin directory contents changed; retained')
+    if record['file_created']:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            require_root_owned(path, info)
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
+                    [info.st_dev, info.st_ino] != record['file_identity'] or
+                    os.read(fd, len(record['content'].encode()) + 1) != record['written'].encode()):
+                raise RuntimeError('CPU NUMA dropin file identity or bytes changed; retained')
+        finally:
+            os.close(fd)
+        info = path.lstat()
+        if [info.st_dev, info.st_ino] != record['file_identity']:
+            raise RuntimeError('CPU NUMA dropin changed before removal; retained')
+        path.unlink()
+    expected.rmdir()
+    record['removed'] = True
+
+
+def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_requested=None, receipt=None):
     """Keep admission held while systemd owns escaped sessions and stop cleanup."""
     if not Path('/sys/fs/cgroup/cgroup.controllers').is_file():
         raise ValueError('Hosted CPU service requires unified cgroup v2')
@@ -765,9 +853,11 @@ def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_r
         previous[signum] = signal.signal(signum, interrupt)
     process, code, workload_code, state, cleanup_error = None, 1, None, {}, None
     transaction, cleanup_verified = None, False
+    numa_dropin = {}
     try:
         if yield_requested is not None:
             transaction = begin_background_transaction(policy, unit)
+        prepare_cpu_numa_dropin(unit, command, numa_dropin)
         process = subprocess.Popen(argv, env=environment, start_new_session=True)
         if yield_requested is None:
             code = process.wait()
@@ -851,6 +941,15 @@ def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_r
     finally:
         try:
             try:
+                if numa_dropin and cleanup_verified:
+                    try:
+                        finish_cpu_numa_dropin(numa_dropin, unit, state)
+                    except BaseException as dropin_error:
+                        code = 1
+                        cleanup_error = f'{type(dropin_error).__name__}: {dropin_error}'
+                        if transaction is not None:
+                            retain_backend_recovery(policy, command, dropin_error)
+                        raise
                 if transaction is not None and cleanup_verified:
                     try:
                         finish_background_transaction(transaction, unit)
@@ -860,11 +959,16 @@ def run_cpu_service(policy, caller, command, environment, *, trust=None, yield_r
                         retain_backend_recovery(policy, command, commit_error)
                         raise
             finally:
+                if receipt is not None:
+                    receipt.update(unit=unit, returncode=code, workload_returncode=workload_code,
+                        cleanup_verified=cleanup_verified, cleanup_error=cleanup_error,
+                        interrupted_signals=interrupted, unit_state=state, numa_policy_dropin=numa_dropin)
                 audit_launch(policy, caller, command, trust=trust, event='cpu-service-finished',
                              unit=unit, returncode=code, interrupted_signals=interrupted,
                              workload_returncode=workload_code,
                              yielded_to_reviewer=(code == CPU_REVIEWER_YIELD),
-                             unit_state=state, cleanup_error=cleanup_error)
+                             unit_state=state, cleanup_error=cleanup_error,
+                             numa_policy_dropin=numa_dropin)
             if code == CPU_REVIEWER_YIELD:
                 print('Reviewer requested admission; owned background unit cleaned and yielded.', flush=True)
         finally:
@@ -894,6 +998,106 @@ def run_background_cpu(policy, caller, args, output, environment, priority, *, t
             return code
         print('NUMA0/3 validation will resume completed coverage after reviewer cleanup.', flush=True)
 
+
+
+def cpu_campaign_binding(policy):
+    """Freeze executable source, protected configuration and the Table2 binary."""
+    runtime = Path(policy['runtime_root'])
+    spec = importlib.util.spec_from_file_location('cpu_campaign_source_lock', runtime / 'release/lock.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = Path(policy['config'])
+    module.git = lambda root, *args: subprocess.check_output(
+        ['/usr/bin/git', '-c', 'safe.directory=' + str(root), '-C', str(root), *args], text=True).strip()
+    row = {'source': module.runtime_identity(runtime),
+           'config_sha256': hashlib.sha256(config.read_bytes()).hexdigest(),
+           'launcher_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    binary = json.loads(config.read_text()).get('e2b', {}).get('resume_binary')
+    if binary:
+        path = Path(binary)
+        if not path.is_absolute():
+            path = runtime / path
+        row['table2_binary'] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    return row
+
+
+def run_cpu_campaign(policy, caller, args, output, environment, *, trust=None):
+    """Explicit, bounded failure resumes; successful later attempts never erase failures."""
+    binding = cpu_campaign_binding(policy)
+    history = {'schema_version': 1, 'max_resumes': args.resume_failures,
+               'output': str(output), 'binding': binding, 'attempts': [],
+               'scope': 'Fresh start; later verified resumes are reported as resumed, not uninterrupted success'}
+    history_path = output / 'cpu-resume-history.json'
+
+    def save_history():
+        # The result tree is validated by result_path under the held maintenance
+        # and reviewer leases. Never follow or overwrite an existing foreign file.
+        trusted_path(output, directory=True, trust=trust)
+        if history_path.exists() or history_path.is_symlink():
+            trusted_path(history_path, trust=trust, root_leaf=True)
+        temporary = history_path.with_name('.cpu-resume-history-' + uuid.uuid4().hex + '.json')
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644), 'w') as stream:
+            json.dump(history, stream, indent=2)
+            stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, history_path)
+
+    for index in range(args.resume_failures + 1):
+        if cpu_campaign_binding(policy) != binding:
+            raise RuntimeError('CPU campaign source/configuration/binary changed; resume refused')
+        if index:
+            result_path(policy, output, caller, resume=True, trust=trust)
+            args.resume, args.output = output, None
+        command = command_line(policy, args, output)
+        receipt = {}
+        code = run_cpu_service(policy, caller, command, environment, trust=trust, receipt=receipt)
+        # Exceptions and signals from service/cleanup never enter the retry path.
+        row = {'index': index + 1, 'command': command, 'returncode': code,
+               'finished_at': datetime.now(timezone.utc).isoformat(), 'service': receipt,
+               'decision': 'stopped', 'records': {}}
+        history['attempts'].append(row)
+        if not output.is_dir():
+            audit_launch(policy, caller, command, trust=trust, event='cpu-campaign-no-output', campaign_record=row)
+            return code or 1
+        # Preserve overwritten control records BEFORE the existing resume path
+        # archives failed jobs and their original attempt-specific logs.
+        paths = [output / 'review.json', output / 'cpu-work-queue.json',
+                 *(output / 'lanes').glob('numa*/review.json')]
+        for path in paths:
+            if path.is_file():
+                raw = path.read_bytes()
+                row['records'][str(path.relative_to(output))] = {
+                    'sha256': hashlib.sha256(raw).hexdigest(), 'value': json.loads(raw)}
+        history['resumed_after_failure'] = index > 0
+        save_history()
+        clean = (receipt.get('cleanup_verified') is True and not receipt.get('cleanup_error')
+                 and not receipt.get('interrupted_signals')
+                 and receipt.get('numa_policy_dropin', {}).get('removed') is True)
+        review = row['records'].get('review.json', {}).get('value', {})
+        if not clean:
+            row['decision'] = 'cleanup-unverified'; save_history(); return code or 1
+        try:
+            for name in ('CPU_SERVICE_RECOVERY_REQUIRED.json', 'E2B_SERVICE_RECOVERY_REQUIRED.json',
+                         'CPU_BACKGROUND_TRANSACTION.json'):
+                if (Path(policy['runtime_root']) / 'ae/work' / name).exists():
+                    raise RuntimeError('Shared backend admission remains blocked: ' + name)
+            verify_background_cleanup(policy, command, check_experiment_failure=False)
+        except BaseException as error:
+            row.update(decision='cleanup-unverified', cleanup_error=type(error).__name__ + ': ' + str(error))
+            save_history()
+            retain_backend_recovery(policy, command, error)
+            raise
+        if code == 0:
+            row['decision'] = 'completed'; save_history(); return 0
+        if code != 1 or receipt.get('workload_returncode') != 1 or review.get('status') != 'failed':
+            row['decision'] = 'not-a-retryable-workload-failure'; save_history(); return code
+        if index == args.resume_failures:
+            row['decision'] = 'resume-budget-exhausted'; save_history(); return code
+        row['decision'] = 'resume-after-verified-cleanup'; save_history()
+        audit_launch(policy, caller, command, trust=trust, event='cpu-campaign-resume',
+                     failed_returncode=code, completed_attempt=index + 1, history=str(history_path))
+        print('CPU attempt failed with rc=1; original records retained. Cleanup verified; '
+              f'resuming the same output ({index + 1}/{args.resume_failures}).', flush=True)
+    raise AssertionError('Unreachable campaign state')
 
 def managed_cpu_execution(args):
     return args.cpu_parallel or (args.isolated_validation and args.cpu_layout == 'numa03')
@@ -988,6 +1192,8 @@ def main(argv=None, *, service_context=None):
         if managed_cpu_execution(args) and not args.list and service_context is None:
             if args.cpu_layout == 'numa03':
                 return run_background_cpu(policy, caller, args, output, environment, priority, trust=trust)
+            if args.resume_failures:
+                return run_cpu_campaign(policy, caller, args, output, environment, trust=trust)
             return run_cpu_service(policy, caller, command, environment, trust=trust)
         # Keep the lock in the runner itself, including during signal cleanup.
         os.set_inheritable(lock_fd, True)

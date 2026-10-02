@@ -1394,7 +1394,9 @@ class Review:
                                     cube_contexts.close()
                                 except Exception as error:
                                     log = Path('environment') / self.attempt / name / 'cube-cleanup-error.json'
-                                    write_json(self.output / log, {'error': f'{type(error).__name__}: {error}'})
+                                    import traceback
+                                    write_json(self.output / log, {'error': f'{type(error).__name__}: {error}',
+                                        'traceback': ''.join(traceback.format_exception(type(error), error, error.__traceback__))})
                                     self.record['steps'].append(dict(name='cube-service-cleanup', status='failed',
                                         experiment=name, log=str(log), error=f'{type(error).__name__}: {error}'))
                                     raise

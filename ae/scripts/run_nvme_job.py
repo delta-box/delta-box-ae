@@ -24,6 +24,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'ae')]
+from ae.scripts.job_mount_namespace import release_inherited_cube_mounts
 from repro.common import write_json
 from repro.staging_cleanup import cleanup_reconstructable_staging
 
@@ -343,6 +344,7 @@ def run(args):
 
     previous_handler = signal.signal(signal.SIGTERM, interrupted)
     try:
+        meta['inherited_cube_mounts'] = release_inherited_cube_mounts(ROOT)
         children = OwnedChildren()
         archive = Path(tempfile.mkdtemp(prefix='nvme-archive-', dir=ROOT / 'ae/work'))
         archive_stat = archive.stat()
