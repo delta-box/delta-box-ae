@@ -635,14 +635,25 @@ class VMProof:
         return group, pids, identity
 
     def _discard_deleted_child(self, child, identity, root_identity, operation, error_number):
-        try:
-            current = child.lstat()
-        except FileNotFoundError:
-            pass
-        else:
+        # kernfs deactivates control files before unlinking the directory. Give
+        # that same observed leaf a bounded interval to disappear; never reread
+        # it as successful evidence or waive full VM identity coverage.
+        confirmation_started = time.monotonic()
+        confirmation_limit = .05
+        present_checks = 0
+        while True:
+            try:
+                current = child.lstat()
+            except FileNotFoundError:
+                break
             if identity is not None and (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
                 raise RuntimeError('E2B VM cgroup was replaced during observation')
-            raise RuntimeError('E2B VM cgroup read failed while the observed leaf remains present')
+            remaining = confirmation_limit - (time.monotonic() - confirmation_started)
+            if identity is None or remaining <= 0:
+                raise RuntimeError('E2B VM cgroup read failed while the observed leaf remains present'
+                    + f' (operation={operation}, errno={error_number}, path={child}, inode={current.st_ino})')
+            present_checks += 1
+            time.sleep(min(.002, remaining))
         current_root = VM_ROOT.lstat()
         if (current_root.st_dev, current_root.st_ino) != root_identity:
             raise RuntimeError('E2B VM root identity changed during observation')
@@ -659,7 +670,9 @@ class VMProof:
             raise RuntimeError('E2B VM cgroup reappeared during deletion verification')
         self.discarded_cgroups.append({'path': str(child), 'device': identity.st_dev if identity is not None else None,
             'inode': identity.st_ino if identity is not None else None, 'operation': operation,
-            'errno': error_number, 'observed_at': time.time(), 'reason': 'child absent; incomplete observation discarded'})
+            'errno': error_number, 'observed_at': time.time(),
+            'deletion_confirmation': {'present_checks': present_checks, 'wait_s': time.monotonic() - confirmation_started, 'limit_s': confirmation_limit},
+            'reason': 'child absent; incomplete observation discarded'})
 
     def _validate_process(self, task, owner_pid, owner_start, child, identity, root_identity, group, *, metadata_only=False, stage='pre-numa_maps'):
         if task['pid'] == owner_pid and task['start_ticks'] != owner_start:
