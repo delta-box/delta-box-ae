@@ -10,7 +10,12 @@ case "$layout" in
 esac
 shift
 args=(--group cpu --cpu-parallel)
-resume_failures=0
+resume_failures=
+limit_set=0
+output_set=0
+resume_set=0
+list_only=0
+self_managed=0
 if [[ $layout == numa03 ]]; then args+=(--cpu-layout numa03); fi
 while (($#)); do
     case "$1" in
@@ -18,16 +23,16 @@ while (($#)); do
             cat <<HELP
 Usage: bash ae/$entry [options]
 
-Run all 16 normal CPU experiment groups on NUMA$nodes with the original job caps.
+Run all 16 normal CPU experiment groups on NUMA$nodes (default input limit: 3).
 Idle nodes claim the next experiment; input jobs within each group stay serial.
 Cube/E2B service changes never overlap. Results feed one combined report.
 Figure 8(a) remains included. GPU probing and Figure 8(b)(c) are skipped.
 
 Options forwarded unchanged to the normal entry:
-  --output PATH         New result directory
+  --output PATH         New result directory (generated automatically if omitted)
   --resume PATH         Resume a previous two-lane run
-  --limit N             Input limit; configured job cap still applies
-  --resume-failures N   Hosted NUMA1/2 only: 0..3 resumes after verified cleanup
+  --limit N             Input limit (default: 3); configured job cap still applies
+  --resume-failures N   Hosted NUMA1/2 only: 0..3 resumes (default: 3 for fresh runs)
   --max-events N        Explicit event prefix
   --baseline-inputs 44|all
   --list                Show the shared experiment catalogue without running
@@ -58,10 +63,13 @@ HELP
             if [[ $layout != numa12 || ! $value =~ ^[0-3]$ ]]; then
                 echo '--resume-failures requires hosted NUMA1/2 and a value 0..3' >&2; exit 2
             fi
-            if (( value > 0 )); then args+=(--resume-failures "$value"); fi
+            if [[ -n $resume_failures ]]; then
+                echo 'Use --resume-failures exactly once.' >&2; exit 2
+            fi
             resume_failures=$value
             ;;
         --config|--config=*|--runtime-repo)
+            self_managed=1
             if [[ $layout != numa12 ]]; then
                 echo "Unsupported option: $1. NUMA0/3 requires the fixed hosted configuration." >&2
                 exit 2
@@ -76,9 +84,20 @@ HELP
             if (($# < 2)) || [[ $2 == --* ]]; then
                 echo "Missing value for $1" >&2; exit 2
             fi
+            case "$1" in
+                --limit) limit_set=1 ;;
+                --output) output_set=1 ;;
+                --resume) resume_set=1 ;;
+            esac
             args+=("$1" "$2"); shift 2
             ;;
         --output=*|--resume=*|--limit=*|--max-events=*|--baseline-inputs=*|--list)
+            case "$1" in
+                --limit=*) limit_set=1 ;;
+                --output=*) output_set=1 ;;
+                --resume=*) resume_set=1 ;;
+                --list) list_only=1 ;;
+            esac
             args+=("$1"); shift
             ;;
         *)
@@ -87,6 +106,27 @@ HELP
             ;;
     esac
 done
+# Defaults belong to fresh hosted reviewer campaigns. Listing, explicit manual
+# resume and self-managed overrides must not silently acquire a retry budget.
+if (( ! limit_set )); then args+=(--limit 3); fi
+if [[ -z $resume_failures ]]; then
+    resume_failures=0
+    if [[ $layout == numa12 ]] && (( ! resume_set && ! list_only && ! self_managed )); then
+        resume_failures=3
+    fi
+fi
+if (( resume_failures > 0 )); then
+    if (( resume_set || list_only || self_managed )); then
+        echo 'Failure resumes require a fresh hosted run without --resume, --list or self-managed overrides.' >&2
+        exit 2
+    fi
+    if (( ! output_set )); then
+        repo=$(cd "$ae_dir/.." && pwd)
+        # Do not pre-create the directory: admission and the output lock own it.
+        args+=(--output "$repo/ae/results/selected/$layout-$(date -u +%Y%m%dT%H%M%SZ)-$$")
+    fi
+    args+=(--resume-failures "$resume_failures")
+fi
 launcher=${AE_HOSTED_LAUNCHER:-}
 if (( resume_failures > 0 )); then
     if [[ -n $launcher && $launcher != /usr/local/sbin/deltabox-ae-run ]]; then

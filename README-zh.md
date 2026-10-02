@@ -6,7 +6,7 @@
 
 DeltaBox 为智能体的树搜索提供文件系统与进程状态的 checkpoint、restore 和分支能力。本 artifact 包含运行时代码、录制的工作负载、实验驱动与绘图工具，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，无需提供 LLM API key。
 
-建议先完成约 **5 分钟的快速检查**，再逐项验证。现有配置将每组限制为**最多 10 个完整作业（含所有实验臂）**，默认不启动全量 cohort。Replay、CRIU 和 Firecracker Diff 默认从固定的 **44 条完整轨迹输入池**取样；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
+建议先完成约 **5 分钟的快速检查**，再逐项验证。CPU 审查者入口默认每组最多 **3 条完整输入**；通用 CPU/GPU 配置仍保留 10 个作业的上限，两者默认均不启动全量 cohort。Replay、CRIU 和 Firecracker Diff 默认从固定的 **44 条完整轨迹输入池**取样；运行时间取决于主机负载和各 baseline。也可按[实验索引](#experiments)选择单项。Figure 8(b) 自动探测配置的远端 GPU 主机；资源不可用时在报告中说明跳过原因。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [自建环境](#self-hosting) · [运行问题](#troubleshooting)
 
@@ -49,6 +49,32 @@ CPU 必须属于所选节点。内存准入检查与 CPU 频率恢复仍然生�
 
 <a id="一键运行"></a>
 
+在托管机器上跳过 GPU 探测和测量时，以 `atc-ae` 登录，使用原审查者命令：
+
+```bash
+cd /home/atc-ae/delta-box-ae
+bash ae/run_all_no_gpu.sh
+```
+
+Cube 内存盘实验会临时关闭受控服务进程树的透明大页；托管 VMM 同时使用[稳定 pagemap 分类修复](ae/patches/cube-pagemap-stable-classification.md)，避免通过过期物理页号查询属性而漏存匿名页。源实例和子实例均执行内存 checksum 校验，实验结束后恢复原服务策略。
+
+
+此入口在 **NUMA1/CPU28–31 和 NUMA2/CPU48–51** 上通过共享队列运行全部 **16 个 CPU 实验组**。默认每组输入上限为 **3 条**，保留原实验臂、fan-out 和录制等待，选中的轨迹执行到底，不自动截断事件。空闲节点领取下一组，每组内部输入保持串行；涉及共享 Cube/E2B 服务的实验互斥。保留 Figure 8(a)，排除 GPU 探测及 Figure 8(b)(c)。脚本自动生成并打印新的结果目录；可用 `--output` 指定目录，或用 `--resume` 继续已有运行，不接受放置覆盖。同一次运行续跑会核验已完成产物，保留原节点与源码身份，未完成组仍留在原节点。
+
+在托管服务器上，此入口运行于专属 systemd unit。直接 AE 后代进程禁止使用 swap；运行中断时先发送 SIGINT 执行已有清理，清理宽限期结束后由 unit 回收剩余后代。启动器记录 unit 身份和最终清理状态。
+
+审查者命令默认每组最多 3 条输入，失败且清理核验完成后最多自动续跑 3 次，无需额外参数。每次失败及复用结果均保留记录，经过续跑的成功与一次连续通过明确区分。用户中断、清理无法确认、存在恢复标记或源码/配置/二进制变化时停止。可选覆盖参数见 `--help`；显式手动续跑和自管理配置不会重新获得自动续跑预算。
+
+托管服务器上的后台 NUMA0/3 验证使用下面的入口，并指定新的输出目录。两个入口共用参数解析、实验驱动、存储准备和报告代码，只区分固定 NUMA 布局与审查者优先级。上面的审查者命令继续使用原 NUMA1/2 绑定。
+
+```bash
+bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
+```
+
+这个入口在 **NUMA0/CPU0–3 和 NUMA3/CPU72–75** 上运行相同的 16 组完整输入作业，默认每组输入上限同为 3，不自动截断事件。Cube/E2B 服务跨 NUMA 节点共享，因此两轮运行对共享后端互斥。**审查者请求优先**：后台先清理自己拥有的实验并恢复服务，审查者再获准运行；审查者结束后，后台在同一输出目录核验并续跑已完成的实验组。审查者可能需要等待清理完成。手动续跑时使用 `--resume` 和原 NUMA0/3 输出目录，续跑不能更换布局。结果保存在 `/home/atc-ae/delta-box-ae/ae/results/selected/<运行目录>/`，脚本会打印准确路径。以该次运行的 `SUMMARY.md` 和退出码为准：全部 16 组为 `ok` 且退出码为 0，才表示执行成功。
+
+如需可选的顺序 CPU/GPU 验证，使用通用入口：
+
 ```bash
 bash ae/run_all.sh
 ```
@@ -60,36 +86,6 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
 该命令按[索引](#experiments)顺序逐组验证，每组最多执行 10 个完整作业，再分析样本结果并生成对比页。Replay、CRIU 和 Firecracker Diff 从固定 44 条输入池中取样，选中的轨迹执行到底。上限包含所有实验臂：Figure 6(b) 最多 5 条输入 × 2 模式，Figure 9 最多 3 条输入 × 3 文件系统。报告保留实际子集范围，不冒充全量覆盖。Figure 7 从完整轨迹派生；随后 Figure 8(b) 自动探测 `allinai2plus` 的 GPU 0–7：无空闲卡则记录跳过，1–3 张可执行六案例，四张可执行全部八案例。GPU 资源不足或失败不影响 CPU 结果有效性。本轮 CPU/GPU 输入齐全时自动推导 Figure 8(c)。
-
-在托管机器上跳过 GPU 探测和测量时，以 `atc-ae` 登录，使用原审查者命令：
-
-```bash
-cd /home/atc-ae/delta-box-ae
-AE_HOSTED_LAUNCHER=/usr/local/sbin/deltabox-ae-run bash ae/run_all_no_gpu.sh
-```
-
-Cube 内存盘实验会临时关闭受控服务进程树的透明大页；托管 VMM 同时使用[稳定 pagemap 分类修复](ae/patches/cube-pagemap-stable-classification.md)，避免通过过期物理页号查询属性而漏存匿名页。源实例和子实例均执行内存 checksum 校验，实验结束后恢复原服务策略。
-
-
-此入口在 **NUMA1/CPU28–31 和 NUMA2/CPU48–51** 上通过共享队列运行全部 **16 个 CPU 实验组**。每组最多执行 **10 个完整输入作业（含所有实验臂）**，选中的轨迹执行到底，不自动截断事件。空闲节点领取下一组，每组内部输入保持串行；涉及共享 Cube/E2B 服务的实验互斥。保留 Figure 8(a)，排除 GPU 探测及 Figure 8(b)(c)。可使用 `--output` 或 `--resume`，不接受绑定覆盖。同一次运行续跑会核验已完成产物，保留原节点与源码身份，未完成组仍留在原节点。
-
-在托管服务器上，此入口运行于专属 systemd unit。直接 AE 后代进程禁止使用 swap；运行中断时先发送 SIGINT 执行已有清理，清理宽限期结束后由 unit 回收剩余后代。启动器记录 unit 身份和最终清理状态。
-
-如需在失败后有界续跑，使用新的输出目录显式启用：
-
-```bash
-bash ae/run_all_no_gpu.sh --limit 3 --resume-failures 3 --output "$PWD/ae/results/selected/numa12-validation"
-```
-
-`--resume-failures 3` 最多允许三次续跑，加上首次运行共最多四次尝试，前提是作业失败且清理已核验。用户中断、清理无法确认、存在恢复标记，或源码/配置/二进制变化时立即停止。已有断点逻辑重新核验完成产物，并重新执行失败作业；`cpu-resume-history.json` 保留每次退出码和之前的控制记录，原有 attempt 目录继续保留失败作业日志。经过续跑的成功会明确区分于一次连续通过；不指定此选项时，作业失败仍立即停止。
-
-托管服务器上的后台 NUMA0/3 验证使用下面的入口，并指定新的输出目录。两个入口共用参数解析、实验驱动、存储准备和报告代码，只区分固定 NUMA 布局与审查者优先级。上面的审查者命令继续使用原 NUMA1/2 绑定。
-
-```bash
-bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
-```
-
-这个入口在 **NUMA0/CPU0–3 和 NUMA3/CPU72–75** 上运行相同的 16 组完整输入作业，每组上限同为 10，不自动截断事件。Cube/E2B 服务跨 NUMA 节点共享，因此两轮运行对共享后端互斥。**审查者请求优先**：后台先清理自己拥有的实验并恢复服务，审查者再获准运行；审查者结束后，后台在同一输出目录核验并续跑已完成的实验组。审查者可能需要等待清理完成。手动续跑时使用 `--resume` 和原 NUMA0/3 输出目录，续跑不能更换布局。结果保存在 `/home/atc-ae/delta-box-ae/ae/results/selected/<运行目录>/`，脚本会打印准确路径。以该次运行的 `SUMMARY.md` 和退出码为准：全部 16 组为 `ok` 且退出码为 0，才表示执行成功。
 
 如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
 
