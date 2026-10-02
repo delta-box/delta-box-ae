@@ -36,7 +36,7 @@ class CPUOnlyEntryTests(unittest.TestCase):
 
     def test_normal_options_keep_argv_and_exit_status(self):
         options = ['--output', '/path with spaces/result', '--limit', '2', '--baseline-inputs', '44']
-        result = self.invoke(options, status=7)
+        result = self.invoke([*options, '--resume-failures', '0'], status=7)
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertEqual(result.stdout.decode().split('\0')[:-1], ['--group', 'cpu', '--cpu-parallel', *options])
 

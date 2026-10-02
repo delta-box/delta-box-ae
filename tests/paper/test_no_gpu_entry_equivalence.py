@@ -38,21 +38,57 @@ class CPUEntryEquivalenceTests(unittest.TestCase):
                 words=words[:4]+words[9:]
             return result,words
 
-    def test_same_cpu_selection_options_and_status_only_layout_differs(self):
-        for flags in ([], ['--output','/path with spaces/result','--baseline-inputs','44'],
-                      ['--resume=/previous result','--limit','2','--max-events=29'], ['--list']):
-            results={layout:self.invoke(layout,flags,launcher=LAUNCHER,status=7) for layout in ('numa12','numa03')}
-            for result,words in results.values():self.assertEqual(result.returncode,7,result.stderr)
-            left,right=results['numa12'][1],results['numa03'][1]
-            self.assertEqual(left[:3],['--all','--physcpubind=32-35','--membind=1'])
-            self.assertEqual(right[:4],['--all','--physcpubind=4-7','--membind=0','HOSTED'])
-            self.assertEqual(left[4:],['--group','cpu','--cpu-parallel',*flags])
-            self.assertEqual(right[4:],['--group','cpu','--cpu-parallel','--cpu-layout','numa03',*flags])
-            self.assertEqual(left[3],'SELF' if os.geteuid()==0 else 'HOSTED')
+    def test_default_reviewer_uses_three_inputs_three_resumes_and_fresh_output(self):
+        outputs = []
+        for _ in range(2):
+            result, words = self.invoke('numa12', status=7)
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertEqual(words[:4], ['--all', '--physcpubind=32-35', '--membind=1', 'HOSTED'])
+            self.assertEqual(words[4:9], ['--group', 'cpu', '--cpu-parallel', '--limit', '3'])
+            self.assertEqual(words[9], '--output')
+            self.assertRegex(words[10], r'/ae/results/selected/numa12-\d{8}T\d{6}Z-\d+$')
+            self.assertFalse(Path(words[10]).exists())
+            self.assertEqual(words[11:], ['--resume-failures', '3'])
+            outputs.append(words[10])
+        self.assertNotEqual(*outputs)
+
+    def test_explicit_overrides_keep_values_spaces_and_exit_status(self):
+        for flags in (['--output', '/path with spaces/result', '--limit', '2', '--resume-failures', '1'],
+                      ['--output=/path with spaces/result', '--limit=2', '--resume-failures=1']):
+            result, words = self.invoke('numa12', flags, status=7)
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertEqual(words[3:7], ['HOSTED', '--group', 'cpu', '--cpu-parallel'])
+            preserved = flags[:-2] if flags[-2] == '--resume-failures' else flags[:-1]
+            self.assertEqual(words[7:], [*preserved, '--resume-failures', '1'])
+
+    def test_explicit_zero_disables_failure_resumes(self):
+        result, words = self.invoke('numa12', ['--resume-failures', '0'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(words[3:], ['SELF', '--group', 'cpu', '--cpu-parallel', '--limit', '3'])
+
+    def test_listing_and_manual_resume_do_not_reset_failure_budget(self):
+        for flags in (['--list'], ['--resume', '/previous result'], ['--resume=/previous result']):
+            result, words = self.invoke('numa12', flags)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(words[3:], ['SELF', '--group', 'cpu', '--cpu-parallel', *flags, '--limit', '3'])
+            self.assertNotIn('--resume-failures', words)
+            self.assertNotIn('--output', words)
+        for flags in (['--resume', '/old'], ['--list'], ['--config', '/custom']):
+            result, words = self.invoke('numa12', [*flags, '--resume-failures', '3'])
+            self.assertEqual((result.returncode, words), (2, []))
+
+    def test_background_keeps_priority_dispatch_and_default_input_limit(self):
+        result, words = self.invoke('numa03', ['--output', '/background'], status=7)
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(words, ['--all', '--physcpubind=4-7', '--membind=0', 'HOSTED',
+                                '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03',
+                                '--output', '/background', '--limit', '3'])
+        self.assertNotIn('--resume-failures', words)
 
     def test_illegal_selection_and_missing_values_fail_before_launch_in_both(self):
         for flags in (['--group','gpu'],['--all'],['--cpu-layout','numa12'],['--numa-node=0'],
-                      ['--execute-plan','p'],['--output'],['--limit','--list']):
+                      ['--execute-plan','p'],['--output'],['--limit','--list'],
+                      ['--resume-failures','4'],['--resume-failures','3','--resume-failures','0']):
             for layout in ('numa12','numa03'):
                 result,words=self.invoke(layout,flags)
                 self.assertEqual(result.returncode,2)
@@ -62,7 +98,7 @@ class CPUEntryEquivalenceTests(unittest.TestCase):
         flags=['--config','/custom/config','--runtime-repo','/custom/runtime']
         result,words=self.invoke('numa12',flags)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags])
+        self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags,'--limit','3'])
         result,words=self.invoke('numa03',flags)
         self.assertEqual((result.returncode,words),(2,[]))
         result,words=self.invoke('numa03',launcher='/unprotected/launcher')
