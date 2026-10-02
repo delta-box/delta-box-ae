@@ -39,7 +39,7 @@ def require_memory_workdir(path, *, experiment="figure-09"):
 
 
 @contextmanager
-def runtime_directory(config, output):
+def runtime_directory(config, output, *, state=None):
     experiment = config['experiment']
     memory_required = experiment in ('figure-09', 'correctness')
     parent = config.get('work_dir')
@@ -48,24 +48,32 @@ def runtime_directory(config, output):
     if memory_required and not parent:
         parent = AE_ROOT/'work'
         parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='ae-cpu-', dir=parent) as directory:
-        runtime = Path(directory)
-        mounted = False
+    temporary = tempfile.TemporaryDirectory(prefix='ae-cpu-', dir=parent)
+    runtime = Path(temporary.name)
+    mounted = False
+    try:
+        if memory_required and not config.get('work_dir'):
+            size = Path(config['base_xfs']).stat().st_size + 1024**3
+            subprocess.run(['mount', '-t', 'tmpfs', '-o', f'size={size},noswap',
+                            'ae-war-vm-memory', str(runtime)], check=True)
+            mounted = True
+        if memory_required:
+            # Guest /tmp and /app live on this private XFS rootfs. Keep XFS
+            # semantics while its writable backing bytes stay on noswap RAM.
+            write_json(output/'host-storage.json',
+                       require_memory_workdir(runtime, experiment=experiment))
+        yield runtime
+    finally:
+        if state is not None and getattr(state.args, '_rootfs_cleanup_error', None):
+            temporary._finalizer.detach()
+            raise RuntimeError('Rootfs cleanup failed; retain runtime directory and RAM mount for recovery')
         try:
-            if memory_required and not config.get('work_dir'):
-                size = Path(config['base_xfs']).stat().st_size + 1024**3
-                subprocess.run(['mount', '-t', 'tmpfs', '-o', f'size={size},noswap',
-                                'ae-war-vm-memory', str(runtime)], check=True)
-                mounted = True
-            if memory_required:
-                # Guest /tmp and /app live on this private XFS rootfs. Keep XFS
-                # semantics while its writable backing bytes stay on noswap RAM.
-                write_json(output/'host-storage.json',
-                           require_memory_workdir(runtime, experiment=experiment))
-            yield runtime
-        finally:
             if mounted:
                 subprocess.run(['umount', str(runtime)], check=True)
+        except BaseException:
+            temporary._finalizer.detach()
+            raise
+        temporary.cleanup()
 
 
 def build_extra(args, output):
@@ -104,11 +112,13 @@ def build_extra(args, output):
 def guest_run(config_path):
     config=json.loads(config_path.read_text());output=config_path.parent
     # The archived payload records the measured source; local edits are allowed.
-    with runtime_directory(config, output) as runtime:
+    state = SimpleNamespace(args=None)
+    with runtime_directory(config, output, state=state) as runtime:
         args=SimpleNamespace(kernel=Path(config['kernel']),base_xfs=Path(config['base_xfs']),data_xfs=Path(config['data_xfs']),
             run_rootfs=runtime/'rootfs.xfs',socket=runtime/'fc.sock',log=output/'firecracker.log',ssh_pubkey=None,
             tap='ae'+runtime.name[-10:],guest_ip=vm.GUEST_IP,vcpus=4,mem_mib=8192,ssh_timeout=120,
             reuse_rootfs=False,no_nat=True,inherit_process_group=True)
+        state.args = args
         process=None
         ssh=['ssh',*vm.ssh_opts(),'-o','ConnectTimeout=10',f'root@{args.guest_ip}']
         scp=['scp','-O',*vm.ssh_opts(),'-o','ConnectTimeout=10']

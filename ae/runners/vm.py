@@ -12,10 +12,13 @@ any demo by itself.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import pwd
+import re
 import signal
+import stat
 import shutil
 import subprocess
 import sys
@@ -116,7 +119,7 @@ def resolve_default_kernel() -> Path:
 
 
 def check_prereqs(args: argparse.Namespace) -> None:
-    required = ["firecracker", "curl", "ssh", "scp", "ip", "mount", "umount", "unshare"]
+    required = ["firecracker", "curl", "ssh", "scp", "ip", "mount", "umount", "losetup", "unshare"]
     if not args.no_nat:
         required += ["iptables", "sysctl"]
     missing = [tool for tool in required if shutil.which(tool) is None]
@@ -151,18 +154,131 @@ def prepare_rootfs(args: argparse.Namespace) -> None:
             shutil.copyfile(args.base_xfs, args.run_rootfs)
 
 
+def _rootfs_loop_binding(loop: str, image_stat, *, missing_ok=False) -> bool:
+    records = json.loads(run([
+        "losetup", "--json", "--list", "--output", "NAME,BACK-INO,BACK-MAJ:MIN", loop,
+    ], capture=True).stdout)["loopdevices"]
+    if missing_ok and (not records or (len(records) == 1
+            and records[0].get("name") == loop
+            and records[0].get("back-ino") is None
+            and records[0].get("back-maj:min") is None)):
+        return False
+    expected_device = f"{os.major(image_stat.st_dev)}:{os.minor(image_stat.st_dev)}"
+    if (len(records) != 1 or records[0]["name"] != loop
+            or int(records[0]["back-ino"]) != image_stat.st_ino
+            or records[0]["back-maj:min"].strip() != expected_device):
+        raise RuntimeError(f"Rootfs loop identity changed; refusing cleanup: {loop}")
+    return True
+
+
+def _rootfs_mounts() -> list[tuple[str, str]]:
+    def decode(value):
+        return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), value)
+    return [(decode(fields[4]), fields[2])
+            for line in Path("/proc/self/mountinfo").read_text().splitlines()
+            if len(fields := line.split()) >= 10]
+
+
+def _wait_rootfs_loop_detached(loop: str, image_stat) -> None:
+    # losetup -d uses lazy device destruction. Wait only for this verified
+    # backing inode/device, never for the host's global udev queue.
+    deadline = time.monotonic() + 2.0
+    while _rootfs_loop_binding(loop, image_stat, missing_ok=True):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("Rootfs loop remains attached after detach timeout")
+        time.sleep(min(0.02, remaining))
+
+
+def _retain_rootfs_cleanup(args, evidence) -> None:
+    # The caller must also retain its runtime directory when this flag is set.
+    args._rootfs_cleanup_error = evidence
+    fd, name = tempfile.mkstemp(prefix="rootfs-cleanup-error-", suffix=".json",
+                                dir=args.log.parent)
+    evidence["receipt"] = name
+    with os.fdopen(fd, "w") as stream:
+        json.dump(evidence, stream, indent=2)
+        stream.write("\n")
+    if "AE_HOSTED_CALLER_UID" in os.environ:
+        guard = REPO_ROOT / "ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json"
+        try:
+            fd = os.open(guard, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            return  # The existing recovery barrier must retain its identity.
+        with os.fdopen(fd, "w") as stream:
+            json.dump(dict(reason="Rootfs mount cleanup failed", receipt=name,
+                           loop=evidence["loop"], image_device=evidence["image_device"],
+                           image_inode=evidence["image_inode"]), stream, indent=2)
+            stream.write("\n")
+
+
+@contextmanager
+def patch_rootfs(args: argparse.Namespace):
+    """Mount a private image with an owned loop; retain evidence if cleanup fails."""
+    image = args.run_rootfs.resolve(strict=True)
+    image_stat = image.stat()
+    with image.open("rb") as stream:
+        is_xfs = stream.read(4) == b"XFSB"
+    mount_point = Path(tempfile.mkdtemp(prefix="deltafs-rootfs-")).resolve()
+    loop = None
+    device = None
+    primary = None
+    try:
+        loop = run(["losetup", "--find", "--show", str(image)], capture=True).stdout.strip()
+        if re.fullmatch(r"/dev/loop[0-9]+", loop) is None:
+            raise RuntimeError(f"Unexpected rootfs loop device: {loop!r}")
+        _rootfs_loop_binding(loop, image_stat)
+        loop_stat = Path(loop).stat()
+        if not stat.S_ISBLK(loop_stat.st_mode):
+            raise RuntimeError(f"Rootfs loop is not a block device: {loop}")
+        device = f"{os.major(loop_stat.st_rdev)}:{os.minor(loop_stat.st_rdev)}"
+        # Clones deliberately retain the original UUID. XFS needs nouuid when
+        # fast/slow lanes patch copies concurrently; ext4 must not receive it.
+        options = ["-t", "xfs", "-o", "nouuid"] if is_xfs else []
+        run(["mount", *options, loop, str(mount_point)])
+        if (str(mount_point), device) not in _rootfs_mounts():
+            raise RuntimeError("Rootfs mount identity was not observed")
+        yield mount_point
+    except BaseException as error:
+        primary = error
+        raise
+    finally:
+        try:
+            mounts = _rootfs_mounts()
+            targets = [dev for target, dev in mounts if target == str(mount_point)]
+            if loop is not None:
+                present = _rootfs_loop_binding(loop, image_stat, missing_ok=True)
+                if targets:
+                    if targets != [device] or not present:
+                        raise RuntimeError("Rootfs mount identity changed; refusing unmount")
+                    run(["umount", str(mount_point)])
+                    mounts = _rootfs_mounts()
+                if any(target == str(mount_point) or dev == device for target, dev in mounts):
+                    raise RuntimeError("Rootfs loop remains mounted; refusing detach")
+                if _rootfs_loop_binding(loop, image_stat, missing_ok=True):
+                    run(["losetup", "--detach", loop])
+                    _wait_rootfs_loop_detached(loop, image_stat)
+            elif targets:
+                raise RuntimeError("Unexpected mount at private rootfs directory")
+            mount_point.rmdir()
+        except BaseException as error:
+            evidence = dict(rootfs=str(image), mount_point=str(mount_point), loop=loop,
+                            image_device=image_stat.st_dev, image_inode=image_stat.st_ino,
+                            loop_device=device, xfs=is_xfs,
+                            cleanup_error=f"{type(error).__name__}: {error}",
+                            original_error=None if primary is None else
+                            f"{type(primary).__name__}: {primary}")
+            _retain_rootfs_cleanup(args, evidence)
+            raise RuntimeError(f"Rootfs cleanup failed; resources retained: {evidence['receipt']}") from error
+
+
 def inject_ssh_key(args: argparse.Namespace) -> None:
     pubkey = args.ssh_pubkey or default_pubkey()
     if not pubkey or not pubkey.exists():
         print("[host] WARN: no SSH public key found; SSH may fail")
         return
 
-    mount_point = Path(tempfile.mkdtemp(prefix="deltafs-rootfs-"))
-    mounted = False
-    run(["mkdir", "-p", str(mount_point)])
-    try:
-        run(["mount", "-o", "loop", str(args.run_rootfs), str(mount_point)])
-        mounted = True
+    with patch_rootfs(args) as mount_point:
         ssh_dir = mount_point / "root" / ".ssh"
         ssh_dir.mkdir(mode=0o700, exist_ok=True)
         auth = ssh_dir / "authorized_keys"
@@ -176,10 +292,6 @@ def inject_ssh_key(args: argparse.Namespace) -> None:
         auth.chmod(0o600)
         ssh_dir.chmod(0o700)
         print(f"[host] injected SSH public key: {pubkey}")
-    finally:
-        if mounted:
-            run(["umount", str(mount_point)])
-        mount_point.rmdir()
 
 
 def get_default_interface() -> str | None:
@@ -404,6 +516,8 @@ def stop_vm(args: argparse.Namespace, process: subprocess.Popen | None) -> None:
     if getattr(args, "_tap_created", False):
         run(["ip", "link", "del", args.tap], check=False)
     args.socket.unlink(missing_ok=True)
+    if getattr(args, "_rootfs_cleanup_error", None):
+        raise RuntimeError("Rootfs mount cleanup failed; retain runtime image and recovery receipt")
     args.run_rootfs.unlink(missing_ok=True)
 
 

@@ -15,9 +15,15 @@ import time
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO), str(REPO / 'ae')]
-PLACEMENT = {1: '28-31', 2: '48-51'}
+CPU_LAYOUTS = {'numa12': {1: '28-31', 2: '48-51'},
+               'numa03': {0: '0-3', 3: '72-75'}}
+PLACEMENT = CPU_LAYOUTS['numa12']
 BASELINES = {'table-02-replay', 'table-02-criu', 'table-02-fc-diff',
              'table-02-cube', 'table-02-e2b', 'figure-08-cube', 'figure-08-e2b'}
+
+
+def placement(args):
+    return CPU_LAYOUTS[getattr(args, 'cpu_layout', 'numa12')]
 
 
 def partition(experiments):
@@ -32,12 +38,13 @@ def validate(args):
             or args.isolated_validation or args.execute_plan or args.probe_plan
             or args.publish_output or args.reuse_completed_from
             or args.cube_profile or args.e2b_profile or args.experiment_config):
-        raise ValueError('--cpu-parallel requires --group cpu with fixed NUMA1/2 placement; selection, placement, profile and internal overrides are not allowed')
+        raise ValueError('--cpu-parallel requires --group cpu with a fixed CPU layout; selection, placement, profile and internal overrides are not allowed')
 
 
 def lane_arguments(args, node, output, experiments):
     command = ['--config', str(args.config.resolve()), '--numa-node', str(node),
-               '--cpus', PLACEMENT[node], '--baseline-inputs', args.baseline_inputs]
+               '--cpus', placement(args)[node], '--cpu-layout', args.cpu_layout,
+               '--baseline-inputs', args.baseline_inputs]
     for name in experiments:
         command += ['--experiment', name]
     for key in ('limit', 'max_events'):
@@ -77,7 +84,7 @@ def stop_owned(processes, grace=600):
     return forced
 
 
-def launch_lanes(commands, control, lease_fd, changed, *, poll_interval=0.5):
+def launch_lanes(commands, control, lease_fd, changed, *, lane_placement=PLACEMENT, poll_interval=0.5):
     """Wait for both owned processes; cancel the peer on failure or interruption."""
     processes, handles, rows = {}, [], {}
     try:
@@ -89,7 +96,7 @@ def launch_lanes(commands, control, lease_fd, changed, *, poll_interval=0.5):
             process = subprocess.Popen(command, cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True, pass_fds=(lease_fd,))
             processes[node] = process
-            rows[node] = dict(node=node, cpus=PLACEMENT[node], pid=process.pid,
+            rows[node] = dict(node=node, cpus=lane_placement[node], pid=process.pid,
                               status='running', log=str(directory / 'stdout.log'), command=command)
         changed(rows)
         while True:
@@ -127,6 +134,39 @@ def launch_lanes(commands, control, lease_fd, changed, *, poll_interval=0.5):
             handle.close()
 
 
+def concurrency_policy(args, experiments):
+    return dict(mode='cpu-shared-queue', cpu_layout=args.cpu_layout,
+                lanes={str(n): {'node': n, 'cpus': cpus, 'experiments': list(experiments)}
+                       for n, cpus in placement(args).items()}, trace_workers_per_lane=1)
+
+
+def validate_resume_policy(previous, policy, experiments):
+    if previous == policy:
+        return False
+    legacy = copy.deepcopy(previous)
+    # Earlier NUMA1/2 shared queues did not record the layout name.
+    if policy['cpu_layout'] == 'numa12' and legacy.get('mode') == 'cpu-shared-queue':
+        legacy.setdefault('cpu_layout', 'numa12')
+        if legacy == policy:
+            return False
+    old_lanes = legacy.get('lanes', {})
+    if (policy['cpu_layout'] != 'numa12' or legacy.get('mode') != 'cpu-two-lane'
+            or set(old_lanes) != {str(n) for n in PLACEMENT}
+            or any(old_lanes[str(n)].get('node') != n or old_lanes[str(n)].get('cpus') != cpus
+                   or old_lanes[str(n)].get('experiments') != partition(experiments)[n]
+                   for n, cpus in PLACEMENT.items())):
+        raise ValueError('Resume requires unchanged CPU layout and lane binding')
+    return True
+
+
+def lane_commands(args, output, assignments, lease_fd):
+    return {node: ['numactl', '--all', '--physcpubind=' + placement(args)[node], '--membind=' + str(node),
+                   sys.executable, '-I', str(Path(__file__).resolve()),
+                   '--worker-node', str(node), '--cpu-layout', args.cpu_layout,
+                   '--lease-fd', str(lease_fd), '--', *lane_arguments(args, node, output, exps)]
+            for node, exps in assignments.items()}
+
+
 def run(args, parser, config, lease_fd, review):
     validate(args)
     if review.validation_job_limit(config) is None:
@@ -137,18 +177,13 @@ def run(args, parser, config, lease_fd, review):
         raise ValueError('Two-lane results must use a dedicated ae/results/selected/<run> directory')
     inherited_lease(lease_fd, REPO / 'ae/work/.results.lock')
     with review.output_tree_lock(REPO / 'ae/work', root, output):
+        review.assert_backend_recovery(background=args.cpu_layout == 'numa03')
         runner = review.Review(args, config, output)
-        assignments = {node: list(review.CPU_EXPERIMENTS) for node in PLACEMENT}
-        policy = dict(mode='cpu-shared-queue', lanes={str(n): {'node': n, 'cpus': PLACEMENT[n], 'experiments': exps}
-                                                for n, exps in assignments.items()}, trace_workers_per_lane=1)
-        if args.resume and runner.previous_record.get('concurrency_policy') != policy:
-            legacy = runner.previous_record.get('concurrency_policy', {})
-            old_lanes = legacy.get('lanes', {})
-            if (legacy.get('mode') != 'cpu-two-lane' or set(old_lanes) != {str(n) for n in PLACEMENT}
-                    or any(old_lanes[str(n)].get('node') != n or old_lanes[str(n)].get('cpus') != cpus
-                           or old_lanes[str(n)].get('experiments') != partition(review.CPU_EXPERIMENTS)[n]
-                           for n, cpus in PLACEMENT.items())):
-                raise ValueError('Resume requires unchanged NUMA1/2 binding')
+        lane_placement = placement(args)
+        assignments = {node: list(review.CPU_EXPERIMENTS) for node in lane_placement}
+        policy = concurrency_policy(args, review.CPU_EXPERIMENTS)
+        legacy = runner.previous_record.get('concurrency_policy', {})
+        if args.resume and validate_resume_policy(legacy, policy, review.CPU_EXPERIMENTS):
             runner.record['queue_migration'] = dict(previous_policy=legacy, source_review=runner.record['resumed_review'])
         runner.record['concurrency_policy'] = policy
         output.mkdir(parents=True, exist_ok=bool(args.resume))
@@ -159,24 +194,23 @@ def run(args, parser, config, lease_fd, review):
                 if (output / name).is_file():
                     (history / name).write_bytes((output / name).read_bytes())
         from repro.cpu_work_queue import WorkQueue, recover_groups
-        groups = recover_groups(output, review.CPU_EXPERIMENTS, PLACEMENT, args.config,
+        groups = recover_groups(output, review.CPU_EXPERIMENTS, lane_placement, args.config,
                                 review.verify_reused_images) if args.resume else None
-        WorkQueue.initialize(output / 'cpu-work-queue.json', review.CPU_EXPERIMENTS, PLACEMENT, groups=groups)
+        WorkQueue.initialize(output / 'cpu-work-queue.json', review.CPU_EXPERIMENTS, lane_placement, groups=groups)
         runner.record['cpu_work_queue'] = str(output / 'cpu-work-queue.json')
         runner.record['cpu_lanes'] = {}
         runner.save()
-        print('Two CPU lanes: NUMA1 CPU28–31; NUMA2 CPU48–51. Output: ' + str(output), flush=True)
-        commands = {node: ['numactl', '--all', '--physcpubind=' + PLACEMENT[node], '--membind=' + str(node),
-                           sys.executable, '-I', str(Path(__file__).resolve()),
-                           '--worker-node', str(node), '--lease-fd', str(lease_fd), '--',
-                           *lane_arguments(args, node, output, exps)] for node, exps in assignments.items()}
+        print('Two CPU lanes: ' + '; '.join(f'NUMA{node} CPU{cpus}' for node, cpus in lane_placement.items())
+              + '. Output: ' + str(output), flush=True)
+        commands = lane_commands(args, output, assignments, lease_fd)
         def changed(rows):
             runner.record['cpu_lanes'] = copy.deepcopy(rows)
             runner.save()
         failure = None
         rows = {}
         try:
-            rows = launch_lanes(commands, output / 'control' / runner.attempt, lease_fd, changed)
+            rows = launch_lanes(commands, output / 'control' / runner.attempt, lease_fd, changed,
+                                lane_placement=lane_placement)
         except BaseException as error:
             failure = error
             runner.record['error'] = f'{type(error).__name__}: {error}'
@@ -211,10 +245,27 @@ def run(args, parser, config, lease_fd, review):
         return 1 if failed else 0
 
 
+def validate_worker_binding(args, node, cpu_layout, *, affinity=None, memory_policy=None):
+    lane_placement = CPU_LAYOUTS[cpu_layout]
+    if (args.cpu_layout != cpu_layout or node not in lane_placement
+            or args.numa_node != node or args.cpus != lane_placement[node]):
+        raise ValueError('Worker selection differs from fixed CPU layout')
+    actual = sorted(os.sched_getaffinity(0) if affinity is None else affinity)
+    low, high = map(int, lane_placement[node].split('-'))
+    if actual != list(range(low, high + 1)):
+        raise ValueError('Worker CPU affinity differs from fixed lane')
+    if memory_policy is None:
+        memory_policy = subprocess.check_output(['numactl', '--show'], text=True, timeout=15)
+    fields = dict(line.split(':', 1) for line in memory_policy.splitlines() if ':' in line)
+    if fields.get('policy', '').strip() != 'bind' or fields.get('membind', '').strip().split() != [str(node)]:
+        raise ValueError('Worker memory policy differs from fixed lane')
+
+
 def worker(argv=None):
     from ae.scripts import run_review as review
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--worker-node', type=int, choices=PLACEMENT, required=True)
+    parser.add_argument('--worker-node', type=int, choices=sorted({n for p in CPU_LAYOUTS.values() for n in p}), required=True)
+    parser.add_argument('--cpu-layout', choices=CPU_LAYOUTS, default='numa12')
     parser.add_argument('--lease-fd', type=int, required=True)
     options, rest = parser.parse_known_args(argv)
     if rest[:1] == ['--']:
@@ -225,7 +276,7 @@ def worker(argv=None):
     expected = list(review.CPU_EXPERIMENTS)
     if (args.experiment != expected or args.group or args.cpu_parallel or args.quick_check
             or args.all or args.no_pin or args.analyze_existing or args.available
-            or args.numa_node != options.worker_node or args.cpus != PLACEMENT[options.worker_node]):
+            or args.numa_node != options.worker_node or args.cpu_layout != options.cpu_layout):
         raise ValueError('Invalid CPU lane selection or placement')
     args.cpu_parallel_lane = True
     config = review.load_config(args.config.resolve())
@@ -235,10 +286,7 @@ def worker(argv=None):
     root = REPO / 'ae/results/selected'
     if not output.is_relative_to(root) or output.name != 'numa' + str(options.worker_node) or output.parent.name != 'lanes':
         raise ValueError('Invalid CPU lane output')
-    actual = sorted(os.sched_getaffinity(0))
-    expected_cpus = [int(x) for part in args.cpus.split(',') for x in (range(int(part.split('-')[0]), int(part.split('-')[1])+1) if '-' in part else [part])]
-    if actual != expected_cpus:
-        raise ValueError('Worker CPU affinity differs from fixed lane')
+    validate_worker_binding(args, options.worker_node, options.cpu_layout)
     from repro.cpu_work_queue import WorkQueue
     args.cpu_work_queue = WorkQueue(output.parent.parent / 'cpu-work-queue.json', options.worker_node)
     # Parent owns the exclusive result/output leases through all worker cleanup.

@@ -7,6 +7,7 @@ from contextlib import ExitStack
 import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+import time
 import hashlib
 import shutil
 from datetime import datetime, timezone
@@ -89,7 +90,9 @@ def parser():
     selection.add_argument('--smoke', dest='quick_check', action='store_true', help=argparse.SUPPRESS)
     p.add_argument('--experiment', action='append', choices=EXPERIMENTS, help='Select an experiment; repeatable')
     p.add_argument('--group', action='append', choices=GROUPS, help='Select a paper/backend group; repeatable')
-    p.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes on NUMA1 and NUMA2')
+    p.add_argument('--cpu-parallel', action='store_true', help='Two bounded CPU lanes using the fixed CPU layout')
+    p.add_argument('--cpu-layout', choices=('numa12', 'numa03'), default='numa12',
+                   help='CPU parallel layout: numa12 for reviewers (default); numa03 for the background CPU run')
     p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
     p.add_argument('--e2b-profile', choices=('paper-nested',), action=GPUCases, help='E2B-only documented nested reconstruction; original eight complete inputs')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
@@ -1239,10 +1242,26 @@ class Review:
             self.cube_placement = {'numa_node': node, 'cpus': cpus, 'pin': True}
             if validate_only:
                 return
+            service_out = self.output / 'environment' / self.attempt / selected[0]
+            service_options = {}
+            background_placement = getattr(self.args, 'cpu_layout', 'numa12') == 'numa03'
+            if background_placement:
+                # This run owns the exclusive results/backend lease. Keep the
+                # shared control plane off reviewer NUMA1/2 throughout the RAM
+                # service, and restore it only after that service is clean.
+                from ae.scripts.cube_control_context import placement
+                control_out = service_out / 'control-plane'
+                guard = control_out / 'RECOVERY_REQUIRED.json'
+                contexts.enter_context(placement(node, cpus, control_out, guard))
+                service_options['recovery_guard'] = guard
             from ae.scripts.cube_memory_context import memory_service
             self.cube_memory_manifest = contexts.enter_context(memory_service(
-                self.output / 'environment' / self.attempt / selected[0] / 'cube-memory',
-                node=node, cpus=cpus, size_gib=sizes.pop()))
+                service_out / 'cube-memory',
+                node=node, cpus=cpus, size_gib=sizes.pop(), **service_options))
+            if background_placement:
+                from ae.scripts.cube_control_context import proof
+                proof(node, cpus, control_out / 'placement-active.json')
+                self.record['cube_control_plane_placement'] = file_record(control_out / 'placement-active.json')
             self.record['cube_memory_service'] = file_record(self.cube_memory_manifest)
         from runners.cube_memory import verify
         for config in configs:
@@ -1385,6 +1404,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     try:
         validate_gpu_selection(args)
+        if args.cpu_layout != 'numa12' and not args.cpu_parallel:
+            raise ValueError('--cpu-layout requires --cpu-parallel')
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import validate
             validate(args)
@@ -1427,7 +1448,7 @@ def main(argv=None):
                 return run_selected(args, p)
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import run
-            with run_lock(REPO / 'ae/work/.results.lock') as lease_fd:
+            with run_lock(REPO / 'ae/work/.results.lock', wait=True) as lease_fd:
                 return run(args, p, config, lease_fd, sys.modules[__name__])
         parallel = config.get('review', {}).get('parallel_quick_check', False)
         if type(parallel) is not bool:
@@ -1484,7 +1505,63 @@ def run_selected(args, p, *, gate=None):
         return run_locked_selection(args, p, config, output, gate=gate)
 
 
+def assert_backend_recovery(*, background=False):
+    # Call only after obtaining the inherited/exclusive results lease. A live
+    # background transaction may clear its guard while the reviewer waits.
+    guard = REPO / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json'
+    transaction = REPO / 'ae/work/CPU_BACKGROUND_TRANSACTION.json'
+    deadline = time.monotonic() + 730
+    incomplete_deadline = None
+    while transaction.exists():
+        if guard.exists():
+            raise RuntimeError('Shared backend recovery is required before evaluation: ' + str(guard))
+        try:
+            with os.fdopen(os.open(transaction, os.O_RDONLY | os.O_NOFOLLOW)) as stream:
+                info = os.fstat(stream.fileno())
+                if info.st_uid != 0 or info.st_mode & 0o022 or info.st_nlink != 1 or not stat.S_ISREG(info.st_mode):
+                    raise RuntimeError('Untrusted background transaction: ' + str(transaction))
+                record = json.load(stream)
+        except FileNotFoundError:
+            continue  # The exact owner just committed its cleanup receipt.
+        except json.JSONDecodeError as error:
+            # O_EXCL publishes an empty trusted file just before its short
+            # write. Bound that creation window; persistent damage is failure.
+            if incomplete_deadline is None:
+                incomplete_deadline = time.monotonic() + 2
+            if time.monotonic() >= incomplete_deadline:
+                raise RuntimeError('Incomplete background transaction; recovery required: ' + str(transaction)) from error
+            time.sleep(0.05)
+            continue
+        unit = record.get('unit', '')
+        membership = Path('/proc/self/cgroup').read_text().splitlines()
+        owned = [line[3:].split('/') for line in membership if line.startswith('0::')]
+        pid = record.get('pid')
+        if type(pid) is not int or pid <= 0:
+            raise RuntimeError('Invalid background transaction; recovery required: ' + str(transaction))
+        try:
+            ticks = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+        except (OSError, IndexError):
+            ticks = None
+        if ticks != record.get('start_ticks') or time.monotonic() >= deadline:
+            raise RuntimeError('Unfinished background transaction; recovery required: ' + str(transaction))
+        if (background and re.fullmatch(r'deltabox-ae-cpu-[0-9a-f]{32}\.service', unit)
+                and any(parts[:3] == ['', 'system.slice', unit] for parts in owned)):
+            # Both fixed lanes belong to this transaction. Their service queue
+            # may already have created its active E2B guard while the other
+            # lane enters; that live guard is owned by this same EX holder.
+            return
+        # EX may be released by an inner runner slightly before its outer
+        # service owner verifies shared recovery and emptiness. Wait for that
+        # exact owner to commit the receipt before starting reviewer work.
+        time.sleep(0.2)
+    if guard.exists():
+        raise RuntimeError('Shared backend recovery is required before evaluation: ' + str(guard))
+    from ae.scripts.e2b_service_context import assert_backend_ready
+    assert_backend_ready()
+
+
 def run_locked_selection(args, p, config, output, *, gate=None):
+    assert_backend_recovery(background=getattr(args, 'cpu_layout', 'numa12') == 'numa03')
     runner = Review(args, config, output)
     latest = output == (REPO / 'ae/results').resolve() and not args.resume
     if latest and not complete_selection(args):

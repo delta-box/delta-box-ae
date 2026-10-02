@@ -20,7 +20,11 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--backend',choices=['cube','e2b'],required=True);p.add_argument('--config',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True);p.add_argument('--forks');p.add_argument('--dry-run',action='store_true')
-    args=p.parse_args();release=from_environment();config=load_config(args.config);settings=config[args.backend];out=args.out.resolve();out.mkdir(parents=True,exist_ok=False)
+    args=p.parse_args()
+    if args.backend == 'e2b':
+        from ae.scripts.e2b_service_context import assert_backend_ready
+        assert_backend_ready()
+    release=from_environment();config=load_config(args.config);settings=config[args.backend];out=args.out.resolve();out.mkdir(parents=True,exist_ok=False)
     if args.forks is None:args.forks='1,16' if args.backend == 'cube' else '1,4,16,64'
     forks=list(map(int,args.forks.split(',')))
     if not forks or min(forks)<=0:raise ValueError('fork counts must be positive')
@@ -54,6 +58,11 @@ def main():
                 raise ValueError('E2B_API_KEY is missing')
         with ExitStack() as contexts:
             managed = None
+            if args.backend == 'e2b' and config.get('measurement', {}).get('numa_node') in (0, 3):
+                from ae.scripts.e2b_service_context import service_placement
+                record['e2b_service_placement'] = contexts.enter_context(service_placement(
+                    config, out/'environment/e2b-placement', fanout_path=out/'fanout.json'))
+                write_json(path, record)
             if args.backend == 'cube':
                 from ae.scripts.cube_control_context import metadata_enabled, managed_memory_service, idle, save
                 from ae.runners.cube_memory import verify
@@ -88,7 +97,8 @@ def main():
             for row in rows:
                 if not row.get('success') or row.get('success_count')!=row['forks']:raise ValueError('Incomplete inherited memory verification')
                 number(row['ready_e2e_ms'],'ready_e2e_ms')
-        record['artifacts']=artifact_records(out,[out/'fanout.json'] + ([out/'cube-audit.json', *sorted((out/'environment').rglob('*.json'))] if args.backend == 'cube' else []))
+        environment_files = sorted((out/'environment').rglob('*.json')) if args.backend == 'cube' or record.get('e2b_service_placement') else []
+        record['artifacts']=artifact_records(out,[out/'fanout.json', *environment_files] + ([out/'cube-audit.json'] if args.backend == 'cube' else []))
         record['status']='ok'
     except BaseException as error:record.update(status='failed',error=str(error));raise
     finally:write_json(path,record)

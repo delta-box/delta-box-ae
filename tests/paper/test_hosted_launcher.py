@@ -13,12 +13,15 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('hosted_launcher', ROOT / 'ae/scripts/hosted_launcher.py')
 hosted = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hosted)
+priority_spec = importlib.util.spec_from_file_location('hosted_priority_tests', ROOT / 'ae/scripts/hosted_cpu_priority.py')
+priority_module = importlib.util.module_from_spec(priority_spec)
+priority_spec.loader.exec_module(priority_module)
 REVIEWER = SimpleNamespace(pw_name='atc-ae', pw_uid=7001, pw_gid=7001)
 ROOT_USER = SimpleNamespace(pw_name='root', pw_uid=0, pw_gid=0)
 MAINTAINER = SimpleNamespace(pw_name='dyp', pw_uid=1010, pw_gid=1011)
@@ -55,6 +58,11 @@ class HostedTests(unittest.TestCase):
         self.owners = {}
         self.users = [ROOT_USER, MAINTAINER, REVIEWER, OTHER_USER]
         self.groups = {0: [], MAINTAINER.pw_gid: [], REVIEWER.pw_gid: [], OTHER_USER.pw_gid: []}
+        # Real flock on a private fixture path; never use the host /run lock.
+        self.priority_lock = self.root / 'reviewer-priority.lock'
+        self.priority = SimpleNamespace(
+            acquire_reviewer=Mock(side_effect=lambda: priority_module.acquire_reviewer(self.priority_lock)),
+            reviewer_waiting=Mock(side_effect=lambda: priority_module.reviewer_waiting(self.priority_lock)))
 
     def test_default_results_use_stable_root_and_separate_checks(self):
         with self.owned_fixture():
@@ -63,6 +71,215 @@ class HostedTests(unittest.TestCase):
         self.assertEqual(full, Path('.'))
         self.assertEqual(quick.parent, Path('checks'))
         self.assertTrue(quick.name.startswith('quick-check-'))
+
+    def test_cpu_execution_uses_supervised_service_without_execing_caller_code(self):
+        def inspect_supervision(*args, **kwargs):
+            self.assertTrue(self.priority.reviewer_waiting())
+            with self.assertRaisesRegex(ValueError, 'Another hosted AE run'):
+                hosted.acquire_lock(self.policy['lock_file'])
+            return 7
+        with self.launcher() as (execute, _, stderr), \
+             patch.object(hosted, 'run_cpu_service', side_effect=inspect_supervision) as supervise:
+            result = hosted.main(['--checkout', str(self.runtime), '--group', 'cpu',
+                                  '--cpu-parallel', '--output', 'selected/test'])
+            self.assertEqual(result, 7, stderr.getvalue())
+            execute.assert_not_called()
+            self.assertEqual(supervise.call_args.args[1].pw_uid, REVIEWER.pw_uid)
+            self.assertFalse(self.priority.reviewer_waiting())
+
+    def test_service_main_repeats_admission_owns_lease_and_adds_exact_git_allowance(self):
+        unit = 'deltabox-ae-cpu-' + 'a' * 32 + '.service'
+        observed = []
+        def inspect_exec(binary, command, environment):
+            fd = inherit.call_args.args[0]
+            observed.append(os.get_inheritable(fd))
+            with self.assertRaisesRegex(ValueError, 'Another hosted AE run'):
+                hosted.acquire_lock(self.policy['lock_file'])
+            self.assertEqual(environment['GIT_CONFIG_COUNT'], '1')
+            self.assertEqual(environment['GIT_CONFIG_KEY_0'], 'safe.directory')
+            self.assertEqual(environment['GIT_CONFIG_VALUE_0'], str(self.runtime))
+            self.assertEqual(environment['E2B_API_KEY'], 'fixed-secret')
+            self.assertNotIn('fixed-secret', ' '.join(command))
+            self.assertTrue(self.priority.reviewer_waiting())
+        with self.launcher({'GIT_CONFIG_COUNT': '9', 'PYTHONPATH': '/attacker'}) as (execute, _, stderr), \
+             patch.object(hosted, 'cpu_service_identity', return_value=dict(unit=unit, cgroup='/owned', memory_swap_max='0')), \
+             patch.object(hosted.os, 'set_inheritable', wraps=os.set_inheritable) as inherit:
+            execute.side_effect = inspect_exec
+            result = hosted.main(['--checkout', str(self.runtime), '--group', 'cpu',
+                                  '--cpu-parallel', '--output', 'selected/service'],
+                                 service_context=(REVIEWER.pw_uid, unit))
+            self.assertEqual(result, 0, stderr.getvalue())
+            self.assertFalse(self.priority.reviewer_waiting())
+        self.assertEqual(observed, [True])
+        audit = json.loads((self.output.parent / '.launcher-audit.jsonl').read_text())
+        self.assertEqual(audit['event'], 'cpu-service-running')
+        self.assertEqual(audit['memory_swap_max'], '0')
+
+    def test_cpu_git_allowance_adds_only_registered_trusted_infra(self):
+        infra = self.root / 'infra'
+        infra.mkdir()
+        self.config.write_text(json.dumps({'e2b': {'infra': str(infra)}}))
+        with self.owned_fixture():
+            environment = hosted.cpu_git_environment(self.policy, self.runtime, None)
+            self.assertEqual(environment, {'GIT_CONFIG_COUNT': '2',
+                'GIT_CONFIG_KEY_0': 'safe.directory', 'GIT_CONFIG_VALUE_0': str(self.runtime),
+                'GIT_CONFIG_KEY_1': 'safe.directory', 'GIT_CONFIG_VALUE_1': str(infra)})
+            self.untrusted.add(infra)
+            with self.assertRaisesRegex(ValueError, 'owned by root'):
+                hosted.cpu_git_environment(self.policy, self.runtime, None)
+
+    def test_every_nonlist_reviewer_mode_holds_priority_until_execution_finishes(self):
+        for flags in ([], ['--test'], ['--experiment', 'correctness'],
+                      ['--group', 'gpu'], ['--group', 'cpu', '--cpu-parallel']):
+            with self.subTest(flags=flags), self.launcher() as (execute, _, stderr), \
+                 patch.object(hosted, 'run_cpu_service', return_value=0) as service:
+                def inspect(*args, **kwargs):
+                    self.assertTrue(self.priority.reviewer_waiting())
+                    return 0
+                execute.side_effect = inspect
+                service.side_effect = inspect
+                self.priority.acquire_reviewer.reset_mock()
+                self.assertEqual(hosted.main(['--checkout', str(self.runtime), *flags]), 0, stderr.getvalue())
+                self.priority.acquire_reviewer.assert_called_once_with()
+                self.assertFalse(self.priority.reviewer_waiting())
+
+    def test_list_does_not_import_or_acquire_priority_and_failed_exec_releases_it(self):
+        with self.launcher() as (execute, _, stderr), \
+             patch.object(hosted, 'load_cpu_priority') as load:
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0, stderr.getvalue())
+            load.assert_not_called()
+        with self.launcher() as (execute, _, stderr):
+            execute.side_effect = OSError('fixture exec rejected')
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 2)
+            self.assertFalse(self.priority.reviewer_waiting())
+
+    def test_background03_outer_and_helper_never_take_reviewer_priority(self):
+        flags = ['--checkout', str(self.runtime), '--group', 'cpu', '--cpu-parallel',
+                 '--cpu-layout', 'numa03', '--output', 'selected/background']
+        unit = 'deltabox-ae-cpu-' + 'a' * 32 + '.service'
+        def check_outer(*args, **kwargs):
+            self.assertFalse(self.priority.reviewer_waiting())
+            with self.assertRaisesRegex(ValueError, 'Another hosted AE run'):
+                hosted.acquire_lock(self.policy['lock_file'])
+            return 7
+        with self.launcher() as (execute, _, stderr), \
+             patch.object(hosted, 'run_background_cpu', side_effect=check_outer) as background:
+            self.assertEqual(hosted.main(flags), 7, stderr.getvalue())
+            execute.assert_not_called()
+            background.assert_called_once()
+            self.priority.acquire_reviewer.assert_not_called()
+        with self.launcher() as (execute, _, stderr), \
+             patch.object(hosted, 'cpu_service_identity', return_value=dict(unit=unit, cgroup='/owned', memory_swap_max='0')), \
+             patch.object(hosted, 'background_cpu_binding', return_value={'cpu_layout': 'numa03'}) as binding:
+            self.assertEqual(hosted.main(flags, service_context=(REVIEWER.pw_uid, unit)), 0, stderr.getvalue())
+            binding.assert_called_once_with('/owned')
+            self.priority.acquire_reviewer.assert_not_called()
+            command = execute.call_args.args[1]
+            self.assertEqual(command[command.index('--cpu-layout') + 1], 'numa03')
+
+    def test_service_helper_lease_is_independent_of_outer_reviewer_lease(self):
+        unit = 'deltabox-ae-cpu-' + 'a' * 32 + '.service'
+        with self.launcher() as (execute, _, stderr), \
+             patch.object(hosted, 'cpu_service_identity', return_value=dict(unit=unit, cgroup='/owned', memory_swap_max='0')):
+            outer = priority_module.acquire_reviewer(self.priority_lock)
+            try:
+                self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--group', 'cpu',
+                    '--cpu-parallel', '--output', 'selected/owned-service'],
+                    service_context=(REVIEWER.pw_uid, unit)), 0, stderr.getvalue())
+                self.priority.acquire_reviewer.assert_called_once_with()
+                self.assertTrue(self.priority.reviewer_waiting())
+            finally:
+                os.close(outer)
+            self.assertFalse(self.priority.reviewer_waiting())
+
+    def test_background_waits_then_resumes_only_after_cooperative_yield(self):
+        args = hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'cpu',
+            '--cpu-parallel', '--cpu-layout', 'numa03', '--output', 'selected/background'])
+        output = self.output / 'selected/background'
+        commands = []
+        priority = SimpleNamespace(reviewer_waiting=Mock(side_effect=[True, False, False]))
+        def run_service(policy, caller, command, environment, **kwargs):
+            self.assertIs(kwargs['yield_requested'], priority.reviewer_waiting)
+            commands.append(list(command))
+            if len(commands) == 1:
+                output.mkdir(parents=True)
+                (output / 'review.json').write_text('{}')
+                (output / 'SUMMARY.md').write_text('interrupted coverage')
+                return hosted.CPU_REVIEWER_YIELD
+            return 0
+        with self.owned_fixture(), patch.object(hosted.time, 'sleep') as sleep, \
+             patch.object(hosted, 'run_cpu_service', side_effect=run_service), \
+             patch.object(hosted, 'result_path', wraps=hosted.result_path) as validate:
+            self.assertEqual(hosted.run_background_cpu(self.policy, REVIEWER, args, output, {}, priority), 0)
+            sleep.assert_called_once_with(.5)
+            validate.assert_called_once_with(self.policy, output, REVIEWER, resume=True, trust=None)
+        self.assertIn('--output', commands[0])
+        self.assertIn('--resume', commands[1])
+        self.assertNotIn('--output', commands[1])
+        for command in commands:
+            self.assertEqual(command[-1], str(output))
+            self.assertEqual(command[command.index('--cpu-layout') + 1], 'numa03')
+
+    def test_yield_before_admission_retries_new_output_without_inventing_resume(self):
+        args = hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'cpu',
+            '--cpu-parallel', '--cpu-layout', 'numa03', '--output', 'selected/background'])
+        output = self.output / 'selected/background'
+        priority = SimpleNamespace(reviewer_waiting=Mock(return_value=False))
+        with patch.object(hosted, 'run_cpu_service', side_effect=[hosted.CPU_REVIEWER_YIELD, 0]) as run, \
+             patch.object(hosted, 'result_path') as validate:
+            self.assertEqual(hosted.run_background_cpu(self.policy, REVIEWER, args, output, {}, priority), 0)
+            validate.assert_not_called()
+        for call in run.call_args_list:
+            self.assertIn('--output', call.args[2])
+            self.assertNotIn('--resume', call.args[2])
+
+    def test_background_revalidates_immutable_resume_controls_before_second_unit(self):
+        args = hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'cpu',
+            '--cpu-parallel', '--cpu-layout', 'numa03', '--output', 'selected/background'])
+        output = self.output / 'selected/background'
+        priority = SimpleNamespace(reviewer_waiting=Mock(return_value=False))
+        def interrupt_after_output(*args, **kwargs):
+            output.mkdir(parents=True)
+            (output / 'review.json').write_text('{}')
+            (output / 'SUMMARY.md').write_text('interrupted')
+            self.untrusted.add(output / 'review.json')
+            return hosted.CPU_REVIEWER_YIELD
+        with self.owned_fixture(), patch.object(hosted, 'run_cpu_service', side_effect=interrupt_after_output) as run:
+            with self.assertRaisesRegex(ValueError, 'owned by root'):
+                hosted.run_background_cpu(self.policy, REVIEWER, args, output, {}, priority)
+            run.assert_called_once()
+
+    def test_background_never_retries_failure_interruption_or_cleanup_exception(self):
+        flags = ['--checkout', str(self.runtime), '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03']
+        priority = SimpleNamespace(reviewer_waiting=Mock(return_value=False))
+        for status in (1, 7, 130, 143):
+            with self.subTest(status=status), patch.object(hosted, 'run_cpu_service', return_value=status) as run:
+                self.assertEqual(hosted.run_background_cpu(self.policy, REVIEWER,
+                    hosted.parse_arguments(flags), self.output / 'background', {}, priority), status)
+                run.assert_called_once()
+        with patch.object(hosted, 'run_cpu_service', side_effect=RuntimeError('owned cleanup failed')) as run:
+            with self.assertRaisesRegex(RuntimeError, 'owned cleanup failed'):
+                hosted.run_background_cpu(self.policy, REVIEWER, hosted.parse_arguments(flags),
+                    self.output / 'background', {}, priority)
+            run.assert_called_once()
+
+    def test_background_cancellation_while_waiting_never_starts_service(self):
+        args = hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03'])
+        priority = SimpleNamespace(reviewer_waiting=Mock(return_value=True))
+        with patch.object(hosted.time, 'sleep', side_effect=KeyboardInterrupt), \
+             patch.object(hosted, 'run_cpu_service') as run:
+            with self.assertRaises(KeyboardInterrupt):
+                hosted.run_background_cpu(self.policy, REVIEWER, args, self.output / 'background', {}, priority)
+            run.assert_not_called()
+
+    def test_cpu_layout_validation_refuses_unbounded_or_ambiguous_override(self):
+        accepted = hosted.parse_arguments(['--checkout', str(self.runtime), '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03'])
+        self.assertEqual(accepted.cpu_layout, 'numa03')
+        for flags in (['--cpu-layout', 'numa03'], ['--group', 'cpu', '--cpu-layout', 'numa03'],
+                      ['--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03', '--cpus', '0-3', '--numa-node', '0'],
+                      ['--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03', '--cpu-layout', 'numa12']):
+            with self.subTest(flags=flags), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                hosted.parse_arguments(['--checkout', str(self.runtime), *flags])
 
     def test_default_result_does_not_read_source_identity(self):
         (self.runtime / 'release/candidate-lock.json').unlink()
@@ -142,6 +359,7 @@ class HostedTests(unittest.TestCase):
              patch.object(hosted.grp, 'getgrgid', side_effect=lambda gid: SimpleNamespace(gr_gid=gid, gr_mem=self.groups[gid])),\
              patch.dict(hosted.os.environ, env, clear=True),\
              patch.object(hosted.os, 'chdir'), patch.object(hosted.os, 'umask'),\
+             patch.object(hosted, 'load_cpu_priority', return_value=self.priority),\
              patch.object(hosted.os, 'execve') as execute,\
              contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()) as stderr:
             yield execute, stdout, stderr

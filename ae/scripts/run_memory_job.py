@@ -94,8 +94,10 @@ def run(args):
     if args.experiment == 'table-02-cube':
         raise ValueError('Cube service memory/NUMA placement needs its own verified configuration')
     env = dict(os.environ)
+    identity = json.loads(env.get('AE_MEASUREMENT_IDENTITY', '{}'))
     meta = dict(storage_mode='tmpfs-noswap', node=args.node,
-                cpus=sorted(os.sched_getaffinity(0)), frequency_policy='maximum-pstate',
+                cpus=sorted(os.sched_getaffinity(0)),
+                frequency_policy=identity.get('frequency_policy') or 'maximum-pstate',
                 numa_policy=subprocess.check_output(['numactl', '--show'], text=True),
                 experiment=args.experiment, archive_after_measurement=True)
     code = 1
@@ -120,15 +122,19 @@ def run(args):
             if args.experiment == 'table-02-fc-diff':
                 job_size_gib(args.experiment, dict(config, memory_job_size_gib=args.size_gib))
                 needed = (8 + 3 * int(config.get('mem_mib', 8192)) / 1024 + 2) * GIB
+                # Guest RAM uses node capacity, not tmpfs file space. Keep the
+                # node budget unchanged and reserve room for thin root, base
+                # snapshot, one merged image, staging, and the normal headroom.
+                filesystem_needed = (8 + 2 * int(config.get('mem_mib', 8192)) / 1024 + 2) * GIB
                 meta['admission'] = check_capacity(suite, 'before-staging', int(needed),
-                    archive / '.memory-jobs' / (args.key + '-capacity.jsonl'), node=args.node)
+                    archive / '.memory-jobs' / (args.key + '-capacity.jsonl'), node=args.node,
+                    filesystem_required=int(filesystem_needed) + 2 * GIB)
             if meta['mount']['fstype'] != 'tmpfs' or 'noswap' not in meta['mount']['options'].split(','):
                 raise RuntimeError('Memory measurement requires verified noswap tmpfs')
             with ExitStack() as inputs:
                 meta['index'] = stage_index(config, command, suite, inputs)
                 if args.experiment == 'table-02-e2b':
                     meta['e2b'] = stage_e2b(config, suite, inputs)
-                identity = json.loads(env.get('AE_MEASUREMENT_IDENTITY', '{}'))
                 identity.update({k: meta[k] for k in ('storage_mode', 'node', 'cpus', 'frequency_policy')})
                 env['AE_MEASUREMENT_IDENTITY'] = json.dumps(identity)
                 env['AE_MEMORY_JOB'] = json.dumps(meta)

@@ -86,11 +86,11 @@
         "baseline_storage": "tmpfs"
       },
       "table-02-criu": {
-        "baseline_storage": "disk",
-        "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted-criu-nvme",
+        "baseline_storage": "tmpfs",
         "measurement": {
           "frequency_khz": 2101000
-        }
+        },
+        "memory_job_size_gib": 16
       },
       "table-02-replay": {
         "replay_workers": 16,
@@ -106,16 +106,19 @@
         }
       },
       "table-02-fc-diff": {
-        "baseline_storage": "disk",
-        "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted-fc-nvme",
-        "memory_job_size_gib": 64,
+        "baseline_storage": "tmpfs",
+        "memory_job_size_gib": 30,
         "measurement": {
           "frequency_khz": 2101000
         }
       },
       "table-02-e2b": {
-        "baseline_storage": "disk",
-        "recorded_search_order": true
+        "baseline_storage": "tmpfs",
+        "memory_job_size_gib": 24,
+        "recorded_search_order": true,
+        "e2b": {
+          "warm_action_worker": false
+        }
       },
       "table-03-slow": {
         "checkpoint_profile": "async-incremental-lazy",
@@ -128,7 +131,7 @@
       }
     },
     "declared_unavailable": [],
-    "results_backup_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/results-backups/public-ae",
+    "results_backup_root": "/home/atc-ae/delta-box-ae/ae/work/results-backups/public-ae",
     "parallel_quick_check": false,
     "validation_max_jobs": 10
   },

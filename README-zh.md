@@ -72,6 +72,14 @@ Cube 内存盘实验会临时关闭其受控服务进程树的透明大页，避
 
 此入口在NUMA1/CPU28–31与NUMA2/CPU48–51上使用共享实验队列：空闲节点立即领取下一组，Replay较慢时另一节点可继续执行独立baseline。每组内部输入保持串行，Cube/E2B涉及共享服务的实验互斥。配置、作业上限、真实测量身份和统一报告保留。同一次运行续跑会核验已完成产物，保留原节点与源码身份，未完成组仍留在原节点；支持从之前NUMA1/2静态分组切换，不导入其他运行的数据。保留Figure8(a)，排除GPU探测及Figure8(b)(c)。使用`--output`或`--resume`，不接受绑定覆盖。
 
+托管服务器上的后台 NUMA0/3 验证使用下面的独立入口。上面的审查者命令继续使用原 NUMA1/2 绑定。
+
+```bash
+bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
+```
+
+这个验证入口在 NUMA0/CPU0–3 和 NUMA3/CPU72–75 上运行全部 16 个 CPU 实验组，保留原有逐组作业上限，并独占结果和共享后端的运行租约。审查者请求优先：后台运行先清理自己拥有的实验和服务，审查者再获准运行；审查者结束后，后台在同一输出目录核验并续跑已完成的实验组。审查者可能需要等待清理完成。手动续跑时使用 `--resume` 和原 NUMA0/3 输出目录，续跑不能更换布局。
+
 如需从原始 baseline 输入池取样（Replay/CRIU 各 244 条，Firecracker Diff 238 条），保持同样的作业上限并运行：
 
 ```bash
@@ -79,6 +87,8 @@ bash ae/run_all.sh --baseline-inputs all
 ```
 
 `--baseline-inputs` 只选择输入池，默认值为 `44`；不会绕过 `review.validation_max_jobs=10` 上限。先用 `--limit 1` 做小样本，检查后再在上限内扩大。脚本不自动截断轨迹事件。
+
+各 backend 保留自身声明的输入池和作业顺序。默认 44 条输入池包含 34 条 Django 和 10 条 Astropy，前 10 个作业均为 Astropy。每份 plan 和 `suite.json` 记录实际选中的输入。Table 2 的事件平均值保留各 backend 自身的 cohort；具体范围见[覆盖与偏差总账](ae/report/README-zh.md)。
 
 运行结束后，打开 `result.md`（同时保存为 `SUMMARY.md`）查看 CPU 和 GPU 状态，再进入同一结果目录的 **`comparison/attempt-NNN/README-zh.md`（中文）**或同文件夹的 **`README.md`（英文）**。两页由一键脚本同时生成，顶部可以切换语言。具体路径记录在 `review.json` 的 `outputs.comparison`。样本运行成功时状态为 `ok`，失败步骤会保留日志并返回非零退出码。
 

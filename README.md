@@ -72,6 +72,13 @@ bash ae/run_all_no_gpu.sh
 This entry runs a shared experiment queue on NUMA1/CPU28–31 and NUMA2/CPU48–51. An idle node claims the next pending group, so a slow Replay group does not block independent baselines on the other node. Input jobs within a group remain serial; Cube/E2B service-changing groups never overlap. Configuration, job caps, fresh measurement identities and combined reporting are retained. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node. It can migrate the earlier NUMA1/2 static layout without importing another run. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume`; placement overrides are rejected.
 
 Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree to avoid page relocation during anonymous-page snapshot classification. Source and child memory checksums are verified; the original service policy is restored afterward.
+For hosted background validation on NUMA0/3, use the separate entry below. The reviewer command above keeps its NUMA1/2 placement.
+
+```bash
+bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
+```
+
+This validation entry visits all 16 CPU groups with the existing per-group job cap on NUMA0/CPU0–3 and NUMA3/CPU72–75. It holds an exclusive lease on the results and shared backends. Reviewer requests take priority: the background run cleans up its owned experiment and services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume.
 
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
@@ -80,6 +87,8 @@ bash ae/run_all.sh --baseline-inputs all
 ```
 
 `--baseline-inputs` selects the input pool, not the sample size. Its default is `44`; the supplied `review.validation_max_jobs=10` cap still applies. `--limit 1` starts a pilot and may be increased within the cap after checking its result. No implicit `--max-events` truncation is added.
+
+Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; the [coverage and deviation ledger](ae/report/README.md) records these scopes.
 
 When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful sampled run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
