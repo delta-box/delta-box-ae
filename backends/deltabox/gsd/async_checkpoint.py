@@ -189,26 +189,36 @@ class AsyncIncrementalCheckpoint:
             # Implementations of this contract validate the quiescent worker and
             # prepare a dump-private file view; unsupported resources fail here.
             try:
-                from .async_resources import validate_replay_resources, dump_child_contract
+                from .async_resources import validate_replay_resources, validate_replay_children, dump_child_contract
             except ImportError:
-                from async_resources import validate_replay_resources, dump_child_contract
+                from async_resources import validate_replay_resources, validate_replay_children, dump_child_contract
             if c.root_overlays is not None:
                 raise RuntimeError("async-incremental does not yet support multiple root overlays")
-            protected = [e["async_dump_template_pid"] for e in c.registry.values()
-                         if e.get("async_dump_template_pid") and e.get("dump_future") is not None
-                         and not e["dump_future"].done()]
-            resources = validate_replay_resources(c.agent_pid,
-                overlay_mount_point=c.overlay_mount_point, allowed_child_pids=protected)
-            # Filesystem ancestry follows the logical node, while CRIU waits
-            # for and compares against its effective physical memory parent.
-            logical_parent = c.registry[parent_id] if parent_id else None
-            layers, dirty, overlay_ms, overlay_preparation_ms = self._sink(checkpoint_id, logical_parent)
-            view = {"contract": dump_child_contract(resources), "lower_layers": layers, "workspace": None}
+            if c._is_pidns_init(c.agent_pid):
+                # Bootstrap would leave children with the old parent. Do not
+                # let that transfer hide unsupported application children.
+                validate_replay_children(c.agent_pid, allowed_child_pids=[
+                    e["async_dump_template_pid"] for e in c.registry.values()
+                    if e.get("async_dump_template_pid") and e.get("dump_future") is not None
+                    and not e["dump_future"].done()])
             warm, fork_ms, attempted = c._bootstrap_active_before_dump(checkpoint_id)
             if attempted and warm is None:
                 raise RuntimeError("failed to move active off PID namespace init")
             if c._is_pidns_init(c.agent_pid):
                 raise RuntimeError("asynchronous writers cannot be children of an active PID namespace init")
+            # Resource inspection must see an actually quiescent process,
+            # including completion logging. Keep application commands gated.
+            with c.template_pool.quiesce_for_checkpoint(c.agent_pid):
+                protected = [e["async_dump_template_pid"] for e in c.registry.values()
+                             if e.get("async_dump_template_pid") and e.get("dump_future") is not None
+                             and not e["dump_future"].done()]
+                resources = validate_replay_resources(c.agent_pid,
+                    overlay_mount_point=c.overlay_mount_point, allowed_child_pids=protected)
+                # Filesystem ancestry follows the logical node, while CRIU waits
+                # for and compares against its effective physical memory parent.
+                logical_parent = c.registry[parent_id] if parent_id else None
+                layers, dirty, overlay_ms, overlay_preparation_ms = self._sink(checkpoint_id, logical_parent)
+            view = {"contract": dump_child_contract(resources), "lower_layers": layers, "workspace": None}
             if warm is None:
                 before = time.perf_counter()
                 warm = c.template_pool.request_stash_template(

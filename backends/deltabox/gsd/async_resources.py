@@ -45,6 +45,29 @@ def _identity(proc):
     return _status_identity(proc)[1]
 
 
+def validate_replay_children(pid, *, allowed_child_pids=(), proc_root="/proc"):
+    """Retain the original child ownership guard before bootstrap changes PID."""
+    proc = Path(proc_root) / str(pid)
+    try:
+        children = set(map(int, (proc / "task" / str(pid) / "children").read_text().split()))
+        unsupported_children, exited_children = set(), set()
+        for child in children - set(allowed_child_pids):
+            try:
+                state, _ = _status_identity(Path(proc_root) / str(child))
+            except FileNotFoundError:
+                exited_children.add(child)
+                continue
+            if state in ("Z", "X"):
+                exited_children.add(child)
+            else:
+                unsupported_children.add(child)
+        if unsupported_children:
+            raise UnsupportedAsyncResources(f"Live/unowned worker children: {sorted(unsupported_children)}")
+        return exited_children
+    except (OSError, ValueError, KeyError) as error:
+        raise UnsupportedAsyncResources(f"Cannot verify async replay children: {error}") from error
+
+
 def validate_replay_resources(pid, *, overlay_mount_point, allowed_child_pids=(),
                               allowed_fifo_paths=None, allowed_stdio_paths=None,
                               proc_root="/proc"):
@@ -64,20 +87,8 @@ def validate_replay_resources(pid, *, overlay_mount_point, allowed_child_pids=()
         tasks = sorted(p.name for p in (proc / "task").iterdir())
         if tasks != [str(pid)]:
             raise UnsupportedAsyncResources(f"Worker must be single-threaded; tasks={tasks}")
-        children = set(map(int, (proc / "task" / str(pid) / "children").read_text().split()))
-        unsupported_children, exited_children = set(), set()
-        for child in children - set(allowed_child_pids):
-            try:
-                state, _ = _status_identity(Path(proc_root) / str(child))
-            except FileNotFoundError:
-                exited_children.add(child)
-                continue
-            if state in ("Z", "X"):
-                exited_children.add(child)
-            else:
-                unsupported_children.add(child)
-        if unsupported_children:
-            raise UnsupportedAsyncResources(f"Live/unowned worker children: {sorted(unsupported_children)}")
+        exited_children = validate_replay_children(
+            pid, allowed_child_pids=allowed_child_pids, proc_root=proc_root)
         cwd = os.readlink(proc / "cwd")
         if not cwd.startswith("/") or cwd.endswith(" (deleted)"):
             raise UnsupportedAsyncResources(f"Unsupported cwd: {cwd!r}")

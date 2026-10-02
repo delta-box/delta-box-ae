@@ -162,9 +162,39 @@ def sample_records(key, result, population):
                         ("backend", "mode", "checkpoint_profile", "run_purpose", "baseline_test_runtime",
                          "cohort", "instance", "group", "domain", "panel", "arm", "operation", "metric", "x",
                          "unit", "n", "n_units", "n_edits", "evidence_kind", "modeled",
-                         "plot_group", "source_identity") if name in row}
+                         "plot_group", "source_identity", "storage_mode", "measurement_identity") if name in row}
             rows.append(dict(row_type=category, **identity))
     return rows
+
+
+
+def comparison_conditions(key, result):
+    """State storage differences using measured manifest labels, never plot values."""
+    if key != "table-02":
+        return []
+    rows = [row for row in result.get("metrics", []) if row.get("backend") == "cube"]
+    if not rows:
+        return []
+    modes = sorted({str(row["storage_mode"]) for row in rows if row.get("storage_mode") is not None})
+    unknown = any(row.get("storage_mode") is None for row in rows)
+    ram = bool(set(modes) & {"tmpfs", "tmpfs-noswap"})
+    record = dict(backend="cube", current_storage_modes=modes,
+                  missing_storage_identity=unknown, paper_storage="disk-backed",
+                  storage_matches_paper=False if ram else None)
+    current = ", ".join(modes) or "unrecorded"
+    if ram:
+        record.update(
+            en=f"CubeSandbox uses {current} RAM storage in this run; the paper used disk-backed storage. These storage conditions differ, so a lower latency does not demonstrate reproduction of the paper's Cube timings.",
+            zh=f"本次 CubeSandbox 使用 {current} 内存盘；论文使用磁盘存储。存储条件不同，较低的时延不能据此视为复现论文的 Cube 计时。")
+    elif unknown:
+        record.update(
+            en=f"CubeSandbox storage labels: {current}; at least one measured population lacks a storage identity. The paper used disk-backed storage; matching conditions are not verified.",
+            zh=f"CubeSandbox 存储标签：{current}；至少一个实测集合缺少存储身份。论文使用磁盘存储，尚未核验条件一致。")
+    else:
+        record.update(
+            en=f"CubeSandbox storage labels: {current}; the paper used disk-backed storage. A disk label alone does not verify the original device, placement or service configuration.",
+            zh=f"CubeSandbox 存储标签：{current}；论文使用磁盘存储。仅凭磁盘标签不能确认原始设备、节点绑定与服务配置一致。")
+    return [record]
 
 
 def sample_lines(key, records):
@@ -204,7 +234,7 @@ def sample_lines(key, records):
 
 
 def brief_population(population):
-    values = re.findall(r'(?:^|;)(experiment|mode|checkpoint_profile|run_purpose|message_policy|baseline_test_runtime|mock_latency_policy|replay_timing_method|legacy_timing_policy|source_identity)=([^;]+)', population or "")
+    values = re.findall(r'(?:^|;)(experiment|mode|checkpoint_profile|run_purpose|message_policy|baseline_test_runtime|mock_latency_policy|replay_timing_method|legacy_timing_policy|source_identity|storage_mode)=([^;]+)', population or "")
     values = [(key, re.sub(r'[0-9a-f]{40,64}', lambda match: match.group(0)[:12], value)
                if key == 'source_identity' else value) for key, value in values]
     return timing_text("; ".join(f"{key}={value}" for key, value in values if value != "null") or (population or "unspecified population"))
@@ -383,8 +413,10 @@ def markdown_index(manifest, *, language):
         if key == 'table-03' and item.get('restore_timing'):
             from ae.repro.table3_restore import timing_markdown
             lines += timing_markdown(item['restore_timing'], language=language)
-        lines += [BOUNDARIES_ZH[key] if zh else item["timing_boundary"], "",
-                  "**运行状态**" if zh else "**Execution status**", ""]
+        lines += [BOUNDARIES_ZH[key] if zh else item["timing_boundary"], ""]
+        for condition in item.get("comparison_conditions", []):
+            lines += [condition["zh" if zh else "en"], ""]
+        lines += ["**运行状态**" if zh else "**Execution status**", ""]
         lines += ["- " + line for line in coverage_lines(item["coverage"], language=language)]
         lines.append("")
         if key == "figure-08":
@@ -540,7 +572,8 @@ def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_d
         result = (summary or {}).get("experiments", {}).get(key, {})
         selected = [plot for plot in plots if plot["experiment"] == key]
         rows = matching_coverage(key, coverage)
-        panels = [canvas.text([version, boundary, "Fresh selected runs only; full paper cohort is not certified by this image."], width,
+        conditions = comparison_conditions(key, result)
+        panels = [canvas.text([version, boundary, *[row["en"] for row in conditions], "Fresh selected runs only; full paper cohort is not certified by this image."], width,
                               title=title + " | AE measurements")]
         populations = []
         for number, plot in enumerate(selected, 1):
@@ -589,7 +622,8 @@ def build(analysis_path=None, plots_path=None, *, coverage_path, output, paper_d
         item = dict(experiment=key, paper_item=title, status="fresh-results" if selected else "unavailable",
                     layout='paper' if compact_paper else 'population-panels',
                     original=references[key], populations=populations, coverage=rows,
-                    limitations=limitations, missing=missing, timing_boundary=boundary, artifacts=outputs)
+                    limitations=limitations, missing=missing, timing_boundary=boundary,
+                    comparison_conditions=conditions, artifacts=outputs)
         if key == 'table-03' and table3_timing is not None:
             item['restore_timing'] = table3_timing
         manifest["items"].append(item)

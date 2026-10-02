@@ -122,15 +122,23 @@ def acquire_node_lock(node, *, timeout, root=Path('/run/lock')):
 def prepare_output(output):
     """Create the measurement directory.
 
-    Cube memory setup creates ``cube-memory`` before this process starts, so
-    that parent may already exist. A directory with an environment record or
-    any other contents is still a conflict.
+    Cube setup creates ``control-plane`` and ``cube-memory`` before this
+    process starts. Reuse only those real directories without recovery guards;
+    an environment record or any other top-level contents remain a conflict.
     """
     output = Path(output)
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        raise FileExistsError(f'Pinned measurement output is not a real directory: {output}')
     if output.exists():
         names = {path.name for path in output.iterdir()}
-        if names - {'cube-memory'} or (output / 'environment.json').exists():
+        if names - {'control-plane', 'cube-memory'} or (output / 'environment.json').exists():
             raise FileExistsError(f'Pinned measurement output already exists: {output}')
+        for name in names:
+            prepared = output / name
+            if prepared.is_symlink() or not prepared.is_dir():
+                raise FileExistsError(f'Cube setup is not a real directory: {prepared}')
+            if any('RECOVERY_REQUIRED' in path.name for path in prepared.iterdir()):
+                raise FileExistsError(f'Cube setup requires recovery: {prepared}')
         return output
     output.mkdir(parents=True, exist_ok=False)
     return output

@@ -3,6 +3,7 @@
 These tests exercise the real executor/admission/filesystem publication logic.
 The separate Linux probe provides the actual CRIU image/restore evidence.
 """
+from contextlib import nullcontext
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
 import os
 from pathlib import Path
@@ -45,7 +46,8 @@ class AsyncCheckpointTests(unittest.TestCase):
             layers_root=str(root / 'layers'), base_layer=str(root / 'base'),
             current_upper=str(root / 'layers/upper'), current_work=str(root / 'layers/work'),
             criu_dump_bin='/test/criu', _dump_pool=self.executor,
-            template_pool=SimpleNamespace(request_stash_template=Mock(side_effect=stash), discard=Mock()),
+            template_pool=SimpleNamespace(request_stash_template=Mock(side_effect=stash),
+                quiesce_for_checkpoint=Mock(side_effect=lambda pid: nullcontext()), discard=Mock()),
             _bootstrap_active_before_dump=Mock(return_value=(None, 0., False)),
             _wait_pid_stopped=Mock(return_value=True), _is_pidns_init=Mock(side_effect=lambda pid: pid != 10),
             _apply_overlay_switch=Mock(), _all_ext_mount_map_args=lambda: [],
@@ -84,6 +86,17 @@ class AsyncCheckpointTests(unittest.TestCase):
 
     def checkpoint(self, parent=None):
         return self.pipeline.checkpoint(parent, 'test')
+
+    def test_bootstrap_does_not_hide_unowned_children(self):
+        self.controller._is_pidns_init.return_value = True
+        self.controller._is_pidns_init.side_effect = None
+        with patch.object(ar, 'validate_replay_children',
+                          side_effect=ar.UnsupportedAsyncResources('Live/unowned worker children')):
+            with self.assertRaisesRegex(ar.UnsupportedAsyncResources, 'Live/unowned'):
+                self.checkpoint()
+        self.controller._bootstrap_active_before_dump.assert_not_called()
+        self.controller._apply_overlay_switch.assert_not_called()
+        self.controller.template_pool.request_stash_template.assert_not_called()
 
     def test_overlay_switch_timer_excludes_directory_preparation(self):
         Path(self.controller.current_upper, 'changed').write_text('data')

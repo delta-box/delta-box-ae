@@ -1,0 +1,74 @@
+--- a/hypervisor/vmm/src/pagemap_anon.rs
++++ b/hypervisor/vmm/src/pagemap_anon.rs
+@@ -41,8 +41,8 @@
+ /// Mask for PFN (bits 0-54)
+ const PAGEMAP_PFN_MASK: u64 = (1 << 55) - 1;
+ 
+-/// Bit 12 in kpageflags: KPF_ANON (anonymous page)
+-const KPF_ANON: u64 = 1 << 12;
++/// Bit 61: file page or shared-anon; clear for private anonymous CoW pages.
++const PAGEMAP_FILE_BIT: u64 = 1 << 61;
+ 
+ /// Errors related to pagemap_anon operations
+ #[derive(Debug, Error)]
+@@ -131,7 +131,7 @@
+             source: e,
+         })?;
+ 
+-    let mut kpageflags_file =
++    let _kpageflags_file =
+         File::open("/proc/kpageflags").map_err(|e| PagemapAnonError::OpenFailed {
+             path: "/proc/kpageflags".to_string(),
+             source: e,
+@@ -156,7 +156,6 @@
+         })?;
+ 
+     let mut result = vec![false; num_pages];
+-    let mut kpageflags_buf = [0u8; KPAGEFLAGS_ENTRY_SIZE as usize];
+ 
+     for (i, item) in result.iter_mut().enumerate().take(num_pages) {
+         let entry_offset = i * PAGEMAP_ENTRY_SIZE as usize;
+@@ -187,27 +186,12 @@
+             return Err(PagemapAnonError::NoCapSysAdmin);
+         }
+ 
+-        // Read kpageflags for this PFN
+-        let kpageflags_offset = pfn * KPAGEFLAGS_ENTRY_SIZE;
+-        kpageflags_file
+-            .seek(SeekFrom::Start(kpageflags_offset))
+-            .map_err(|e| PagemapAnonError::SeekFailed {
+-                path: "/proc/kpageflags".to_string(),
+-                source: e,
+-            })?;
+-
+-        kpageflags_file
+-            .read_exact(&mut kpageflags_buf)
+-            .map_err(|e| PagemapAnonError::ReadFailed {
+-                path: "/proc/kpageflags".to_string(),
+-                source: e,
+-            })?;
+-
+-        let flags = u64::from_ne_bytes(kpageflags_buf);
+-
+-        // KPF_ANON (bit 12) indicates this is an anonymous page,
+-        // meaning it was created by CoW when Guest wrote to it.
+-        if (flags & KPF_ANON) != 0 {
++        // The PFN can migrate after the batched pagemap read. Looking up
++        // kpageflags later may classify the freed/reused OLD physical page.
++        // The file/anon type is already in this same pagemap entry, under
++        // the kernel's PTE lock. This function is used for MAP_PRIVATE RAM.
++        // Keep swapped-page handling, PFN permission checks and I/O errors.
++        if (entry & PAGEMAP_FILE_BIT) == 0 {
+             *item = true;
+         }
+     }
+@@ -366,6 +350,6 @@
+         assert_eq!(PAGEMAP_PRESENT_BIT, 1u64 << 63);
+         assert_eq!(PAGEMAP_SWAPPED_BIT, 1u64 << 62);
+         assert_eq!(PAGEMAP_PFN_MASK, (1u64 << 55) - 1);
+-        assert_eq!(KPF_ANON, 1u64 << 12);
+-    }
+-}
++        assert_eq!(PAGEMAP_FILE_BIT, 1u64 << 61);
++    }
++}

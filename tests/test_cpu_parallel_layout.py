@@ -35,7 +35,7 @@ def cpu_experiments():
 def review_namespace():
     # Load the real argument/admission code without importing VM/backend modules.
     tree = ast.parse((ROOT / 'ae/scripts/run_review.py').read_text())
-    names = {'gpu_case_selection', 'GPUCases', 'parser', 'main'}
+    names = {'gpu_case_selection', 'GPUCases', 'parser', 'main', 'isolated_background_baseline'}
     tree.body = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))
                  and node.name in names]
     catalogue = cpu_experiments()
@@ -160,9 +160,9 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 2)
 
     def test_copied_wrapper_uses_new_layout_and_default_is_unchanged(self):
-        original = (ROOT / 'ae/run_all_no_gpu.sh').read_text()
-        self.assertIn('args=(--group cpu --cpu-parallel)', original)
-        self.assertIn('--physcpubind=32-35 --membind=1', original)
+        original = ROOT / 'ae/run_all_no_gpu.sh'
+        result = subprocess.run(['bash', str(original), '--help'], text=True, capture_output=True, check=True)
+        self.assertIn('NUMA1 CPU28-31 and NUMA2 CPU48-51', result.stdout)
         script = ROOT / 'ae/run_all_no_gpu_numa03.sh'
         result = subprocess.run(['bash', str(script), '--help'], text=True, capture_output=True, check=True)
         self.assertIn('all 16', result.stdout)
@@ -171,6 +171,8 @@ class LayoutTests(unittest.TestCase):
             root = Path(directory)
             wrapper = root / script.name
             wrapper.write_text(script.read_text())
+            (root / 'scripts').mkdir()
+            (root / 'scripts/run_no_gpu_entry.sh').write_text((ROOT / 'ae/scripts/run_no_gpu_entry.sh').read_text())
             (root / 'run_all.sh').write_text("#!/bin/bash\nprintf '%s\\n' \"$@\"\n")
             fake = root / 'numactl'
             fake.write_text("#!/bin/bash\nprintf '%s\\n' \"$1\" \"$2\" \"$3\"\nshift 3\nexec \"$@\"\n")

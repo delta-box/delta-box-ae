@@ -63,22 +63,34 @@ bash ae/run_all.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 
 This command visits the experiment groups in the [index](#experiments) sequentially, runs at most 10 complete jobs per group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. The cap covers all arms together: Figure 6(b) uses at most five inputs × two arms, and Figure 9 at most three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
 
-To run the same CPU validation without any GPU probing or measurements, use:
+For CPU validation without GPU probing or measurements on the hosted machine, log in as `atc-ae` and use the reviewer command:
 
 ```bash
-bash ae/run_all_no_gpu.sh
+cd /home/atc-ae/delta-box-ae
+AE_HOSTED_LAUNCHER=/usr/local/sbin/deltabox-ae-run bash ae/run_all_no_gpu.sh
 ```
 
-This entry runs a shared experiment queue on NUMA1/CPU28–31 and NUMA2/CPU48–51. An idle node claims the next pending group, so a slow Replay group does not block independent baselines on the other node. Input jobs within a group remain serial; Cube/E2B service-changing groups never overlap. Configuration, job caps, fresh measurement identities and combined reporting are retained. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node. It can migrate the earlier NUMA1/2 static layout without importing another run. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume`; placement overrides are rejected.
+This entry runs all **16 CPU experiment groups** through a shared queue on **NUMA1/CPU28–31 and NUMA2/CPU48–51**. Each group runs at most **10 complete input jobs, including all arms**; selected trajectories run to completion without automatic event truncation. An idle node claims the next pending group, and input jobs within a group remain serial. Cube/E2B service-changing groups never overlap. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. Use `--output` or `--resume`; placement overrides are rejected. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node.
 
-Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree to avoid page relocation during anonymous-page snapshot classification. Source and child memory checksums are verified; the original service policy is restored afterward.
-For hosted background validation on NUMA0/3, use the separate entry below. The reviewer command above keeps its NUMA1/2 placement.
+On the hosted machine, this entry runs in its own managed systemd unit. Direct AE descendants cannot use swap; an interrupted run receives SIGINT for existing cleanup, then the unit reaps remaining descendants after its cleanup grace. The launcher records the unit identity and final cleanup state.
+
+Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree. The hosted VMM also uses the [stable pagemap classification repair](ae/patches/cube-pagemap-stable-classification.md), so host page relocation cannot change the anonymous-page decision through a stale PFN lookup. Source and child memory checksums are verified; the original service policy is restored afterward.
+
+For an explicitly bounded campaign that may resume after failures, use a fresh output:
+
+```bash
+bash ae/run_all_no_gpu.sh --limit 3 --resume-failures 3 --output "$PWD/ae/results/selected/numa12-validation"
+```
+
+`--resume-failures 3` allows at most three resumes after a failed workload and verified cleanup (up to four attempts including the initial run). Interruptions, uncertain cleanup, recovery guards, or source/configuration/binary changes stop the campaign. Completed artifacts are revalidated by the existing resume path; failed jobs run again. `cpu-resume-history.json` retains each return code and prior control records, while the existing attempt directories retain failed job logs. A successful resumed campaign is not an uninterrupted pass. Without this option, workload failures still stop immediately.
+
+For hosted background validation on NUMA0/3, use the entry below with a new output directory. Both entries share the same option parser, experiment drivers, storage preparation and reporting core; their fixed NUMA placement and reviewer priority differ. The reviewer command above keeps its NUMA1/2 placement.
 
 ```bash
 bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
 ```
 
-This validation entry visits all 16 CPU groups with the existing per-group job cap on NUMA0/CPU0–3 and NUMA3/CPU72–75. It holds an exclusive lease on the results and shared backends. Reviewer requests take priority: the background run cleans up its owned experiment and services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume.
+This entry runs the same 16 groups and complete input jobs on **NUMA0/CPU0–3 and NUMA3/CPU72–75**, with the same per-group cap of 10 and no automatic event truncation. Cube/E2B services are shared across NUMA nodes, so the two runs hold mutually exclusive access to those backends. **Reviewer requests take priority**: the background run cleans up its owned experiment and restores services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume. Results are saved under `/home/atc-ae/delta-box-ae/ae/results/selected/<run-directory>/`; the script prints the exact directory. Check that run's `SUMMARY.md` and exit code: success requires all 16 groups to report `ok` and exit code 0.
 
 To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same job cap and run:
 
@@ -88,7 +100,7 @@ bash ae/run_all.sh --baseline-inputs all
 
 `--baseline-inputs` selects the input pool, not the sample size. Its default is `44`; the supplied `review.validation_max_jobs=10` cap still applies. `--limit 1` starts a pilot and may be increased within the cap after checking its result. No implicit `--max-events` truncation is added.
 
-Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; the [coverage and deviation ledger](ae/report/README.md) records these scopes.
+Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; these scopes are recorded in the canonical ledger on the host: `spr4numa:/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md` ([repository copy; access required](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md)).
 
 When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful sampled run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
 
