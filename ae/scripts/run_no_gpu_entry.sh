@@ -27,7 +27,7 @@ Options forwarded unchanged to the normal entry:
   --output PATH         New result directory
   --resume PATH         Resume a previous two-lane run
   --limit N             Input limit; configured job cap still applies
-  --resume-failures N   Hosted NUMA1/2 only: 0..2 resumes after verified cleanup
+  --resume-failures N   Hosted NUMA1/2 only: 0..3 resumes after verified cleanup
   --max-events N        Explicit event prefix
   --baseline-inputs 44|all
   --list                Show the shared experiment catalogue without running
@@ -55,8 +55,8 @@ HELP
                 if (($# < 2)); then echo 'Missing --resume-failures value' >&2; exit 2; fi
                 value=$2; shift 2
             fi
-            if [[ $layout != numa12 || ! $value =~ ^[0-2]$ ]]; then
-                echo '--resume-failures requires hosted NUMA1/2 and a value 0..2' >&2; exit 2
+            if [[ $layout != numa12 || ! $value =~ ^[0-3]$ ]]; then
+                echo '--resume-failures requires hosted NUMA1/2 and a value 0..3' >&2; exit 2
             fi
             if (( value > 0 )); then args+=(--resume-failures "$value"); fi
             resume_failures=$value

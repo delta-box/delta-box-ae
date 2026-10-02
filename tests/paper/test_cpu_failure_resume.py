@@ -63,6 +63,24 @@ class FailureResumeTests(unittest.TestCase):
         self.assertEqual(code,1);self.assertIsNone(error);self.assertEqual(len(commands),3)
         self.assertEqual(history['attempts'][-1]['decision'],'resume-budget-exhausted')
 
+    def test_three_resumes_stop_after_four_failed_attempts(self):
+        code,error,commands,history,_,_=self.exercise([1,1,1,1],limit=3)
+        self.assertEqual(code,1);self.assertIsNone(error);self.assertEqual(len(commands),4)
+        self.assertEqual(history['max_resumes'],3)
+        self.assertEqual([a['returncode'] for a in history['attempts']],[1,1,1,1])
+        self.assertEqual(history['attempts'][-1]['decision'],'resume-budget-exhausted')
+        self.assertIn('--output',commands[0])
+        self.assertTrue(all('--resume' in command and '--output' not in command for command in commands[1:]))
+
+    def test_third_resume_can_succeed_without_erasing_failures(self):
+        code,error,commands,history,_,_=self.exercise([1,1,1,0],limit=3)
+        self.assertEqual(code,0);self.assertIsNone(error);self.assertEqual(len(commands),4)
+        self.assertEqual([a['returncode'] for a in history['attempts']],[1,1,1,0])
+        self.assertTrue(history['resumed_after_failure'])
+        self.assertTrue(all(a['records']['review.json']['value']['original_error']=='real failure'
+                            for a in history['attempts'][:3]))
+        self.assertEqual([c[c.index('--limit')+1] for c in commands],['3']*4)
+
     def test_one_resume_budget(self):
         code,error,commands,history,_,_=self.exercise([1,1],limit=1)
         self.assertEqual(code,1);self.assertEqual(len(commands),2)
@@ -96,7 +114,7 @@ class FailureResumeTests(unittest.TestCase):
         common=['--checkout','/fixed','--cpu-parallel','--group','cpu','--resume-failures','2']
         for suffix in ([],['--resume','/prior'],['--output','/fresh','--cpu-layout','numa03'],['--list']):
             with self.subTest(suffix=suffix),self.assertRaises(SystemExit):h.parse_arguments(common+suffix)
-        for value in ('-1','3','999'):
+        for value in ('-1','4','999'):
             with self.subTest(value=value),self.assertRaises(SystemExit):
                 h.parse_arguments(['--checkout','/fixed','--cpu-parallel','--group','cpu','--output','/fresh','--resume-failures',value])
 

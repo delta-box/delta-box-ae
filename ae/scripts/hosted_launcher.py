@@ -298,8 +298,8 @@ def parse_arguments(argv):
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
                         help='Replay/CRIU/FC-diff: fixed 44 complete trajectories by default, or all inputs')
     parser.add_argument('--limit', type=positive_integer, action=Once)
-    parser.add_argument('--resume-failures', type=int, choices=range(3), action=Once,
-                        help='Opt in to at most 2 verified-cleanup resumes of a fresh hosted NUMA1/2 CPU run')
+    parser.add_argument('--resume-failures', type=int, choices=range(4), action=Once,
+                        help='Opt in to at most 3 verified-cleanup resumes of a fresh hosted NUMA1/2 CPU run')
     parser.add_argument('--isolated-validation', action='store_true', help='Small selected VM validation with separate output and explicit placement')
     parser.add_argument('--max-events', type=positive_integer, action=Once)
     output = parser.add_mutually_exclusive_group()

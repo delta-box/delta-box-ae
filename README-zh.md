@@ -78,10 +78,10 @@ Cube 内存盘实验会临时关闭其受控服务进程树的透明大页，避
 如需在失败后有界续跑，使用新的输出目录显式启用：
 
 ```bash
-bash ae/run_all_no_gpu.sh --limit 3 --resume-failures 2 --output "$PWD/ae/results/selected/numa12-validation"
+bash ae/run_all_no_gpu.sh --limit 3 --resume-failures 3 --output "$PWD/ae/results/selected/numa12-validation"
 ```
 
-`--resume-failures 2` 最多允许两次续跑，前提是作业失败且清理已核验。用户中断、清理无法确认、存在恢复标记，或源码/配置/二进制变化时立即停止。已有断点逻辑重新核验完成产物，并重新执行失败作业；`cpu-resume-history.json` 保留每次退出码和之前的控制记录，原有 attempt 目录继续保留失败作业日志。经过续跑的成功会明确区分于一次连续通过；不指定此选项时，作业失败仍立即停止。
+`--resume-failures 3` 最多允许三次续跑，加上首次运行共最多四次尝试，前提是作业失败且清理已核验。用户中断、清理无法确认、存在恢复标记，或源码/配置/二进制变化时立即停止。已有断点逻辑重新核验完成产物，并重新执行失败作业；`cpu-resume-history.json` 保留每次退出码和之前的控制记录，原有 attempt 目录继续保留失败作业日志。经过续跑的成功会明确区分于一次连续通过；不指定此选项时，作业失败仍立即停止。
 
 托管服务器上的后台 NUMA0/3 验证使用下面的入口，并指定新的输出目录。两个入口共用参数解析、实验驱动、存储准备和报告代码，只区分固定 NUMA 布局与审查者优先级。上面的审查者命令继续使用原 NUMA1/2 绑定。
 
