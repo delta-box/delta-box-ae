@@ -74,7 +74,7 @@ This entry runs all **16 CPU experiment groups** through a shared queue on **NUM
 
 On the hosted machine, this entry runs in its own managed systemd unit. Direct AE descendants cannot use swap; an interrupted run receives SIGINT for existing cleanup, then the unit reaps remaining descendants after its cleanup grace. The launcher records the unit identity and final cleanup state.
 
-Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree to avoid page relocation during anonymous-page snapshot classification. Source and child memory checksums are verified; the original service policy is restored afterward.
+Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree. The hosted VMM also uses the [stable pagemap classification repair](ae/patches/cube-pagemap-stable-classification.md), so host page relocation cannot change the anonymous-page decision through a stale PFN lookup. Source and child memory checksums are verified; the original service policy is restored afterward.
 
 For an explicitly bounded campaign that may resume after failures, use a fresh output:
 

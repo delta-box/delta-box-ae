@@ -68,7 +68,7 @@ cd /home/atc-ae/delta-box-ae
 AE_HOSTED_LAUNCHER=/usr/local/sbin/deltabox-ae-run bash ae/run_all_no_gpu.sh
 ```
 
-Cube 内存盘实验会临时关闭其受控服务进程树的透明大页，避免匿名页快照分类期间发生页迁移。源实例和子实例均执行内存 checksum 校验，实验结束后恢复原服务策略。
+Cube 内存盘实验会临时关闭受控服务进程树的透明大页；托管 VMM 同时使用[稳定 pagemap 分类修复](ae/patches/cube-pagemap-stable-classification.md)，避免通过过期物理页号查询属性而漏存匿名页。源实例和子实例均执行内存 checksum 校验，实验结束后恢复原服务策略。
 
 
 此入口在 **NUMA1/CPU28–31 和 NUMA2/CPU48–51** 上通过共享队列运行全部 **16 个 CPU 实验组**。每组最多执行 **10 个完整输入作业（含所有实验臂）**，选中的轨迹执行到底，不自动截断事件。空闲节点领取下一组，每组内部输入保持串行；涉及共享 Cube/E2B 服务的实验互斥。保留 Figure 8(a)，排除 GPU 探测及 Figure 8(b)(c)。可使用 `--output` 或 `--resume`，不接受绑定覆盖。同一次运行续跑会核验已完成产物，保留原节点与源码身份，未完成组仍留在原节点。
