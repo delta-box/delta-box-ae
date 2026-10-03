@@ -1,4 +1,5 @@
-"""Run both shell entries against inert executables, preserving complete argv."""
+"""Capture shell dispatch and validate its contract with the real launcher parser."""
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -9,10 +10,13 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER = '/usr/local/sbin/deltabox-ae-run'
+spec = importlib.util.spec_from_file_location('no_gpu_hosted_parser', ROOT/'ae/scripts/hosted_launcher.py')
+hosted = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hosted)
 
 
 class CPUEntryEquivalenceTests(unittest.TestCase):
-    def invoke(self, layout, flags=(), *, launcher=None, status=0):
+    def invoke(self, layout, flags=(), *, launcher=None, status=0, nonroot=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ae = root / 'ae'
@@ -30,11 +34,23 @@ class CPUEntryEquivalenceTests(unittest.TestCase):
             env.pop('AE_HOSTED_LAUNCHER',None)
             if launcher is not None:env['AE_HOSTED_LAUNCHER']=launcher
             entry='run_all_no_gpu.sh' if layout=='numa12' else 'run_all_no_gpu_numa03.sh'
-            result=subprocess.run(['bash',str(ae/entry),*flags],capture_output=True,env=env)
+            command=['bash',str(ae/entry),*flags]
+            identity={}
+            if nonroot:
+                # Exercise Bash's actual EUID branch, including in root-run CI.
+                command=['bash','-c','(( EUID != 0 )) || exit 99; exec bash "$@"',
+                         'nonroot-entry',str(ae/entry),*flags]
+                if os.geteuid()==0:
+                    root.chmod(0o755)
+                    identity=dict(user=65534,group=65534,extra_groups=[])
+            result=subprocess.run(command,capture_output=True,env=env,**identity)
             words=result.stdout.decode().split('\0')[:-1]
             if len(words)>3 and words[3]=='HOSTED':
                 self.assertEqual(words[4:8],['-n','--',launcher or LAUNCHER,'--checkout'])
                 self.assertEqual(words[8],str(root))
+                # sudo is inert, but the forwarded CLI must parse for real.
+                # Calling only the parser never loads policy or starts a workload.
+                hosted.parse_arguments(words[7:])
                 words=words[:4]+words[9:]
             return result,words
 
@@ -110,6 +126,50 @@ class CPUEntryEquivalenceTests(unittest.TestCase):
             self.assertEqual(result.returncode,0)
             self.assertIn(b'all 16',result.stdout)
             self.assertIn(b'Figure 8(a)',result.stdout)
+
+    def test_hosted_reviewer_rejects_self_managed_overrides_before_dispatch(self):
+        for flags in (['--config','/custom config'], ['--config=/custom config'],
+                      ['--runtime-repo','/custom runtime']):
+            for extra in ([], ['--resume-failures','0'], ['--list'], ['--resume-failures','3']):
+                with self.subTest(flags=flags,extra=extra):
+                    result,words=self.invoke('numa12',[*flags,*extra],launcher=LAUNCHER,nonroot=True)
+                    self.assertEqual((result.returncode,words),(2,[]))
+                    self.assertIn(b'only available in self-managed mode',result.stderr)
+                    self.assertIn(b'fixed configuration and runtime checkout',result.stderr)
+
+    def test_real_parser_accepts_hosted_reviewer_dispatch(self):
+        cases=([], ['--limit','5','--output','/result with spaces'],
+               ['--limit=5','--output=/result with spaces','--resume-failures=1'],
+               ['--resume-failures','0'], ['--list'], ['--resume','/previous result'],
+               ['--baseline-inputs','all','--max-events','2'])
+        for flags in cases:
+            with self.subTest(flags=flags):
+                result,words=self.invoke('numa12',flags,launcher=LAUNCHER,nonroot=True)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(words[3],'HOSTED')
+
+    def test_hosted_help_excludes_self_managed_usage(self):
+        result,words=self.invoke('numa12',['--help'],launcher=LAUNCHER,nonroot=True)
+        self.assertEqual((result.returncode,words),(0,[]))
+        self.assertIn(b'--config and --runtime-repo are unavailable in hosted mode',result.stdout)
+        self.assertNotIn(b'--config PATH',result.stdout)
+        self.assertNotIn(b'--runtime-repo PATH',result.stdout)
+        result,_=self.invoke('numa12',['--help'])
+        self.assertIn(b'Self-managed options (unavailable in hosted mode)',result.stdout)
+        self.assertIn(b'--config PATH',result.stdout)
+
+    def test_non_hosted_nonroot_caller_keeps_self_managed_overrides(self):
+        flags=['--config','/custom config','--runtime-repo','/custom runtime']
+        result,words=self.invoke('numa12',flags,nonroot=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags,'--limit','3'])
+
+    @unittest.skipUnless(os.geteuid()==0,'root-only self-managed dispatch')
+    def test_root_self_managed_dispatch_is_not_changed_by_hosted_environment(self):
+        flags=['--config','/custom config','--runtime-repo','/custom runtime']
+        result,words=self.invoke('numa12',flags,launcher=LAUNCHER)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags,'--limit','3'])
 
 
 if __name__=='__main__':

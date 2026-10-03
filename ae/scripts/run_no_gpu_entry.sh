@@ -16,6 +16,10 @@ output_set=0
 resume_set=0
 list_only=0
 self_managed=0
+hosted_reviewer=0
+if [[ -n ${AE_HOSTED_LAUNCHER:-} ]] && (( EUID != 0 )); then
+    hosted_reviewer=1
+fi
 if [[ $layout == numa03 ]]; then args+=(--cpu-layout numa03); fi
 while (($#)); do
     case "$1" in
@@ -48,8 +52,17 @@ HELP
                 cat <<'HELP'
 
 NUMA1 CPU28-31 and NUMA2 CPU48-51; reviewer work has priority.
-  --config PATH --runtime-repo PATH   Self-managed options; hosted rules apply
 HELP
+                if (( hosted_reviewer )); then
+                    echo 'Hosted mode uses a fixed configuration and runtime checkout.'
+                    echo '--config and --runtime-repo are unavailable in hosted mode.'
+                else
+                    cat <<'HELP'
+Self-managed options (unavailable in hosted mode):
+  --config PATH         Select the experiment configuration
+  --runtime-repo PATH   Select a complete runtime checkout
+HELP
+                fi
             fi
             echo 'Placement and experiment selection are fixed. Use ae/run_test.sh for a quick test.'
             exit 0
@@ -69,6 +82,10 @@ HELP
             resume_failures=$value
             ;;
         --config|--config=*|--runtime-repo)
+            if (( hosted_reviewer )); then
+                echo "${1%%=*} is only available in self-managed mode; hosted mode uses a fixed configuration and runtime checkout." >&2
+                exit 2
+            fi
             self_managed=1
             if [[ $layout != numa12 ]]; then
                 echo "Unsupported option: $1. NUMA0/3 requires the fixed hosted configuration." >&2
