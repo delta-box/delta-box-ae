@@ -131,6 +131,17 @@ class ProfileTests(unittest.TestCase):
                 review.execute_plan(path, paper_context_ready=True, paper_before_job=mock.Mock())
             self.assertFalse((root/'suite').exists())
 
+    def test_explicit_workspace_is_preserved_only_for_selected_profile(self):
+        config = {'e2b': {'execution': 'local', 'l1_workspace': 'reviewed-l1-nvme'}}
+        value = profile.effective(config, profile.PROFILE)
+        self.assertEqual(value['e2b']['l1_workspace'], 'reviewed-l1-nvme')
+        self.assertEqual(value['e2b']['execution'], 'paper-nested-pending')
+        self.assertEqual(config['e2b']['execution'], 'local')
+        self.assertEqual(profile.effective(config, None), config)
+
+    def test_selected_profile_without_workspace_keeps_existing_default(self):
+        self.assertEqual(profile.effective({}, profile.PROFILE)['e2b']['l1_workspace'], 'l1-work')
+
     def test_default_is_unchanged_and_copied(self):
         config = {'measurement': {'cpus': '52-55'}, 'e2b': {'from_build': 'old'}, 'baseline_storage': 'tmpfs'}
         value = profile.effective(config, None)

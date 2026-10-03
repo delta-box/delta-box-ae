@@ -1,0 +1,113 @@
+--- a/ae/scripts/e2b_service_context.py
++++ b/ae/scripts/e2b_service_context.py
+@@ -635,14 +635,25 @@
+         return group, pids, identity
+ 
+     def _discard_deleted_child(self, child, identity, root_identity, operation, error_number):
+-        try:
+-            current = child.lstat()
+-        except FileNotFoundError:
+-            pass
+-        else:
++        # kernfs deactivates control files before unlinking the directory. Give
++        # that same observed leaf a bounded interval to disappear; never reread
++        # it as successful evidence or waive full VM identity coverage.
++        confirmation_started = time.monotonic()
++        confirmation_limit = .05
++        present_checks = 0
++        while True:
++            try:
++                current = child.lstat()
++            except FileNotFoundError:
++                break
+             if identity is not None and (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+                 raise RuntimeError('E2B VM cgroup was replaced during observation')
+-            raise RuntimeError('E2B VM cgroup read failed while the observed leaf remains present')
++            remaining = confirmation_limit - (time.monotonic() - confirmation_started)
++            if identity is None or remaining <= 0:
++                raise RuntimeError('E2B VM cgroup read failed while the observed leaf remains present'
++                    + f' (operation={operation}, errno={error_number}, path={child}, inode={current.st_ino})')
++            present_checks += 1
++            time.sleep(min(.002, remaining))
+         current_root = VM_ROOT.lstat()
+         if (current_root.st_dev, current_root.st_ino) != root_identity:
+             raise RuntimeError('E2B VM root identity changed during observation')
+@@ -659,7 +670,9 @@
+             raise RuntimeError('E2B VM cgroup reappeared during deletion verification')
+         self.discarded_cgroups.append({'path': str(child), 'device': identity.st_dev if identity is not None else None,
+             'inode': identity.st_ino if identity is not None else None, 'operation': operation,
+-            'errno': error_number, 'observed_at': time.time(), 'reason': 'child absent; incomplete observation discarded'})
++            'errno': error_number, 'observed_at': time.time(),
++            'deletion_confirmation': {'present_checks': present_checks, 'wait_s': time.monotonic() - confirmation_started, 'limit_s': confirmation_limit},
++            'reason': 'child absent; incomplete observation discarded'})
+ 
+     def _validate_process(self, task, owner_pid, owner_start, child, identity, root_identity, group, *, metadata_only=False, stage='pre-numa_maps'):
+         if task['pid'] == owner_pid and task['start_ticks'] != owner_start:
+--- a/ae/tests/test_e2b_vm_proof_lifecycle.py
++++ b/ae/tests/test_e2b_vm_proof_lifecycle.py
+@@ -70,6 +70,65 @@
+         self.assertEqual(self.proof.rows, {})
+         self.assertEqual(self.proof.discarded_cgroups[0]['operation'], 'cgroup.procs')
+ 
++    def test_kernfs_deactivation_before_unlink_discards_only_after_absence(self):
++        for code in (errno.ENODEV, errno.ENOENT):
++            with self.subTest(code=code):
++                if not self.child.exists():
++                    self.child.mkdir()
++                self.proof.discarded_cgroups.clear()
++                self.procs.side_effect = OSError(code, 'deactivated before unlink')
++                with patch.object(m.time, 'sleep', side_effect=lambda delay: shutil.rmtree(self.child)) as sleep:
++                    self.proof.sample()
++                self.assertEqual(self.proof.rows, {})
++                self.assertFalse(self.child.exists())
++                self.assertEqual(sleep.call_count, 1)
++                receipt = self.proof.discarded_cgroups[0]
++                self.assertEqual(receipt['deletion_confirmation']['present_checks'], 1)
++                self.assertEqual(receipt['errno'], code)
++                output = self.root/'fanout.json'
++                output.write_text(json.dumps([{'children': [{'sandbox_id': 'sandbox1'}]}]))
++                with self.assertRaisesRegex(RuntimeError, 'Missing placement proof'):
++                    self.proof.verify_ids(output)
++                self.child_inode = None  # next identity comes from actual lstat
++                self.child.mkdir()
++                self.group['inode'] = self.lstat(self.child).st_ino
++
++    def test_deletion_confirmation_still_rejects_persistent_leaf(self):
++        self.procs.side_effect = OSError(errno.ENODEV, 'persistent')
++        with patch.object(m.time, 'monotonic', side_effect=[0, .051]), patch.object(m.time, 'sleep') as sleep:
++            with self.assertRaisesRegex(RuntimeError, 'remains present.*errno=19'):
++                self.proof.sample()
++        sleep.assert_not_called()
++        self.assertEqual(self.proof.discarded_cgroups, [])
++
++    def test_deletion_confirmation_rejects_replacement(self):
++        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
++        def replace(delay):
++            self.child.rename(self.root/'old-leaf')
++            self.child.mkdir()
++        with patch.object(m.time, 'sleep', side_effect=replace):
++            with self.assertRaisesRegex(RuntimeError, 'replaced'):
++                self.proof.sample()
++        self.assertEqual(self.proof.discarded_cgroups, [])
++
++    def test_deletion_confirmation_keeps_root_policy_check(self):
++        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
++        def remove_and_unpin(delay):
++            shutil.rmtree(self.child)
++            self.root_group['cpuset.mems.effective'] = '2'
++        with patch.object(m.time, 'sleep', side_effect=remove_and_unpin):
++            with self.assertRaisesRegex(RuntimeError, 'placement differs'):
++                self.proof.sample()
++        self.assertEqual(self.proof.discarded_cgroups, [])
++
++    def test_deletion_confirmation_keeps_io_errors_fatal(self):
++        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
++        with patch.object(m.time, 'sleep', side_effect=OSError(errno.EIO, 'confirmation read failed')):
++            with self.assertRaises(OSError) as caught:
++                self.proof.sample()
++        self.assertEqual(caught.exception.errno, errno.EIO)
++        self.assertEqual(self.proof.discarded_cgroups, [])
++
+     def test_present_leaf_enodev_is_fatal(self):
+         self.procs.side_effect = OSError(errno.ENODEV, 'present leaf')
+         with self.assertRaisesRegex(RuntimeError, 'remains present'):
