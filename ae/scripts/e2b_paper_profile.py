@@ -60,6 +60,7 @@ def effective(config, profile):
     # Dynamic SSH address/key/storage/binary may only be supplied by the suite
     # context after L1 startup. Do not inherit direct-host or prebuilt-parent keys.
     value['e2b'] = dict(profile=PROFILE, execution='paper-nested-pending',
+                        l1_workspace=config.get('e2b', {}).get('l1_workspace', 'l1-work'),
                         paper_manifest=str(MANIFEST),
                         paper_contract=str(INPUT_ROOT / 'e2b-paper-185-input-action-contract.json'),
                         fresh_base_per_input=True, warm_action_worker=False,

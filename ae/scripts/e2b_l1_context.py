@@ -259,15 +259,36 @@ def resources():
     return {'lease_owner': owner, 'numactl': binding, **cgroup_noswap()}
 
 
+REVIEWED_DEVICES = (Path('/mnt/disk1'), Path('/mnt/disk2'))
+
+
+def growth_budget(workspace):
+    """Optional root-owned per-workspace overlay growth budget, in GiB."""
+    for folder in (workspace, workspace.parent):
+        path = folder / 'growth-budget.json'
+        if path.is_file():
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                raise ValueError('Growth budget must be a root-owned, non-writable regular file')
+            budget = json.loads(path.read_text()).get('growth_gib')
+            if type(budget) is not int or budget <= 0:
+                raise ValueError('Invalid L1 growth budget')
+            return budget
+    return None
+
+
 def capacity(workspace, disk_gib, *, allocated=0):
-    if workspace.stat().st_dev != Path('/mnt/disk1').stat().st_dev:
-        raise ValueError('Owned L1 work must be backed by the reviewed disk1 device')
+    if workspace.stat().st_dev not in {p.stat().st_dev for p in REVIEWED_DEVICES}:
+        raise ValueError('Owned L1 work must be backed by the reviewed disk1 or disk2 NVMe device')
     v = os.statvfs(workspace)
     available = v.f_bavail * v.f_frsize
-    required = max(0, disk_gib * GIB - allocated) + 10 * GIB
+    budget = growth_budget(workspace)
+    growth = disk_gib if budget is None else min(disk_gib, budget)
+    required = max(0, growth * GIB - allocated) + 10 * GIB
     if available < required:
-        raise ValueError('Insufficient full-growth disk capacity plus 10GiB reserve')
-    return {'available_bytes': available, 'required_bytes': required, 'disk_size_gib': disk_gib}
+        raise ValueError('Insufficient planned-growth disk capacity plus 10GiB reserve')
+    return {'available_bytes': available, 'required_bytes': required, 'disk_size_gib': disk_gib,
+            'growth_budget_gib': budget}
 
 
 def memory_admission():

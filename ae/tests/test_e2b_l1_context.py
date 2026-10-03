@@ -791,15 +791,68 @@ class Resources(unittest.TestCase):
 
     def test_capacity_accounts_remaining_growth_and_reserve(self):
         fake = types.SimpleNamespace(st_dev=8)
-        with patch.object(Path,'stat',return_value=fake), \
+        with patch.object(Path,'stat',return_value=fake), patch.object(m,'growth_budget',return_value=None), \
              patch.object(m.os,'statvfs',return_value=types.SimpleNamespace(f_bavail=137, f_frsize=m.GIB)):
             with self.assertRaises(ValueError): m.capacity(Path('/workspace'),128)
             result = m.capacity(Path('/workspace'),128,allocated=2*m.GIB)
             self.assertEqual(result['required_bytes'],136*m.GIB)
 
+    def test_capacity_growth_budget_caps_reservation(self):
+        fake = types.SimpleNamespace(st_dev=8)
+        with patch.object(Path,'stat',return_value=fake), patch.object(m,'growth_budget',return_value=40), \
+             patch.object(m.os,'statvfs',return_value=types.SimpleNamespace(f_bavail=60, f_frsize=m.GIB)):
+            result = m.capacity(Path('/workspace'),156,allocated=2*m.GIB)
+            self.assertEqual(result['required_bytes'],48*m.GIB)
+            self.assertEqual(result['growth_budget_gib'],40)
+
+    def test_growth_budget_requires_root_owned_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder)/'growth-budget.json').write_text('{"growth_gib": 40}')
+            if os.geteuid() == 0:
+                self.assertEqual(m.growth_budget(Path(folder)/'l1-x'),40)
+            else:
+                with self.assertRaisesRegex(ValueError,'root-owned'): m.growth_budget(Path(folder)/'l1-x')
+            self.assertIsNone(m.growth_budget(Path(folder).parent/'absent-workspace'))
+
+    def test_growth_budget_rejects_invalid_values_and_unsafe_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            target = folder / 'growth-budget.json'
+            for value in (True, 0, -1, '40', None):
+                target.write_text(json.dumps({'growth_gib': value}))
+                metadata = types.SimpleNamespace(st_mode=0o100644, st_uid=0)
+                with self.subTest(value=value), patch.object(Path, 'lstat', return_value=metadata):
+                    with self.assertRaisesRegex(ValueError, 'Invalid'):
+                        m.growth_budget(folder)
+            target.write_text('{"growth_gib": 40}')
+            for mode, uid in ((0o100666, 0), (0o100664, 0), (0o100644, 1234), (0o120777, 0)):
+                metadata = types.SimpleNamespace(st_mode=mode, st_uid=uid)
+                with self.subTest(mode=mode, uid=uid), patch.object(Path, 'lstat', return_value=metadata):
+                    with self.assertRaisesRegex(ValueError, 'root-owned'):
+                        m.growth_budget(folder)
+
+    def test_growth_budget_cannot_remove_reserve_or_reserve_beyond_full_size(self):
+        with patch.object(Path, 'stat', return_value=types.SimpleNamespace(st_dev=8)), \
+             patch.object(m, 'growth_budget', return_value=256), \
+             patch.object(m.os, 'statvfs', return_value=types.SimpleNamespace(f_bavail=138, f_frsize=m.GIB)):
+            self.assertEqual(m.capacity(Path('/workspace'), 128)['required_bytes'], 138 * m.GIB)
+            self.assertEqual(m.capacity(Path('/workspace'), 128, allocated=200 * m.GIB)['required_bytes'], 10 * m.GIB)
+        with patch.object(Path, 'stat', return_value=types.SimpleNamespace(st_dev=8)), \
+             patch.object(m, 'growth_budget', return_value=40), \
+             patch.object(m.os, 'statvfs', return_value=types.SimpleNamespace(f_bavail=9, f_frsize=m.GIB)):
+            with self.assertRaisesRegex(ValueError, 'reserve'):
+                m.capacity(Path('/workspace'), 128, allocated=40 * m.GIB)
+
+    def test_disk2_nvme_device_accepted(self):
+        def stat(path):
+            return types.SimpleNamespace(st_dev={'/mnt/disk1': 1, '/mnt/disk2': 3}.get(str(path), 3))
+        with patch.object(Path,'stat',stat), patch.object(m,'growth_budget',return_value=None), \
+             patch.object(m.os,'statvfs',return_value=types.SimpleNamespace(f_bavail=200, f_frsize=m.GIB)):
+            self.assertEqual(m.capacity(Path('/workspace'),156)['required_bytes'],166*m.GIB)
+
     def test_wrong_disk_device_denied(self):
         def stat(path):
-            return types.SimpleNamespace(st_dev=1 if str(path)=='/mnt/disk1' else 2)
+            return types.SimpleNamespace(st_dev={'/mnt/disk1': 1, '/mnt/disk2': 3}.get(str(path), 2))
         with patch.object(Path,'stat',stat):
             with self.assertRaisesRegex(ValueError,'disk1'): m.capacity(Path('/workspace'),80)
 
