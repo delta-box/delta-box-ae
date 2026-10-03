@@ -23,8 +23,13 @@ def mount_records():
 
 def release_inherited_cube_mounts(repo):
     prefix = str(Path(repo) / 'ae/results/selected') + '/'
-    pattern = re.compile(r'[^/]+/lanes/numa[0-9]+/environment/attempt-[0-9]+/'
-                         r'[^/]+/(?:control-plane/)?cube-memory/ram$')
+    # Table 2 creates its workspace at lane/attempt scope; Figure 8 creates
+    # one inside its job. Both can be inherited by a concurrent producer.
+    pattern = re.compile(
+        r'[^/]+/lanes/numa[0-9]+/'
+        r'(?:environment/attempt-[0-9]+/[^/]+/(?:control-plane/)?'
+        r'|runs/figure-08-cube/figure-08-cube/environment/)'
+        r'cube-memory/ram$')
     rows = mount_records()
     roots = [r for r in rows if r['target'].startswith(prefix)
              and pattern.fullmatch(r['target'][len(prefix):])]
