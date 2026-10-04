@@ -18,7 +18,7 @@ from .gpu_occupation import (
 TIMING_BATCHES = (1, 4, 16, 64)
 BACKEND_LABELS = {"deltabox": "δSandbox", "cube": "CubeSandbox", "e2b": "E2B"}
 THEORY_LABELS = {
-    "historical": "Historical-input model", "fresh": "Fresh-input model",
+    "historical": "Paper's archived measurements", "fresh": "This run's measurements",
     "assumed": "Assumed-input model", "mixed": "Mixed-input model",
 }
 TIMING_LABELS = {
@@ -178,7 +178,8 @@ def plot_gpu_occupation(result: dict, output_dir: Path) -> dict:
                  if (backend, n) in rows and rows[backend, n]["estimated"]]
     missing = [dict(backend=backend, n=n) for backend in backends for n in batches if (backend, n) not in rows]
     provenance = f"{THEORY_LABELS[result['source_kind']]} · {result['model_label']}"
-    footer = "Equation 1 time fraction; this is not GPU telemetry or GPU-count-weighted utilization."
+    footer = ("Paper's Equation 1, as in the paper's Figure 8(c): "
+              "U = (T_gen + T_train) / (T_sandbox + T_gen + T_train).")
     if estimated:
         footer += "\n" + textwrap.fill("* Estimated sandbox input: " + ", ".join(
             f"{BACKEND_LABELS.get(r['backend'], r['backend'])} N={r['n']}" for r in estimated), width=95)

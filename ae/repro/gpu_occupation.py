@@ -31,7 +31,7 @@ FORMULAS = {
     "staleness_versions": "(t_sandbox_s + t_gen_s) / t_train_s",
 }
 ASSUMPTIONS = [
-    "Expected occupation is a modeled time fraction in a serialized sandbox/generation/training cycle.",
+    "Expected occupation follows the paper's Equation 1 (Figure 8(c)): a time fraction of a serialized sandbox/generation/training cycle.",
     "This is not measured nvidia-smi utilization or a measured end-to-end RL job.",
     "GPU-count weighting is not applied; generation and training GPU counts are retained as provenance.",
     "Staleness is the modeled sandbox-plus-generation duration divided by one training-step duration.",
@@ -406,7 +406,7 @@ def main(argv=None):
             writer.writeheader()
             writer.writerows(dict(row, source_kind=result["source_kind"], model_label=result["model_label"])
                              for row in result["rows"])
-        print(f"Wrote CPU occupation model to {args.output / 'occupation.json'}")
+        print(f"Wrote Figure 8(c) (paper Equation 1) to {args.output / 'occupation.json'}")
         for row in result["unavailable"]:
             print(f"Unavailable: {row['backend']} N={row['n']}: {row['reason']}")
         return 0

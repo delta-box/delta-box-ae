@@ -96,7 +96,7 @@ To choose the placement:
 bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-It uses the same three-input limit and input pools as above, then analyzes the results and builds the comparison pages. After the CPU experiments, it checks the reserved GPUs 0, 3, 6 and 7 on the GPU host `allinai2plus`. If no GPU is free, Figure 8(b) is recorded as skipped; with one to three free GPUs, six of its eight cases run; with four, all eight run. GPU availability does not affect the CPU results. Figure 8(c) is computed once all CPU and GPU inputs are complete; you can also [compute it manually](#figure-08-gpu).
+It uses the same three-input limit and input pools as above, then analyzes the results and builds the comparison pages. After the CPU experiments, it checks the GPUs reserved for this artifact on the GPU host `allinai2plus`. If no GPU is free, Figure 8(b) is recorded as skipped; with one to three free GPUs, six of its eight cases run; with four, all eight run. GPU availability does not affect the CPU results. Figure 8(c) is computed once all CPU and GPU inputs are complete; you can also [compute it manually](#figure-08-gpu).
 
 ### Input sets
 
@@ -348,7 +348,7 @@ bash ae/run_all_gpu.sh
 
 When the command finishes, it prints a GPU-only summary with the status, GPU count, repetitions and mean time for each of the eight cases, followed by the exact `SUMMARY.md` path. The same summary is saved as `result.md`; you do not need to locate the result directory yourself.
 
-The GPU-only entry defaults to physical GPUs **0, 3, 6, 7** on `allinai2plus` and creates a new result directory automatically. All eight cases need four idle GPUs: generation and training at batch 1/4 use one GPU; training at batch 16/64 uses four. Use `--output PATH` to choose the result directory. `--gpu-devices ID,...` selects a different set of GPUs; use it only if the authors assign you different GPUs. Busy devices are excluded, and the script never selects GPUs outside the specified set. Insufficient capacity is reported as partial or unavailable. This entry runs panel (b); panel (c) also needs CPU fan-out results. To compute panel (c) from this GPU run and your earlier `ae/run_all_no_gpu.sh` run, replace the two directories with the ones those runs printed:
+The GPU-only entry uses the GPUs reserved for this artifact on `allinai2plus` and creates a new result directory automatically. All eight cases need four idle GPUs: generation and training at batch 1/4 use one GPU; training at batch 16/64 uses four. Use `--output PATH` to choose the result directory. `--gpu-devices ID,...` selects a different set of GPUs; use it only if the authors assign you different GPUs. Busy devices are excluded, and the script never selects GPUs outside the specified set. Insufficient capacity is reported as partial or unavailable. This entry runs panel (b). As in the paper, panel (c) applies Equation 1 to these GPU times and the fan-out times of a CPU run. To produce it from this GPU run and your earlier `ae/run_all_no_gpu.sh` run, replace the two directories with the ones those runs printed:
 
 ```bash
 "$AE_PYTHON" ae/repro/gpu_occupation.py \
@@ -365,9 +365,9 @@ To rerun every panel of Figure 8:
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-The authors maintain the remote model and Python environments. The script checks the reserved GPUs 0, 3, 6 and 7 (the `devices` list in the remote configuration) and records busy or unavailable GPUs as skipped; it never uses other GPUs. If fewer GPUs are free, the run produces a result that is marked as partial; the parameters of each case stay the same. See the [GPU setup guide](ae/docs/self-hosting.md#gpu-setup).
+The authors maintain the remote model and Python environments. The script checks only the GPUs reserved for this artifact (the `devices` list in the remote configuration) and records busy or unavailable GPUs as skipped. If fewer GPUs are free, the run produces a result that is marked as partial; the parameters of each case stay the same. See the [GPU setup guide](ae/docs/self-hosting.md#gpu-setup).
 
-**Output and interpretation.** Panel (b) produces per-repeat generation and training times and `gpu/attempt-NNN/plots/figure-08b.png`; compare the same stage at the same batch size. Once both the CPU fan-out and the GPU measurements have succeeded, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and its plots. Panel (c) is a model, not a measurement: check whether shorter sandbox time raises the modeled useful GPU occupation and lowers staleness. Both panels appear in the run's English and Chinese comparison pages.
+**Output and interpretation.** Panel (b) produces per-repeat generation and training times and `gpu/attempt-NNN/plots/figure-08b.png`; compare the same stage at the same batch size. Once both the CPU fan-out and the GPU measurements have succeeded, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and its plots. Panel (c) follows the paper's Equation 1, the same method as the paper's Figure 8(c): check whether shorter sandbox time raises the expected GPU occupation and lowers staleness. Both panels appear in the run's English and Chinese comparison pages.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>

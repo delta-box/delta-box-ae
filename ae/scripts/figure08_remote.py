@@ -684,7 +684,8 @@ def gpu_summary_lines(record, output):
     if reason:
         lines += ['', 'Details: ' + str(reason).replace('\n', ' ')]
     lines += ['', 'Means use every recorded repetition; full GPU coverage requires all eight cases.',
-              'Scope: GPU Figure 8(b). CPU experiments and Figure 8(c) are outside this run.', '']
+              'Scope: Figure 8(b). As in the paper, Figure 8(c) applies Equation 1 to these timings and a CPU run\'s '
+              'fan-out times; see the README.', '']
     if prefix:
         for relative, label in (('plots/figure-08b.png', 'Result plot'),
                                 ('results/summary.json', 'Raw timings'),
