@@ -86,7 +86,7 @@ For a functional check, explicitly use `--no-pin`. Self-hosted setups can use `-
 
 <a id="gpu-setup"></a>
 
-The one-click workflow uses only auto mode: SSH to `allinai2plus` and probe physical GPUs 0–7. The initiating host needs no GPU. Copy and adjust `ae/configs/figure08-remote.json`, then set `"gpu_remote_config": "/absolute/path/to/remote.json"` in the main `AE_CONFIG`; relative paths resolve against that configuration's directory. Configure the SSH host, remote directory, model/Python paths, idle thresholds and top-level version constraints. `gpu.config` and `gpu.enabled` no longer control one-click execution.
+The one-click workflow uses only auto mode: SSH to `allinai2plus` and probe the physical GPUs listed in `devices` (0, 3, 6, 7 on the AE host). The initiating host needs no GPU. Copy and adjust `ae/configs/figure08-remote.json`, then set `"gpu_remote_config": "/absolute/path/to/remote.json"` in the main `AE_CONFIG`; relative paths resolve against that configuration's directory. Configure the SSH host, remote directory, model/Python paths, idle thresholds and top-level version constraints. `gpu.config` and `gpu.enabled` no longer control one-click execution.
 
 Prepare noninteractive SSH, rsync on both hosts, local plotting dependencies and the remote GPU environment. The default reuses deployed py312 without installing software; preflight records version drift. See the [Figure 8 guide](../paper/figure-08/README.md) for setup and exact parameters.
 

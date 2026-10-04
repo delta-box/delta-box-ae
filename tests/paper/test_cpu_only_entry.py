@@ -132,9 +132,9 @@ class CPUReportScopeTests(unittest.TestCase):
                 runner.record['gpu'].update(status=status, reason='original admission or measurement failure')
                 runner.save()
                 summary = (runner.output / 'SUMMARY.md').read_text()
-                self.assertIn('automatic remote GPU measurement', summary)
-                self.assertIn('Status: **' + status + '**; successful cases: 0/8.', summary)
-                self.assertIn('Full GPU coverage requires all eight cases', summary)
+                self.assertIn('GPU experiment summary — Figure 8(b)', summary)
+                self.assertIn('GPU cases passed: **0/8**.', summary)
+                self.assertIn('full GPU coverage requires all eight cases', summary)
                 self.assertIn('original admission or measurement failure', summary)
                 self.assertNotIn('outside the scope of this run', summary)
 
@@ -144,7 +144,8 @@ class CPUReportScopeTests(unittest.TestCase):
             runner.record['gpu'].update(status='complete', successful_cases=8, reason='all cases passed')
             runner.save()
             summary = (runner.output / 'SUMMARY.md').read_text()
-            self.assertIn('Status: **complete**; successful cases: 8/8.', summary)
+            self.assertIn('GPU cases passed: **8/8**.', summary)
+            self.assertIn('all cases passed', summary)
             self.assertNotIn('outside the scope of this run', summary)
 
 

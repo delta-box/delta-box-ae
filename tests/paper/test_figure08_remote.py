@@ -44,8 +44,13 @@ class RemoteTests(unittest.TestCase):
         return dict(gpus=[dict(index=i, uuid=f'GPU-{i}', memory_mib=4, utilization_pct=0)
                           for i in range(count)], processes=[])
 
+    def test_shipped_config_only_admits_the_reserved_gpus(self):
+        self.assertEqual(self.settings()['devices'], [0, 3, 6, 7])
+        self.assertEqual([g['index'] for g in remote.idle_devices([self.observation()] * 3, self.settings())],
+                         [0, 3, 6, 7])
+
     def test_idle_requires_stable_identity_no_pid_and_low_memory(self):
-        config = self.settings()
+        config = dict(self.settings(), devices=list(range(8)))
         obs = [self.observation() for _ in range(3)]
         obs[0]['processes'] = [dict(pid=123, uuid='GPU-0')]
         obs[1]['gpus'][1]['memory_mib'] = 86000

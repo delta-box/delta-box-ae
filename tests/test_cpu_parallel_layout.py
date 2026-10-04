@@ -35,7 +35,7 @@ def cpu_experiments():
 def review_namespace():
     # Load the real argument/admission code without importing VM/backend modules.
     tree = ast.parse((ROOT / 'ae/scripts/run_review.py').read_text())
-    names = {'gpu_case_selection', 'GPUCases', 'parser', 'main', 'isolated_background_baseline'}
+    names = {'gpu_case_selection', 'gpu_device_selection', 'GPUCases', 'parser', 'main', 'isolated_background_baseline'}
     tree.body = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))
                  and node.name in names]
     catalogue = cpu_experiments()

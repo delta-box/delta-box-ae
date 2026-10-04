@@ -1,4 +1,4 @@
-"""Every figure producer carries the campaign lock before any measured work."""
+"""Every figure producer records the actual source identity before any measured work."""
 from contextlib import ExitStack, redirect_stdout
 import importlib.util
 import io
@@ -34,15 +34,13 @@ class ProducerReleaseBindingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name)
-        self.checkout = self.base / 'locked-checkout'
+        self.checkout = self.base / 'checkout'
         source = self.checkout / 'ae/runners/fixture.py'
         source.parent.mkdir(parents=True)
         source.write_text('frozen = True\n')
         for arguments in (['init', '-q'], ['add', '.'],
                           ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture']):
             subprocess.run(['git', '-C', str(self.checkout), *arguments], check=True, capture_output=True)
-        self.lock_path = self.base / 'candidate-lock.json'
-        write_json(self.lock_path, lock.create(self.checkout))
         self.release = self.verify()
         self.images = self.base / 'images'
         self.images.mkdir()
@@ -56,7 +54,7 @@ class ProducerReleaseBindingTests(unittest.TestCase):
             e2b=dict(api_url='http://localhost:3000', sandbox_url='http://localhost:3002', template='fixture')))
 
     def verify(self):
-        return lock.verify(self.lock_path, root=self.checkout)
+        return lock.runtime_identity(self.checkout)
 
     def assert_bound(self, output):
         run = FreshRun(Evidence(output, 'fresh'), output / 'run.json', set())
@@ -126,34 +124,23 @@ class ProducerReleaseBindingTests(unittest.TestCase):
                 self.assertEqual(FANOUT.main(), 0)
                 self.assert_bound(output)
 
-    def test_changed_locked_source_stops_both_producers_before_output_or_execution(self):
+    def test_changed_source_is_recorded_without_blocking_the_producer(self):
         (self.checkout / 'ae/runners/fixture.py').write_text('frozen = False\n')
-        for module, arguments in ((VM, ['--experiment', 'correctness']), (FANOUT, ['--backend', 'cube'])):
-            with self.subTest(module=module.__name__), ExitStack() as stack:
-                output = self.base / module.__name__
-                self.common(stack, module, [*arguments, '--out', str(output)])
-                execute = stack.enter_context(patch.object(module, 'execute'))
-                with self.assertRaisesRegex(ValueError, 'release source mismatch'):
-                    module.main()
-                execute.assert_not_called()
-                self.assertFalse(output.exists())
-
-    def test_guest_launch_rejects_a_different_manifest_release_before_vm_start(self):
-        config = self.base / 'guest.json'
-        write_json(config, dict(release=dict(self.release, source_sha256='d' * 64)))
-        with patch.object(VM, 'from_environment', side_effect=self.verify), patch.object(VM.vm, 'start_vm') as start:
-            with self.assertRaisesRegex(ValueError, 'differs from the active guest-launch lock'):
-                VM.guest_run(config)
-            start.assert_not_called()
-
-    def test_guest_launch_rechecks_the_source_lock_after_staging(self):
-        config = self.base / 'guest.json'
-        write_json(config, dict(release=self.release))
-        (self.checkout / 'ae/runners/fixture.py').write_text('changed while staging\n')
-        with patch.object(VM, 'from_environment', side_effect=self.verify), patch.object(VM.vm, 'start_vm') as start:
-            with self.assertRaisesRegex(ValueError, 'release source mismatch'):
-                VM.guest_run(config)
-            start.assert_not_called()
+        changed = self.verify()
+        self.assertNotEqual(changed['source_sha256'], self.release['source_sha256'])
+        with ExitStack() as stack:
+            output = self.base / 'changed'
+            self.common(stack, VM, ['--experiment', 'correctness', '--out', str(output)])
+            stack.enter_context(patch.object(VM, 'build_guest_archive', return_value={'fixture_source_sha256': 'c' * 64}))
+            stack.enter_context(patch.object(VM, 'build_extra', return_value=([], dict(experiment='correctness', expected_edits=1))))
+            stack.enter_context(patch.object(VM, 'cached_digest', side_effect=lambda path, cache: file_record(path)))
+            def measured(argv, logdir, **kwargs):
+                (output / 'measurements').mkdir()
+                write_json(output / 'measurements/correctness.json', dict(ok=True))
+                return dict(status='ok')
+            stack.enter_context(patch.object(VM, 'execute', side_effect=measured))
+            self.assertEqual(VM.main(), 0)
+        self.assertEqual(json.loads((output / 'run.json').read_text())['release'], changed)
 
     def test_cli_imports_release_from_checkout_outside_repository_cwd(self):
         environment = dict(os.environ)

@@ -277,7 +277,7 @@ def remote_run(root, *, probe_only=False):
             if len(acquired) == 4:
                 break
         if not acquired:
-            report['reason'] = 'No idle/unreserved GPU among physical indices 0–7; CPU results unaffected'
+            report['reason'] = 'No idle/unreserved GPU among configured physical indices ' + ','.join(map(str, config['devices']))
             return report
         report['recheck'] = probe(config)
         available = {(g['index'], g['uuid']) for g in report['recheck']['idle']}
@@ -469,7 +469,13 @@ def collect_timings(output, remote, source):
     return combined
 
 
-def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_case_ids=None):
+def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_case_ids=None, device_indices=None):
+    if device_indices is not None:
+        if (not isinstance(device_indices, (list, tuple)) or not device_indices
+                or any(type(n) is not int or n not in range(8) for n in device_indices)
+                or len(set(device_indices)) != len(device_indices)):
+            raise ValueError('device_indices must be unique physical GPU indices 0–7')
+        device_indices = list(device_indices)
     wanted = requested_cases(requested_case_ids)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
@@ -481,6 +487,9 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
     started = False
     try:
         config = load_settings(config_path)
+        if device_indices is not None:
+            config['devices'] = device_indices
+        record['requested_devices'] = list(config['devices'])
         wanted = requested_cases(requested_case_ids if requested_case_ids is not None else config.get('requested_cases'))
         record.update(requested_cases=wanted, requested_case_count=len(wanted),
                       missing_selected_cases=list(wanted))
@@ -629,11 +638,71 @@ def finish_remote(review, analysis_dir, analyzed):
     return metadata
 
 
+
+def gpu_summary_lines(record, output):
+    """Render the GPU-only run directly from its recorded, hash-bound results."""
+    gpu = record.get('gpu', {})
+    prefix = record.get('gpu_output')
+    wanted = record.get('gpu_requested_cases') or requested_cases()
+    candidates = record.get('gpu_requested_devices') or gpu.get('requested_devices')
+    devices = ', '.join(map(str, candidates)) if candidates else 'see remote-config.json'
+    selected = ', '.join(str(item['index']) for item in gpu.get('selected', [])) or 'none'
+    attempt = record.get('attempt_number', 1)
+    lines = ['# GPU experiment summary — Figure 8(b)', '',
+             f"Status: **{record['status']}**; GPU cases passed: **{gpu.get('successful_cases', 0)}/8**.", '',
+             f"Host: `{gpu.get('host', 'allinai2plus')}`; requested physical GPUs: {devices}; selected: {selected}.",
+             f"Attempt: {attempt} ({'fresh run' if attempt == 1 else 'resumed run'}).", '']
+    if record.get('finished_at') and record.get('started_at'):
+        elapsed = (datetime.fromisoformat(record['finished_at']) -
+                   datetime.fromisoformat(record['started_at'])).total_seconds()
+        lines += [f'Review elapsed: {elapsed:.1f} seconds.', '']
+    cases = {}
+    evidence = gpu.get('evidence', {}).get('results/summary.json')
+    if prefix and evidence:
+        try:
+            path = checked_path(output, str(Path(prefix) / 'results/summary.json'))
+            if digest(path) != evidence['sha256'] or path.stat().st_size != evidence['bytes']:
+                raise ValueError('GPU summary hash/size mismatch')
+            summary = json.loads(path.read_text())
+            cases = {row['case_id']: row for row in summary['cases'] if row['status'] == 'ok'}
+            lines += [f"Model: {summary['model_label']}", '']
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            lines += [f'Timing table unavailable: {error}', '']
+    lines += ['| Case | Status | GPUs | Repetitions | Mean (s) |', '|---|---|---:|---:|---:|']
+    terminal = record['status'] not in ('running', 'pending')
+    for name in requested_cases():
+        row = cases.get(name)
+        if name not in wanted:
+            status, values = 'not selected', '- | - | -'
+        elif row:
+            status = 'ok'
+            values = f"{row['num_gpus']} | {row['reps']} | {row['timing_s']['mean']:.6f}"
+        else:
+            status, values = ('not completed' if terminal else 'pending'), '- | - | -'
+        lines.append(f'| {name} | {status} | {values} |')
+    reason = record.get('terminal_error') or gpu.get('reason')
+    if reason:
+        lines += ['', 'Details: ' + str(reason).replace('\n', ' ')]
+    lines += ['', 'Means use every recorded repetition; full GPU coverage requires all eight cases.',
+              'Scope: GPU Figure 8(b). CPU experiments and Figure 8(c) are outside this run.', '']
+    if prefix:
+        for relative, label in (('plots/figure-08b.png', 'Result plot'),
+                                ('results/summary.json', 'Raw timings'),
+                                ('manifest.json', 'GPU manifest'), ('ssh.log', 'Run log')):
+            path = Path(prefix) / relative
+            if checked_path(output, str(path)).is_file():
+                lines.append(f'[{label}]({path.as_posix()})')
+    lines += ['', '[Run record](review.json)', '']
+    return lines
+
+
 def report_lines(record, prefix):
     reason = record.get('reason', '').replace('\n', ' ')
+    candidates = (', '.join(map(str, record['requested_devices']))
+                  if record.get('requested_devices') else 'see remote-config.json')
     lines = ['', '## Figure 8(b) — automatic remote GPU measurement', '',
              f"Status: **{record['status']}**; successful cases: {record.get('successful_cases', 0)}/8.", '',
-             f"Host: `{record.get('host', 'allinai2plus')}`; candidate physical GPUs: 0–7.", '', reason, '',
+             f"Host: `{record.get('host', 'allinai2plus')}`; candidate physical GPUs: {candidates}.", '', reason, '',
              'Full GPU coverage requires all eight cases. Missing cases are never filled from historical data.', '']
     if record.get('requested_cases'):
         lines += [f"Selected cases: {', '.join(record['requested_cases'])}; selected status: **{record.get('selected_status', 'unavailable')}**. Global coverage remains {record.get('successful_cases', 0)}/8.", '']

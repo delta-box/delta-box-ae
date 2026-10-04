@@ -103,6 +103,9 @@ class ValidationOutputLockTests(unittest.TestCase):
                                          'Contending resume loaded live evidence')
                         self.record = {'status': 'ok'}
 
+                    def print_summary(self):
+                        pass
+
                     def run(self):
                         (output / 'review.json').write_text('active evidence')
                         test.assertEqual(review.main(inner), 2)

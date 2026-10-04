@@ -1,6 +1,6 @@
 # 验证进度、运行条件与版本
 
-更新日期：**2026-09-23**。当前发布入口位于 GitHub **`main`**，被测实现字节由[源码锁](../../release/candidate-lock.json)标识。入口和示例图片见 [AE README](../README.md)，当前图片、分析及原始数据见[统一结果目录](https://github.com/delta-box/deltabox-runtime/blob/main/ae/results/c775a9215718/README.md)。下列测量保留各自的源码版本与覆盖范围。
+更新日期：**2026-09-23**。当前发布入口位于 GitHub **`main`**，被测实现由每次结果记录的提交号和源码哈希标识。入口和示例图片见 [AE README](../README.md)，当前图片、分析及原始数据见[统一结果目录](https://github.com/delta-box/deltabox-runtime/blob/main/ae/results/c775a9215718/README.md)。下列测量保留各自的源码版本与覆盖范围。
 
 **托管 CPU 环境：**当前固定目录为 `spr4numa:/mnt/disk2/dyp/deltabox-runtime`，来源是 GitHub `delta-box/deltabox-runtime`。发布源码 `bf1dcbe` 的全目录预检确认 **17/17 个入口、1,404/1,404 个计划作业的依赖与输入可用，0 缺项**。真实评审账号已完成 **17 个入口、23 个作业**的首输入验收，以及 **12/12 个 DeltaBox 输入**各两次 checkpoint、一次 restore；两批测量源码为 `c775a92`，后续仅修改两个绘图文件的留白。155 项入口、清理及绘图检查，以及留白修正后的 36 项绘图检查全部通过、0 跳过，发布版也通过了真实账号的最小 C/R 与出图检查。来源与覆盖见[托管环境报告](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/hosted-environment-20260922/README.md)。完整 1,404 作业性能评测尚未执行，下面的历史缺依赖记录不代表当前环境。
 

@@ -5,9 +5,8 @@ NPD 使用 `guest/mock_npd.py`，guest 包只包含本目录 helper、共享 run
 不包含 `agent/` 的真实网络代理或搜索策略。DeltaBox worker 保留 trace 中的真实源码索引、文件动作、测试命令和状态校验，
 这些是论文 workload 的组成部分，不能为缩短时延而删除。
 
-冻结候选版本复测优先使用 `python3 replay/run_release.py --help`；详见 [源码锁及状态](../release/README.md)。
-旧 `ae/runners/deltabox` 是本目录的兼容链接。以下独立 runner 用于开发诊断，
-正式 release run 经 `run_release.py` 传递源码锁并统一绑定 NUMA/频率。
+旧 `ae/runners/deltabox` 是本目录的兼容链接。以下独立 runner 用于开发诊断；
+正式测量使用 `ae/run_all.sh`，由它统一绑定 NUMA/频率并记录源码身份。
 
 This runner executes recorded MCTS actions in a real checkpointed worker and runs
 `SandboxController.checkpoint_action` / `restore_action` from the **current

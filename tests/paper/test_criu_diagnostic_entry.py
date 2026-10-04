@@ -142,7 +142,7 @@ class DiagnosticHostedTests(unittest.TestCase):
 def review_contract():
     """Execute production parser/main/validators without importing VM backends."""
     source=ROOT/'ae/scripts/run_review.py'
-    names={'parser','GPUCases','gpu_case_selection','validate_gpu_selection','isolated_background_baseline',
+    names={'parser','GPUCases','gpu_case_selection','gpu_device_selection','validate_gpu_selection','isolated_background_baseline',
            'validate_isolated_baseline_resume','validation_job_limit','apply_validation_defaults',
            'isolated_validation_output','main'}
     tree=ast.parse(source.read_text())
