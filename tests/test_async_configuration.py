@@ -64,6 +64,13 @@ class AsyncConfigurationTests(unittest.TestCase):
             self.assertEqual(config['DELTABOX_ASYNC_TEMPLATE_FULL_DUMP'], '0')
             self.assertEqual(config['DELTABOX_CRIU_LAZY_RESTORE'], '1' if mode == 'slow' else '0')
 
+    def test_lazy_daemon_prestart_is_limited_to_the_incremental_lazy_slow_path(self):
+        for profile in ('runtime-default', 'historical-async-full', 'async-incremental', 'async-incremental-lazy'):
+            for mode in ('fast', 'slow'):
+                with self.subTest(profile=profile, mode=mode):
+                    expected = '1' if (profile, mode) == ('async-incremental-lazy', 'slow') else '0'
+                    self.assertEqual(checkpoint_environment(profile, mode)['DELTABOX_CRIU_LAZY_PRESTART'], expected)
+
     def test_lazy_restore_rejects_unpatched_parent_reader(self):
         self.controller.enable_criu_lazy_restore = True
         self.controller.criu_restore_bin = '/stock/criu'

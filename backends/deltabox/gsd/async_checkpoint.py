@@ -266,6 +266,9 @@ class AsyncIncrementalCheckpoint:
                 prev_pid_mode="exact-page-content" if parent else "full-seed",
                 resources=resources, criu_binary=self.binary_identity)
             c.registry[checkpoint_id] = entry
+            watch = getattr(c, "_watch_lazy_prestart", None)
+            if watch is not None:
+                watch(entry)
             # Worker owns its PID handle and slot through process disposal.
             owned_submit = getattr(c._dump_pool, "submit_owned_task", None)
             if owned_submit is not None:

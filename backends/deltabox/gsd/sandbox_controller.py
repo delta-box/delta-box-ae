@@ -247,9 +247,27 @@ class SandboxController:
             os.environ.get("DELTABOX_CRIU_LAZY_RESTORE_PARALLEL", "1") != "0"
         )
         self._lazy_page_daemons = []
+        # Idle daemons armed for a durable image before any restore asks for
+        # it. They hold no UFFD and do not pin images until a restore takes them.
+        self.lazy_prestart = (
+            self.enable_criu_lazy_restore
+            and os.environ.get("DELTABOX_CRIU_LAZY_PRESTART", "0") == "1"
+        )
+        self.lazy_prestart_max = max(
+            1, int(os.environ.get("DELTABOX_CRIU_LAZY_PRESTART_MAX", "64")))
+        self._lazy_prestart_lock = threading.Lock()
+        self._lazy_prestarted = {}
+        self._lazy_prestart_futures = {}
+        self._lazy_prestart_retired = set()
+        self._lazy_prestart_closing = False
+        self._lazy_prestart_pool = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="lazy-prestart")
+            if self.lazy_prestart else None)
         if self.enable_criu_lazy_restore:
             mode = "parallel" if self.parallel_lazy_restore else "serial"
-            print(f"[Controller] CRIU lazy-pages slow restore ENABLED ({mode})")
+            prestart = (f", prestart max={self.lazy_prestart_max}"
+                        if self.lazy_prestart else "")
+            print(f"[Controller] CRIU lazy-pages slow restore ENABLED ({mode}{prestart})")
         
         print(f"[Controller] Opening OverlayFS mount point: {self.overlay_mount_point}")
         self.mount_fd = os.open(self.overlay_mount_point, os.O_RDONLY | os.O_DIRECTORY)
@@ -324,8 +342,8 @@ class SandboxController:
                 alive.append(proc)
         self._lazy_page_daemons = alive
 
-    def _stop_lazy_pages_daemon(self, proc):
-        """Stop only a daemon owned by this controller; reap it before GC."""
+    @staticmethod
+    def _stop_lazy_daemon_process(proc):
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -333,6 +351,10 @@ class SandboxController:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=2)
+
+    def _stop_lazy_pages_daemon(self, proc):
+        """Stop only a daemon owned by this controller; reap it before GC."""
+        self._stop_lazy_daemon_process(proc)
         self._reap_lazy_page_daemons()
 
     def _lazy_reader_ids(self):
@@ -344,6 +366,16 @@ class SandboxController:
 
     def _start_lazy_pages_daemon(self, mem_path: str) -> subprocess.Popen:
         self._reap_lazy_page_daemons()
+        proc = self._spawn_lazy_pages_daemon(mem_path)
+        self._lazy_page_daemons.append(proc)
+        return proc
+
+    def _spawn_lazy_pages_daemon(self, mem_path: str) -> subprocess.Popen:
+        """Start a ready daemon; the caller decides when it becomes a reader.
+
+        Also runs on the prestart worker, so it must not touch the reader list
+        that the restore and GC paths own.
+        """
         sock = os.path.join(mem_path, "lazy-pages.socket")
         log_path = os.path.join(mem_path, "lazy-pages.log")
         for p in (sock, os.path.join(mem_path, "lazy-pages.pid")):
@@ -370,7 +402,6 @@ class SandboxController:
             os.close(wfd)
         try:
             proc.deltabox_mem_path = mem_path
-            self._lazy_page_daemons.append(proc)
             ready = b""
             deadline = time.monotonic() + 2.0
             while time.monotonic() < deadline:
@@ -393,10 +424,123 @@ class SandboxController:
                 time.sleep(0.001)
             raise TimeoutError(f"criu lazy-pages daemon did not signal ready: {sock}")
         except BaseException:
-            self._stop_lazy_pages_daemon(proc)
+            self._stop_lazy_daemon_process(proc)
             raise
         finally:
             os.close(rfd)
+
+    def _watch_lazy_prestart(self, entry: dict) -> None:
+        """Arm a daemon for this image once its dump is atomically durable."""
+        future = entry.get("dump_future")
+        if not getattr(self, "lazy_prestart", False) or future is None:
+            return
+        future.add_done_callback(
+            lambda done, entry=entry: self._on_durable_image(entry, done))
+
+    def _on_durable_image(self, entry: dict, future) -> None:
+        # Runs on the dump worker; only queue background work here.
+        if future.cancelled() or future.exception() is not None:
+            return
+        if (entry.get("state") not in (None, "DURABLE_READY") or entry.get("dump_error")
+                or (entry.get("dump_stats") or {}).get("dump_error")):
+            return
+        self._schedule_lazy_prestart(entry.get("mem_path"))
+
+    def _schedule_lazy_prestart(self, mem_path):
+        pool = getattr(self, "_lazy_prestart_pool", None)
+        if pool is None or not mem_path:
+            return None
+        with self._lazy_prestart_lock:
+            if (self._lazy_prestart_closing or mem_path in self._lazy_prestart_retired
+                    or mem_path in self._lazy_prestarted
+                    or mem_path in self._lazy_prestart_futures):
+                return None
+            try:
+                future = pool.submit(self._prestart_lazy_pages_daemon, mem_path)
+            except RuntimeError:
+                return None
+            self._lazy_prestart_futures[mem_path] = future
+        return future
+
+    def _prestart_lazy_pages_daemon(self, mem_path):
+        """Background start; a restore that needs this image waits for it."""
+        try:
+            with self._lazy_prestart_lock:
+                if self._lazy_prestart_closing or mem_path in self._lazy_prestart_retired:
+                    return None
+                evicted = []
+                while len(self._lazy_prestarted) >= self.lazy_prestart_max:
+                    oldest = next(iter(self._lazy_prestarted))
+                    evicted.append(self._lazy_prestarted.pop(oldest))
+            for proc in evicted:
+                self._stop_lazy_daemon_process(proc)
+            if not os.path.isdir(mem_path):
+                return None
+            started = time.perf_counter()
+            proc = self._spawn_lazy_pages_daemon(mem_path)
+            proc.deltabox_prestart_ms = (time.perf_counter() - started) * 1000
+            with self._lazy_prestart_lock:
+                keep = not (self._lazy_prestart_closing
+                            or mem_path in self._lazy_prestart_retired)
+                if keep:
+                    self._lazy_prestarted[mem_path] = proc
+            if not keep:
+                self._stop_lazy_daemon_process(proc)
+                return None
+            return proc
+        except Exception as e:
+            print(f"[Controller] WARN: lazy-pages prestart failed for {mem_path}: "
+                  f"{type(e).__name__}: {e}")
+            return None
+        finally:
+            with self._lazy_prestart_lock:
+                self._lazy_prestart_futures.pop(mem_path, None)
+
+    def _take_lazy_pages_daemon(self, mem_path):
+        """Return (daemon, source, background start ms) for a cold lazy restore."""
+        lock = getattr(self, "_lazy_prestart_lock", None)
+        if lock is not None:
+            with lock:
+                proc = self._lazy_prestarted.pop(mem_path, None)
+                pending = None if proc is not None else self._lazy_prestart_futures.get(mem_path)
+            source = "prestarted"
+            if pending is not None:
+                # Two daemons must never bind the same image socket.
+                pending.result(timeout=10)
+                source = "prestart-wait"
+                with lock:
+                    proc = self._lazy_prestarted.pop(mem_path, None)
+            if proc is not None and proc.poll() is None:
+                self._lazy_page_daemons.append(proc)
+                return proc, source, getattr(proc, "deltabox_prestart_ms", None)
+            if proc is not None:
+                self._stop_lazy_daemon_process(proc)
+        return self._start_lazy_pages_daemon(mem_path), "synchronous", None
+
+    def _retire_lazy_prestart(self, mem_path) -> None:
+        lock = getattr(self, "_lazy_prestart_lock", None)
+        if lock is None or not mem_path:
+            return
+        with lock:
+            self._lazy_prestart_retired.add(mem_path)
+            proc = self._lazy_prestarted.pop(mem_path, None)
+        if proc is not None:
+            self._stop_lazy_daemon_process(proc)
+
+    def _close_lazy_prestart(self) -> None:
+        lock = getattr(self, "_lazy_prestart_lock", None)
+        if lock is None:
+            return
+        with lock:
+            self._lazy_prestart_closing = True
+        pool = getattr(self, "_lazy_prestart_pool", None)
+        if pool is not None:
+            pool.shutdown(wait=True)
+        with lock:
+            idle = list(self._lazy_prestarted.values())
+            self._lazy_prestarted.clear()
+        for proc in idle:
+            self._stop_lazy_daemon_process(proc)
 
     def _persist_epoch(self):
         tmp = self.npd_epoch_file + ".tmp"
@@ -3147,6 +3291,8 @@ class SandboxController:
         pass_fds = (external_pidns_fd,) if external_pidns_fd is not None else ()
         inherited_resources = ExitStack()
         lazy_daemon = None
+        lazy_daemon_source = None
+        lazy_daemon_prestart_ms = None
         try:
             if physical_target.get("memory_protocol") == "exact-parent-v1":
                 try:
@@ -3161,7 +3307,8 @@ class SandboxController:
             lazy_daemon_ms = 0.0
             if self.enable_criu_lazy_restore:
                 t_lazy_0 = time.time()
-                lazy_daemon = self._start_lazy_pages_daemon(physical_target['mem_path'])
+                lazy_daemon, lazy_daemon_source, lazy_daemon_prestart_ms = (
+                    self._take_lazy_pages_daemon(physical_target['mem_path']))
                 lazy_daemon_ms = (time.time() - t_lazy_0) * 1000
                 cmd.append("--lazy-pages")
             slow_pre_criu_ms = (time.time() - slow_coord_t0) * 1000
@@ -3264,6 +3411,9 @@ class SandboxController:
         print(f"[PERF] Restore ID {effective_id}: OverlayFS={ovl_time:.2f}ms, "
               f"CRIU{lazy_label}={criu_time:.2f}ms")
         print("Full Restore Success")
+        if lazy_daemon is not None:
+            # A daemon serves one restore; the next restore of this image needs another.
+            self._schedule_lazy_prestart(physical_target['mem_path'])
         component_end = time.time()
         restore_api_wall_ms = (component_end - restore_api_t0) * 1000
         slow_post_criu_ms = (component_end - slow_criu_end) * 1000
@@ -3282,6 +3432,8 @@ class SandboxController:
             "restore_slow_total_ms": restore_total_ms,
             "restore_slow_pre_criu_ms": slow_pre_criu_ms,
             "restore_slow_lazy_daemon_ms": lazy_daemon_ms,
+            "restore_slow_lazy_daemon_source": lazy_daemon_source,
+            "restore_slow_lazy_daemon_prestart_ms": lazy_daemon_prestart_ms,
             "restore_slow_post_criu_ms": slow_post_criu_ms,
             "restore_slow_lazy": self.enable_criu_lazy_restore,
             "restore_namespace_drain_ms": namespace_drain_ms,
@@ -3321,6 +3473,7 @@ class SandboxController:
                 if self.template_pool is not None:
                     self.template_pool.discard(rid)
                 mp = entry.get("mem_path")
+                self._retire_lazy_prestart(mp)
                 if mp and os.path.isdir(mp):
                     shutil.rmtree(mp, ignore_errors=True)
                     pruned_mem += 1
@@ -3352,6 +3505,7 @@ class SandboxController:
             self._dump_pool.shutdown(wait=True)
         except Exception as e:
             print(f"[Controller] WARN: dump pool shutdown failed: {e}")
+        self._close_lazy_prestart()
         for proc in list(getattr(self, "_lazy_page_daemons", ())):
             self._stop_lazy_pages_daemon(proc)
         try:

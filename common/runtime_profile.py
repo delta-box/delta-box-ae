@@ -11,6 +11,7 @@ def checkpoint_environment(profile: str = "runtime-default", mode: str = "fast")
         raise ValueError(f"unknown checkpoint configuration: {profile}/{mode}")
     incremental = profile != "historical-async-full"
     detached = profile in ("async-incremental", "async-incremental-lazy")
+    lazy = mode == "slow" and profile != "async-incremental"
     return {
         "DELTABOX_CHECKPOINT_STASH_TEMPLATE": "1",
         "DELTABOX_ASYNC_INCREMENTAL_DUMP": "1" if detached else "0",
@@ -21,6 +22,7 @@ def checkpoint_environment(profile: str = "runtime-default", mode: str = "fast")
         "DELTABOX_RESTORE_FASTFORK_DUMP_PID": "0",
         "DELTABOX_FIXED_SLOT_TIMEOUT_S": "5",
         "DELTABOX_FORCE_CRIU_RESTORE": "1" if mode == "slow" else "0",
-        "DELTABOX_CRIU_LAZY_RESTORE": "1" if mode == "slow" and profile != "async-incremental" else "0",
+        "DELTABOX_CRIU_LAZY_RESTORE": "1" if lazy else "0",
         "DELTABOX_CRIU_LAZY_RESTORE_PARALLEL": "0",
+        "DELTABOX_CRIU_LAZY_PRESTART": "1" if lazy and profile == "async-incremental-lazy" else "0",
     }

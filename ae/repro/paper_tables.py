@@ -152,8 +152,10 @@ SLOW_RESTORE_WINDOWS = (
     ("critical", "restore_critical_ms", "Recorded restore_critical_ms return field; its timing boundary follows the source record, never inferred by subtraction."),
     ("component", "restore_table3_total_ms", "Complete component window, including lazy daemon startup and coordination."),
     ("api", "restore_api_wall_ms", "Complete measured restore API, including work outside the component window."),
-    ("lazy_daemon", "restore_slow_lazy_daemon_ms", "Lazy-pages service startup, already included in the component window; do not add it again."),
+    ("lazy_daemon", "restore_slow_lazy_daemon_ms", "Restore-path wait for a ready lazy-pages service, already included in the component window; do not add it again."),
+    ("lazy_prestart", "restore_slow_lazy_daemon_prestart_ms", "Background lazy-pages service startup before the restore request; outside every restore window. Its event count is the number of restores that used a prestarted service."),
 )
+OPTIONAL_SLOW_RESTORE_WINDOWS = {"lazy_prestart"}
 
 
 def slow_restore_windows(result):
@@ -171,6 +173,8 @@ def slow_restore_windows(result):
         windows = {}
         for name, field, boundary in SLOW_RESTORE_WINDOWS:
             matches = [(index, row) for index, row in population if row.get("metric") == field]
+            if not matches and name in OPTIONAL_SLOW_RESTORE_WINDOWS:
+                continue
             if matches and any(type(row.get("n")) is not int or row["n"] <= 0 for _, row in matches):
                 cell = _empty("Restore window requires positive integer event counts.", matches)
             elif matches and instances and {row.get("instance") for _, row in matches} != set(instances):
@@ -384,8 +388,13 @@ def table3(plt, result):
             def shown(name):
                 cell = windows[name]
                 return f"{cell['value']:.2f} ms" if cell["status"] == "measured" else MISSING
+            prestart = windows.get("lazy_prestart")
+            lazy_note = ("§ Coordination includes lazy startup (" + shown("lazy_daemon") + ")."
+                         if prestart is None or prestart["status"] != "measured" else
+                         "§ Coordination includes lazy wait (" + shown("lazy_daemon") + "); "
+                         + f"{prestart['n']}/{windows['lazy_daemon']['n']} prestarted.")
             notes = (
-                "§ Coordination includes lazy startup (" + shown("lazy_daemon") + ").",
+                lazy_note,
                 r"$\parallel$ Checkpoint: overlap model; slow critical: " + shown("critical") + ".",
                 "Restore component window shown above; full API: " + shown("api") + ".",
             )

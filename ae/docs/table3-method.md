@@ -37,7 +37,8 @@ VM runner 在自身私有 mount namespace 中，把 rootfs 和 data image 放到
 ## 每个数字的定义
 
 - Overlay、fork、CRIU：事件原始计时；slow 字段现在和 fast 字段一起进入分析，按实际事件数加权。
-- Coordination：直接计时的串行前/后处理。fast 使用 fork 分派前和 fork 响应后的两个不重叠区间；slow 使用 CRIU 调用前、后的两个区间。lazy daemon 启动已包含在 slow 前处理内，不能重复相加。
+- Coordination：直接计时的串行前/后处理。fast 使用 fork 分派前和 fork 响应后的两个不重叠区间；slow 使用 CRIU 调用前、后的两个区间。恢复路径上等待 lazy daemon 就绪的时间（`restore_slow_lazy_daemon_ms`）已包含在 slow 前处理内，不能重复相加。
+- lazy daemon 预启动：`async-incremental-lazy` 的 slow 配置设置 `DELTABOX_CRIU_LAZY_PRESTART=1`；`historical-async-full` 诊断对照不启用，仍在恢复路径上同步启动。每个快照的异步 dump 原子落盘（`DURABLE_READY`）后，controller 在后台线程为该镜像目录启动 `criu lazy-pages`，等它监听 socket 并报告就绪；daemon 空闲等待 restore 连接，不持有 UFFD，也不阻止 GC 回收该快照。冷恢复直接接管已就绪的 daemon，恢复返回后在后台为同一快照再预启动一个，供下次恢复使用。若预启动尚未完成，恢复路径等待它完成；若没有可用 daemon，退回到恢复路径上同步启动。每次恢复都记录 `restore_slow_lazy_daemon_source`（`prestarted`、`prestart-wait` 或 `synchronous`）；后台启动耗时单独记为 `restore_slow_lazy_daemon_prestart_ms`，不计入任何恢复窗口。空闲 daemon 最多保留 `DELTABOX_CRIU_LAZY_PRESTART_MAX` 个（默认 64），超出时关闭最早的一个。
 - `restore_table3_total_ms`：active teardown 之后，组件恢复开始到 controller bookkeeping 结束的直接窗口。fast ioctl 与 fork 重叠；本轮 lazy 配置为串行 ioctl + CRIU。
 - 新图底行明确写 component window / checkpoint overlap model。完整 `restore_api_wall_ms`、`restore_wall_ms`、原 `restore_critical_ms` 同时保留，不能把组件窗口当作完整 API 阻塞，也不能宣称它与历史论文未解析的 coordination 定义完全相同。
 - checkpoint 重叠模型逐事件计算 `max(0, checkpoint_api_wall_ms - latency_ms)`，在 manifest 标成 `derived-model`。本 replay 没有直接测量并发在线 LLM 推理，因此模型值不代表实测端到端阻塞。

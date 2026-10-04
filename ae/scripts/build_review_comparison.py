@@ -25,7 +25,7 @@ PAPER_LAYOUT_KEYS = frozenset(('table-02', 'table-03', 'figure-02', 'figure-06',
 PAPER_SHA256 = "1cc012a6ba4afdd127372a236333983ad6d17934ac63680b37faa3e6f65bb95e"
 ITEMS = {
     "table-02": ("Table 2", ("table-02-",), "Full controller API event means; separate backend cohorts. Paper critical timers can differ."),
-    "table-03": ("Table 3", ("table-02-deltabox", "table-03-slow"), "Critical, component and complete API timers are separate. Daemon startup is included in the component window."),
+    "table-03": ("Table 3", ("table-02-deltabox", "table-03-slow"), "Critical, component and complete API timers are separate. The restore-path lazy-pages wait is included in the component window; a prestarted daemon's background startup is not."),
     "figure-02": ("Figure 2", ("figure-02-",), "Positive filesystem writes for delta bars; actual contributors per step; binary KiB/MiB."),
     "figure-06": ("Figure 6", ("figure-06-",), "Memory-policy and adaptive populations remain separate; missing arms stay missing."),
     "figure-07": ("Figure 7", ("table-02-deltabox", "table-02-e2b"), "Derived serialized component model, NOT measured end-to-end latency or async overlap."),

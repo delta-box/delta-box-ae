@@ -28,6 +28,13 @@ class RestoreWindows(unittest.TestCase):
                          {'critical':9.5,'component':14.5,'api':95.,'lazy_daemon':4.75})
         self.assertTrue(all(v['n']==4 for v in windows.values()))
         self.assertEqual(data,old)
+    def test_prestart_window_is_reported_only_when_recorded(self):
+        data=self.fixture()
+        self.assertNotIn('lazy_prestart',paper_tables.slow_restore_windows(data)[0]['windows'])
+        data['metrics']+=[row('restore_slow_lazy_daemon_prestart_ms',v,n,i) for i,n,v in [('a',1,5.),('b',2,6.)]]
+        window=paper_tables.slow_restore_windows(data)[0]['windows']['lazy_prestart']
+        self.assertEqual((window['value'],window['n']),(17/3,3))
+        self.assertEqual(paper_tables.slow_restore_windows(data)[0]['windows']['component']['n'],4)
     def test_missing_critical_never_uses_component_minus_daemon_or_api(self):
         data=self.fixture();data['metrics']=[r for r in data['metrics'] if r['metric']!='restore_critical_ms']
         windows=paper_tables.slow_restore_windows(data)[0]['windows']

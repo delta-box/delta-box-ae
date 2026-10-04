@@ -1842,6 +1842,10 @@ def _run_replay(args: argparse.Namespace, resources: ReplayResources) -> None:
                         "restore_slow_pre_criu_ms"),
                     "restore_slow_lazy_daemon_ms": r.get(
                         "restore_slow_lazy_daemon_ms"),
+                    "restore_slow_lazy_daemon_source": r.get(
+                        "restore_slow_lazy_daemon_source"),
+                    "restore_slow_lazy_daemon_prestart_ms": r.get(
+                        "restore_slow_lazy_daemon_prestart_ms"),
                     "restore_slow_post_criu_ms": r.get(
                         "restore_slow_post_criu_ms"),
                     "restore_slow_lazy": r.get("restore_slow_lazy"),

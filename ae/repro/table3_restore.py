@@ -151,7 +151,8 @@ def build_timing_report(result, paper_root=None):
     return dict(schema_version=1, kind=KIND, windows=groups, reference=reference,
                 comparisons=compare_windows(groups, reference),
                 notes=['All window values come from their recorded raw timer fields, never component minus daemon or API subtraction.',
-                       'Daemon startup is already inside the complete component window; it is not added again.',
+                       'The restore-path daemon wait is already inside the complete component window; it is not added again.',
+                       'A prestarted daemon is started in the background after its image is durable; that startup time is reported separately and is outside every restore window.',
                        'Archive values are only reference statistics; missing fresh fields remain unavailable.',
                        'A same-named critical-field comparison is not a claim of byte-identical historical deployment.'])
 
@@ -164,7 +165,8 @@ def timing_markdown(report, *, language='en'):
     labels = {'critical': 'critical（原返回字段）' if zh else 'Critical return field',
               'component': '完整组件窗口' if zh else 'Complete component window',
               'api': '完整 restore API' if zh else 'Complete restore API',
-              'lazy_daemon': '其中 lazy-pages 服务启动' if zh else 'Included lazy-pages startup'}
+              'lazy_daemon': '其中等待 lazy-pages 服务就绪' if zh else 'Included lazy-pages service wait',
+              'lazy_prestart': 'lazy-pages 服务后台预启动（不在恢复路径上）' if zh else 'Lazy-pages service prestart (background, off the restore path)'}
     lines = ['### Slow restore 计时窗口' if zh else '### Slow restore timing windows', '']
     for group, comparison in zip(report['windows'], report['comparisons']):
         population = group['population']
@@ -194,8 +196,10 @@ def timing_markdown(report, *, language='en'):
                              'The reference subset is fixed by archived names and event counts; all new inputs remain reported.'), '']
         else:
             lines += [('归档字段对照不可用：' if zh else 'Archive-field comparison unavailable: ')+comparison['reason'], '']
-    lines += [('critical、完整组件和完整 API 是不同窗口。服务启动已包含在组件窗口内，不能重复相加；critical 不通过减去服务启动推算。' if zh else
-               'Critical, complete component, and complete API are different windows. Daemon startup is already inside the component window; critical is never derived by subtracting it.'),
+    lines += [('critical、完整组件和完整 API 是不同窗口。恢复路径上等待服务就绪的时间已包含在组件窗口内，不能重复相加；critical 不通过减去这段时间推算。'
+               '预启动的服务在镜像落盘后于后台启动，其启动时间单独列出，不属于任何恢复窗口。' if zh else
+               'Critical, complete component, and complete API are different windows. The restore-path service wait is already inside the component window; critical is never derived by subtracting it. '
+               'A prestarted service starts in the background once its image is durable; its startup time is listed separately and belongs to no restore window.'),
               ('参考值只用于单独对照，不填补本次缺失数据；同名字段比较不代表原 guest 源码和配置逐字节一致。' if zh else
                'References only support a separate comparison and never fill missing current data. Matching field names does not prove byte-identical historical guest source/configuration.'), '']
     return lines
