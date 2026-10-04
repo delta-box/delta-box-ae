@@ -153,7 +153,11 @@ def finish_gpu(review, analysis_dir, analyzed):
             raise ValueError("Cannot render invalid GPU artifacts: " + str(error)) from error
     selected = set(review.record["experiments"])
     # Figure 8(c) is derived for the full fan-out+GPU selection, not a GPU-only run.
-    if (set(FANOUT).issubset(selected) and not review.limits
+    # Each fan-out backend is one complete job, so an input cap does not truncate it;
+    # quick checks and event prefixes still never feed the model.
+    args = getattr(review, "args", None)
+    truncated = getattr(args, "quick_check", False) or getattr(args, "max_events", None) is not None
+    if (set(FANOUT).issubset(selected) and not truncated
             and review.record.get("measurement_run_purpose") not in ("quick-check", "smoke")):
         theory = dict(experiment=THEORY, status="failed", planned_jobs=1, successful_jobs=0, reasons=[])
         review.record["coverage"] = [item for item in review.record["coverage"] if item["experiment"] != THEORY]
@@ -177,8 +181,13 @@ def finish_gpu(review, analysis_dir, analyzed):
                                       "--fanout-summary", str(analysis_dir / "summary.json"),
                                       "--output", str(destination), "--plot"], 300)
             if ok:
-                theory.update(status="ok", successful_jobs=1, available_jobs=1)
-                panel.update(status="ok", input=file_record(destination / "occupation.json"),
+                # Unmeasured points follow the declared fan-out protocol; they stay visible.
+                unavailable = inputs["unavailable"]
+                reasons = [row["reason"] for row in unavailable]
+                theory.update(status="ok", successful_jobs=1, available_jobs=1,
+                              unavailable_points=unavailable, reasons=reasons)
+                panel.update(status="partial" if unavailable else "ok", reasons=list(reasons),
+                             input=file_record(destination / "occupation.json"),
                              artifacts=[file_record(destination / "plots" / ("figure-08c." + ext))
                                         for ext in ("png", "pdf")])
             else:

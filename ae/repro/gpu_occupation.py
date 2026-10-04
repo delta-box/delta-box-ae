@@ -135,12 +135,28 @@ def validate_inputs(inputs):
         if not isinstance(row.get("estimated"), bool):
             raise ValueError("sandbox estimated must be an explicit boolean")
         sandbox[backend, n] = row
+    unavailable = normalized.get("unavailable", [])
+    if not isinstance(unavailable, list):
+        raise ValueError("unavailable must be a list")
+    declared = set()
+    for row in unavailable:
+        _object(row, "unavailable point")
+        backend = _text(row.get("backend"), "unavailable backend")
+        n = _positive_int(row.get("n"), "unavailable n")
+        _text(row.get("reason"), "unavailable reason")
+        if backend not in backends or n not in batches:
+            raise ValueError(f"Unavailable point {backend} N={n} is outside the requested grid")
+        if (backend, n) in declared or (backend, n) in sandbox:
+            raise ValueError(f"Conflicting unavailable point for {backend} N={n}")
+        declared.add((backend, n))
     for n in batches:
         if n not in gpu:
             raise ValueError(f"Missing GPU timing for N={n}")
         for backend in backends:
-            if (backend, n) not in sandbox:
+            if (backend, n) not in sandbox and (backend, n) not in declared:
                 raise ValueError(f"Missing sandbox timing for {backend} N={n}")
+    if not sandbox:
+        raise ValueError("No sandbox timing is available")
     return normalized
 
 
@@ -149,9 +165,12 @@ def calculate_occupation(inputs):
     inputs = validate_inputs(inputs)
     gpu = {row["n"]: row for row in inputs["gpu_timings"]}
     sandbox = {(row["backend"], row["n"]): row for row in inputs["sandbox_timings"]}
+    unavailable = copy.deepcopy(inputs.get("unavailable", []))
     rows = []
     for backend in inputs["backends"]:
         for n in inputs["batches"]:
+            if (backend, n) not in sandbox:
+                continue
             device, host = gpu[n], sandbox[backend, n]
             s, g, t = host["t_sandbox_s"], device["t_gen_s"], device["t_train_s"]
             # Scaling avoids overflow in sums of individually finite durations.
@@ -173,6 +192,7 @@ def calculate_occupation(inputs):
         source_kind=inputs["source_kind"], model_label=inputs["model_label"],
         batches=list(inputs["batches"]), backends=list(inputs["backends"]),
         formulas=dict(FORMULAS), assumptions=list(ASSUMPTIONS), rows=rows,
+        coverage="partial" if unavailable else "complete", unavailable=unavailable,
         estimated_points=[dict(backend=r["backend"], n=r["n"], component="t_sandbox_s")
                           for r in rows if r["estimated"]],
         inputs=inputs, provenance=copy.deepcopy(inputs.get("provenance", {})),
@@ -301,10 +321,18 @@ def inputs_from_measurements(suite, summary, *, batches=DEFAULT_BATCHES):
         raise ValueError("Conflicting fanout comparison populations; select one plot group")
     gpu_kind, host_kind = suite["source_kind"], _fanout_source_kind(summary)
     source_kind = gpu_kind if gpu_kind == host_kind else "mixed"
+    ordered = [b for b in BACKEND_ORDER if b in backends]
+    present = {(row["backend"], row["n"]) for row in rows}
+    unavailable = []
+    for backend in ordered:
+        measured = ", ".join(str(n) for n in sorted(n for b, n in seen if b == backend))
+        unavailable += [dict(backend=backend, n=n,
+                             reason=f"No {backend} fan-out was measured at N={n}; this run measured N={measured}.")
+                        for n in batches if (backend, n) not in present]
     inputs = dict(
         schema_version=1, kind="gpu-occupation-inputs", source_kind=source_kind,
         model_label=suite["model_label"], batches=batches,
-        backends=[b for b in BACKEND_ORDER if b in backends],
+        backends=ordered, unavailable=unavailable,
         gpu_timings=[dict(
             n=n, t_gen_s=cases["generation", n]["timing_s"]["mean"],
             t_train_s=cases["training", n]["timing_s"]["mean"],
@@ -320,7 +348,8 @@ def inputs_from_measurements(suite, summary, *, batches=DEFAULT_BATCHES):
         ),
         notes=["GPU phase durations use timing_s.mean; fanout panel-a y is converted from ms to s.",
                "Individual case and series records are retained in each timing row's source.",
-               "An unlabeled fanout source is treated as assumed input."],
+               "An unlabeled fanout source is treated as assumed input.",
+               "A backend/N point without a measured fan-out is listed as unavailable, never filled."],
     )
     return validate_inputs(inputs)
 
@@ -378,6 +407,8 @@ def main(argv=None):
             writer.writerows(dict(row, source_kind=result["source_kind"], model_label=result["model_label"])
                              for row in result["rows"])
         print(f"Wrote CPU occupation model to {args.output / 'occupation.json'}")
+        for row in result["unavailable"]:
+            print(f"Unavailable: {row['backend']} N={row['n']}: {row['reason']}")
         return 0
     except (ValueError, OSError, ImportError) as exc:
         print(f"error: {exc}", file=sys.stderr)

@@ -156,9 +156,15 @@ def _occupation_rows(result):
         if not isinstance(row.get("estimated"), bool):
             raise ValueError("Occupation estimated must be an explicit boolean")
         indexed[backend, n] = row
+    unavailable = result.get("unavailable", [])
+    if not isinstance(unavailable, list):
+        raise ValueError("unavailable must be a list")
+    declared = {(row.get("backend"), row.get("n")) for row in unavailable}
+    if len(declared) != len(unavailable) or declared & set(indexed):
+        raise ValueError("Unavailable occupation points must be distinct from measured rows")
     for backend in backends:
         for n in batches:
-            if (backend, n) not in indexed:
+            if (backend, n) not in indexed and (backend, n) not in declared:
                 raise ValueError(f"Missing occupation row for {backend} N={n}")
     ordered = [b for b in BACKEND_ORDER if b in backends] + [b for b in backends if b not in BACKEND_ORDER]
     return ordered, sorted(batches), indexed
@@ -169,12 +175,16 @@ def plot_gpu_occupation(result: dict, output_dir: Path) -> dict:
     output_dir = _new_output(output_dir)
     backends, batches, rows = _occupation_rows(result)
     estimated = [dict(backend=backend, n=n) for backend in backends for n in batches
-                 if rows[backend, n]["estimated"]]
+                 if (backend, n) in rows and rows[backend, n]["estimated"]]
+    missing = [dict(backend=backend, n=n) for backend in backends for n in batches if (backend, n) not in rows]
     provenance = f"{THEORY_LABELS[result['source_kind']]} · {result['model_label']}"
     footer = "Equation 1 time fraction; this is not GPU telemetry or GPU-count-weighted utilization."
     if estimated:
         footer += "\n" + textwrap.fill("* Estimated sandbox input: " + ", ".join(
             f"{BACKEND_LABELS.get(r['backend'], r['backend'])} N={r['n']}" for r in estimated), width=95)
+    if missing:
+        footer += "\n" + textwrap.fill("Not measured in this run (no bar): " + ", ".join(
+            f"{BACKEND_LABELS.get(r['backend'], r['backend'])} N={r['n']}" for r in missing), width=95)
     plt = _pyplot()
     with plt.rc_context(PAPER_RC):
         height = max(3.7, 1.9 + .58 * len(backends))
@@ -187,17 +197,22 @@ def plot_gpu_occupation(result: dict, output_dir: Path) -> dict:
             fallback_colors = ("#B7D7A8", "#D5B5D9", "#D9C5A0")
             for batch_index, n in enumerate(batches):
                 offset = (batch_index - (len(batches) - 1) / 2) * bar_height
-                positions = [i + offset for i in range(len(backends))]
-                percentages = [rows[backend, n]["occupation_pct"] for backend in backends]
+                measured = [(i + offset, backend) for i, backend in enumerate(backends) if (backend, n) in rows]
+                positions = [y for y, _ in measured]
+                percentages = [rows[backend, n]["occupation_pct"] for _, backend in measured]
                 color = {16: "#FFA500", 64: "#87CEEB"}.get(n, fallback_colors[batch_index % 3])
                 axis.barh(positions, percentages, height=bar_height * .9, label=f"N = {n}",
                           color=color, edgecolor="#666666", linewidth=.5,
                           hatch="///" if n == 64 else None)
-                for backend, y, percentage in zip(backends, positions, percentages):
+                for (y, backend), percentage in zip(measured, percentages):
                     label = f"{percentage:.1f}%" + ("*" if rows[backend, n]["estimated"] else "")
                     inside = percentage >= 86
                     axis.text(percentage - 1.2 if inside else percentage + 1.2, y, label,
                               ha="right" if inside else "left", va="center", fontsize=9)
+                for i, backend in enumerate(backends):
+                    if (backend, n) not in rows:
+                        axis.text(1.2, i + offset, f"N = {n}: not measured", ha="left", va="center",
+                                  fontsize=9, style="italic", color="#555555")
             axis.set_yticks(range(len(backends)), [BACKEND_LABELS.get(b, b) for b in backends])
             axis.invert_yaxis()
             axis.set_xlim(0, 100)
@@ -214,4 +229,4 @@ def plot_gpu_occupation(result: dict, output_dir: Path) -> dict:
             plt.close(fig)
     return dict(schema_version=1, kind="figure-08c-plot", status="ok", source_kind=result["source_kind"],
                 provenance_label=provenance, backends=backends, batches=batches,
-                estimated_points=estimated, files=files)
+                estimated_points=estimated, unavailable_points=missing, files=files)

@@ -4,6 +4,7 @@ import copy
 import io
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -80,12 +81,13 @@ class OneClickGPUTests(unittest.TestCase):
             gpu.run_gpu(self.subject)
         return self.subject.record["coverage"][-1]
 
-    def analysis(self):
+    def analysis(self, *, skip=()):
         directory = self.root / "analysis"
         directory.mkdir()
         series = [dict(panel="a", backend=backend, x=n, y=100, unit="ms", estimated=False,
                        plot_group="this-run", source_identity="release-sha256:" + SOURCE["source_sha256"])
-                  for backend in ("deltabox", "cube", "e2b") for n in (1, 4, 16, 64)]
+                  for backend in ("deltabox", "cube", "e2b") for n in (1, 4, 16, 64)
+                  if (backend, n) not in skip]
         (directory / "summary.json").write_text(json.dumps(
             dict(schema_version=1, source="fresh", experiments={"figure-08": dict(status="analyzed", series=series)})))
         return directory
@@ -126,6 +128,43 @@ class OneClickGPUTests(unittest.TestCase):
             text = "\n".join(supplemental_markdown(panels, language=language))
             self.assertIn("### Figure 8(b)", text)
             self.assertIn("### Figure 8(c)", text)
+
+    def test_unmeasured_cube_n64_keeps_theory_with_an_explicit_gap(self):
+        self.run_gpu()
+        metadata = gpu.finish_gpu(self.subject, self.analysis(skip={("cube", 4), ("cube", 64)}), True)
+        panels = figure08_supplement(metadata)["panels"]
+        self.assertEqual([panel["status"] for panel in panels], ["ok", "partial"])
+        self.assertEqual(len(panels[1]["artifacts"]), 2)
+        self.assertIn("No cube fan-out was measured at N=64; this run measured N=1, 16.", panels[1]["reasons"])
+        theory = next(row for row in self.subject.record["coverage"] if row["experiment"] == gpu.THEORY)
+        self.assertEqual(theory["status"], "ok")
+        self.assertEqual([(p["backend"], p["n"]) for p in theory["unavailable_points"]], [("cube", 64)])
+        occupation = json.loads(Path(panels[1]["input"]["path"]).read_text())
+        self.assertEqual(occupation["coverage"], "partial")
+        self.assertNotIn(("cube", 64), [(r["backend"], r["n"]) for r in occupation["rows"]])
+        text = "\n".join(supplemental_markdown(panels, language="en"))
+        self.assertIn("- No cube fan-out was measured at N=64", text)
+        self.assertNotIn("\n- \n", text + "\n")
+
+    def test_input_cap_still_derives_theory_but_truncated_runs_do_not(self):
+        self.run_gpu()
+        self.subject.limits = ["--limit", "10"]
+        self.subject.args = SimpleNamespace(quick_check=False, max_events=None)
+        gpu.finish_gpu(self.subject, self.analysis(), True)
+        self.assertIn(gpu.THEORY, [name for name, _ in self.calls])
+        for args in (SimpleNamespace(quick_check=True, max_events=None),
+                     SimpleNamespace(quick_check=False, max_events=3)):
+            with self.subTest(args=args):
+                self.calls.clear()
+                self.subject.args = args
+                self.subject.record["coverage"] = [row for row in self.subject.record["coverage"]
+                                                   if row["experiment"] != gpu.THEORY]
+                shutil.rmtree(self.root / "analysis")
+                for name in ("plots", "theory"):
+                    shutil.rmtree(self.subject.output / "gpu" / self.subject.attempt / name, ignore_errors=True)
+                gpu.finish_gpu(self.subject, self.analysis(), True)
+                self.assertNotIn(gpu.THEORY, [name for name, _ in self.calls])
+                self.assertNotIn(gpu.THEORY, [row["experiment"] for row in self.subject.record["coverage"]])
 
     def test_verified_successful_gpu_matrix_is_reused_on_resume(self):
         self.run_gpu()
