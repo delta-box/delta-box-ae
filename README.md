@@ -4,11 +4,17 @@
 
 **Badges sought: Available, Functional, Reproduced.**
 
-DeltaBox provides checkpoint, restore, and branching of filesystem and process state for agent tree search. This artifact includes the runtime, recorded workloads, experiment drivers, and plotting tools for evaluating state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses; no LLM API key is required.
+DeltaBox checkpoints, restores, and branches the filesystem and process state of an agent sandbox, so that tree-search agents can explore alternatives cheaply. This artifact contains the DeltaBox runtime, recorded agent workloads, the experiment drivers, and the plotting scripts used to evaluate state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses, so no LLM API key is needed.
 
-Start with the **approximately 5-minute quick check**, then validate experiments one at a time. The CPU reviewer entry defaults to **at most 3 complete inputs per group**. Use `--limit N` to increase the input count; for example, `--limit 5`. It does not launch full input cohorts by default. Replay, CRIU, and Firecracker Diff draw from a fixed pool of **44 complete trajectories** by default; duration depends on host load and baseline execution. Alternatively, select an experiment from the [index](#experiments). Figure 8(b) automatically probes the configured remote GPU host; unavailable resources are reported as skipped.
+We recommend evaluating the artifact in three steps:
 
-[Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Self-hosting](#self-hosting) · [Troubleshooting](#troubleshooting)
+1. Run the [quick check](#quick-start) (about 5 minutes) to confirm that the setup works.
+2. Run [all CPU experiments](#run-all) with `ae/run_all_no_gpu.sh` (about 2 hours).
+3. Optionally, rerun individual experiments from the [experiment index](#experiments).
+
+To keep the run time manageable, each experiment uses at most three inputs by default, fewer than in the paper; [`--limit N`](#run-all) raises this. Replay, CRIU, and Firecracker Diff (FC-Diff) draw their inputs from a fixed pool of 44 recorded trajectories. Figure 8(b) needs GPUs on a separate machine; if none are free, it is reported as skipped.
+
+[Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Troubleshooting](#troubleshooting) · [Self-hosting](#self-hosting) · [Hosted-machine details](#hosted-details)
 
 ## 1. Quick start
 
@@ -18,7 +24,7 @@ Start with the **approximately 5-minute quick check**, then validate experiments
 
 ### Log in and check the environment
 
-Provide your SSH public key in the artifact submission system's comments. After receiving access instructions, replace `HOST` with the assigned address:
+Send us your SSH public key through the comments in the artifact submission system. Once you receive access instructions, log in and run the quick check, replacing `HOST` with the address you were given:
 
 ```bash
 ssh atc-ae@HOST
@@ -26,99 +32,89 @@ cd ~/delta-box-ae
 bash ae/run_test.sh
 ```
 
-The hosted machine provides Linux x86-64, KVM, experiment images, recorded inputs, and baseline services. Run all commands below from the **delta-box-ae repository root** on that machine; image building is not a prerequisite. For your own machine, follow the [self-hosting guide](ae/docs/self-hosting.md).
+The AE machine already provides Linux x86-64 with KVM, the experiment images, the recorded inputs, and the baseline services, so you do not need to build anything. Run every command in this guide from the repository root (`~/delta-box-ae`). To use your own machine instead, see the [self-hosting guide](ae/docs/self-hosting.md).
 
-The quick check starts DeltaBox, executes a minimal checkpoint/restore sequence, validates the restored state, analyzes the data, and generates figures. **Success** means exit code 0 and this terminal message:
+The quick check starts DeltaBox, runs a short checkpoint/restore sequence, verifies the restored state, and analyzes and plots the result. It succeeded if it exits with status 0 and prints:
 
 ```text
 ok: <result-directory>/SUMMARY.md
 ```
 
-Open that `SUMMARY.md`; each step should be `ok`. The quick check verifies the execution pipeline. The full experiments below evaluate the paper's claims.
+`SUMMARY.md` should then list every step as `ok`. The quick check only shows that the pipeline works; the experiments below test the paper's claims.
 
-Quick checks write to a separate `ae/results/checks/quick-check-<timestamp>/` directory. The hosted entry runs evaluations and checks sequentially. CPU and memory binding comes from the shared `measurement` configuration and applies to every selected CPU experiment.
+Quick-check results go to `ae/results/checks/quick-check-<timestamp>/`. Runs on the AE machine execute one at a time. CPU and memory placement come from the shared `measurement` configuration and apply to every CPU experiment in a run.
 
-To select a node for one run, set `AE_NUMA_NODE` and `AE_CPUS` in your shell to the desired node and CPU list, then pass both arguments:
+To pin a single run to a different NUMA node, set `AE_NUMA_NODE` and `AE_CPUS` to the node and its CPU list, and pass both:
 
 ```bash
 bash ae/run_test.sh --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-The CPUs must belong to that node. Memory admission checks and CPU-frequency restoration still apply.
+The CPUs must belong to that node. Memory availability checks and CPU-frequency restoration still apply.
 
-### Run bounded validation
+### Run all CPU experiments
 
 <a id="一键运行"></a>
 <a id="run-all"></a>
 
-For CPU validation without GPU probing or measurements on the hosted machine, log in as `atc-ae` and use the reviewer command:
+On the AE machine, log in as `atc-ae` and run:
 
 ```bash
-cd /home/atc-ae/delta-box-ae
+cd ~/delta-box-ae
 bash ae/run_all_no_gpu.sh
 ```
 
-This entry runs all **16 CPU experiment groups** through a shared queue on **NUMA1/CPU28–31 and NUMA2/CPU48–51**. The default input limit is **3 per group**, with the original arms, fan-out and recorded waits preserved; selected trajectories run to completion without automatic event truncation. An idle node claims the next pending group, and input jobs within a group remain serial. Cube/E2B service-changing groups never overlap. Figure 8(a) remains included; GPU admission and Figure 8(b)(c) are excluded. A new result directory is generated and printed automatically; use `--output` to choose one or `--resume` for an existing run. Placement overrides are rejected. A same-run resume verifies completed artifacts, preserves their original node/source identities and pins partial groups to their existing node.
+No arguments are needed, and the run takes about 2 hours. It runs all 16 CPU experiments behind Tables 2 and 3, Figures 2, 6, 7, 8(a), and 9, and the filesystem correctness tests. Two fixed CPU sets share the work: CPUs 28–31 on NUMA node 1 and CPUs 48–51 on NUMA node 2. Each takes the next pending experiment from a shared queue and runs its jobs one at a time. Experiments that reconfigure the CubeSandbox or E2B services never run concurrently. The GPU experiments, Figure 8(b) and 8(c), are not included.
 
-On the hosted machine, this entry runs in its own managed systemd unit. Direct AE descendants cannot use swap; an interrupted run receives SIGINT for existing cleanup, then the unit reaps remaining descendants after its cleanup grace. The launcher records the unit identity and final cleanup state.
+By default, each experiment uses up to three inputs. In experiments that replay recorded agent runs, an input is one recorded trajectory, and it always runs to the end; Figure 8(a) and the correctness tests do not replay trajectories and use fixed fan-out and test workloads instead. One input can produce several jobs: Figure 6(b) runs each input under two policies, and Figure 9 runs it on three filesystems.
 
-Cube RAM-backed runs temporarily disable transparent huge pages in the owned Cube service tree. The hosted VMM also uses the [stable pagemap classification repair](ae/patches/cube-pagemap-stable-classification.md), so host page relocation cannot change the anonymous-page decision through a stale PFN lookup. Source and child memory checksums are verified; the original service policy is restored afterward.
+The script creates a new result directory and prints its path; use `--output` to choose the directory yourself. The run succeeded if it exits with status 0 and `SUMMARY.md` in that directory lists all 16 experiments as `ok`. CPU placement is fixed and cannot be overridden.
 
-The reviewer command defaults to three inputs per group and up to three automatic resumes after verified cleanup. No extra parameters are needed. Each failure and any reused results remain recorded; a resumed success is distinguished from an uninterrupted pass. Interruptions, uncertain cleanup, recovery guards or changed source/configuration/binaries stop the campaign. Use `--help` for optional overrides. Explicit manual resume and self-managed configurations do not receive a new automatic retry budget.
+The script tolerates occasional disruptions on the shared machine, such as temporary memory pressure or a slow baseline service. If an experiment fails, the script cleans up, verifies the cleanup, and resumes the same run, up to three times. Every failure stays in the record, and a run that needed a resume is reported as resumed, not as an uninterrupted pass. The script does not retry after an interruption such as Ctrl-C, after a cleanup it cannot verify, or if the code or configuration changed during the run. To continue a stopped run yourself, pass its directory to `--resume`; manual resumes are not retried automatically. Run `bash ae/run_all_no_gpu.sh --help` for all options.
 
-To increase the number of inputs per group, pass `--limit N`. For example, to select up to five inputs per group:
+To use more inputs, pass `--limit N` with N up to 10:
 
 ```bash
 bash ae/run_all_no_gpu.sh --limit 5
 ```
 
-This changes the input count while preserving each input's complete events and waits, experiment arms and fan-out. Available inputs and the configured per-group job cap still apply; groups with multiple arms may select fewer inputs. An input can produce multiple jobs, so the default is **three inputs, not three jobs**.
+This changes only the number of inputs; each input still runs in full, with all of its configurations. Each experiment is also capped at 10 jobs, so experiments with several configurations may use fewer than N inputs. For example, Figure 9 uses at most three inputs (nine jobs). A larger limit takes longer.
 
-For hosted background validation on NUMA0/3, use the entry below with a new output directory. Both entries share the same option parser, experiment drivers, storage preparation and reporting core; their fixed NUMA placement and reviewer priority differ. The reviewer command above keeps its NUMA1/2 placement.
+The authors may run background validation on NUMA nodes 0 and 3 (see [Hosted-machine details](#hosted-details)). This command takes priority: the background run stops and cleans up first, which can delay the start of your run by up to about 12 minutes.
 
-```bash
-bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
-```
+### Optional: CPU and GPU experiments in sequence
 
-This entry runs the same 16 groups and complete input jobs on **NUMA0/CPU0–3 and NUMA3/CPU72–75**, with the same default input limit of 3 and no automatic event truncation. Cube/E2B services are shared across NUMA nodes, so the two runs hold mutually exclusive access to those backends. **Reviewer requests take priority**: the background run cleans up its owned experiment and restores services before admitting the reviewer, then automatically resumes verified completed groups in the same output. A reviewer may wait for cleanup to finish. Resume manually with `--resume` and the same NUMA0/3 output; its layout cannot be changed during resume. Results are saved under `/home/atc-ae/delta-box-ae/ae/results/selected/<run-directory>/`; the script prints the exact directory. Check that run's `SUMMARY.md` and exit code: success requires all 16 groups to report `ok` and exit code 0.
-
-For optional sequential CPU/GPU validation, use the general entry with the same three-input limit:
+`ae/run_all.sh` runs the CPU experiments one after another on a single NUMA placement, followed by the GPU experiments:
 
 ```bash
 bash ae/run_all.sh --limit 3
 ```
 
-Sampled CPU experiments run in sequence with one shared NUMA placement. Runtime placement can be selected for the bounded run:
+To choose the placement:
 
 ```bash
 bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-This command visits the experiment groups in the [index](#experiments) sequentially, selects at most three complete inputs per CPU group, then analyzes the sampled results and creates comparison pages. Replay, CRIU, and Firecracker Diff sample from the fixed 44-input pool; every selected trajectory runs to completion. All experiment arms are retained: Figure 6(b) uses up to three inputs × two arms, and Figure 9 up to three inputs × three filesystems. Results explicitly retain subset coverage. Figure 7 is derived from complete trajectories. Figure 8(b) then automatically probes GPUs 0–7 on `allinai2plus`: no idle GPUs means a recorded skip, 1–3 allow six cases, and four allow all eight. GPU availability or failure does not invalidate CPU results. Figure 8(c) is derived when all fresh CPU/GPU inputs are complete; [manual calculation](#figure-08-gpu) is also available.
+It uses the same three-input limit and input pools as above, then analyzes the results and builds the comparison pages. After the CPU experiments, it checks GPUs 0–7 on the GPU host `allinai2plus`. If no GPU is free, Figure 8(b) is recorded as skipped; with one to three free GPUs, six of its eight cases run; with four, all eight run. GPU availability does not affect the CPU results. Figure 8(c) is computed once all CPU and GPU inputs are complete; you can also [compute it manually](#figure-08-gpu).
 
-To sample from the original baseline input pools (244 each for Replay/CRIU and 238 for Firecracker Diff), retain the same three-input limit and run:
+### Input sets
+
+Replay, CRIU, and FC-Diff draw their inputs from a fixed pool of 44 trajectories: 34 Django and 10 Astropy. Each backend keeps its own input order, and the first 10 inputs in that order are Astropy, so with a limit of 10 or less these three baselines are measured on Astropy inputs only. To draw from the original, larger pools instead (244 trajectories each for Replay and CRIU, 238 for FC-Diff), add `--baseline-inputs all`:
 
 ```bash
 bash ae/run_all.sh --limit 3 --baseline-inputs all
 ```
 
-`--baseline-inputs` selects the input pool, not the sample size; its default is `44`. The commands above select at most three inputs per CPU group. Increase this with `--limit N`, or use `--limit 1` for a smaller run, within the configured job cap. No implicit `--max-events` truncation is added.
+This option selects the pool that inputs come from, not how many are used; the default is `44`. Use `--limit 1` for a smaller trial run. Events are never truncated unless you pass `--max-events`.
 
-Each backend retains its declared input pool and job order. The default 44-input pool contains 34 Django and 10 Astropy trajectories; its first 10 jobs are Astropy. The selected inputs are recorded in each plan and `suite.json`. Table 2 event means retain each backend's own cohort; these scopes are recorded in the canonical ledger on the host: `spr4numa:/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md` ([repository copy; access required](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md)).
+Each run records the inputs it used in every plan and in `suite.json`. Table 2 averages events over each backend's own inputs; the input sets behind each reported number are listed in the authors' ledger on the AE machine at `/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md`.
 
-When the command finishes, open `result.md` (also written as `SUMMARY.md`) for CPU and GPU status, then **`comparison/attempt-NNN/README.md` (English)** or **`README-zh.md` (Chinese)** in that comparison folder. The one-click script generates both pages together, with language links at the top. The exact path is recorded in `review.json` under `outputs.comparison`. A successful sampled run reports `ok`; failed steps retain their logs and cause a nonzero exit code.
+### Where results are written
 
-Bounded validation writes to a new `ae/results/selected/` directory. Existing complete-run results remain in their own directories. The legacy full-run backup/rotation path is not used by the supplied bounded profile. Insufficient backup space or active jobs stop the launch and leave the results in place. Quick checks and selected experiments use separate subdirectories; an explicit `--output` to a different directory is never overwritten. New runs record the actual source without requiring a release lock. See [troubleshooting](#troubleshooting) for resuming a run.
+When a run finishes, open `result.md` (identical to `SUMMARY.md`) for the status of each experiment and of the GPU stage. Then open **`comparison/attempt-NNN/README.md`** (English) or **`README-zh.md`** (Chinese), which compare your measurements with the paper; both are generated together and link to each other. The exact path is recorded under `outputs.comparison` in `review.json`. A failed step keeps its logs and makes the command exit with a nonzero status.
 
-For a small VM repair while another NUMA node is occupied, use an explicitly isolated output and placement:
-
-```bash
-bash ae/run_all.sh --experiment figure-06-adaptive --limit 1 \
-  --isolated-validation --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS" \
-  --output "$PWD/ae/results/selected/figure06-pilot"
-```
-
-This opt-in mode is restricted to supported VM experiments, preserves the results-rotation barrier, and still takes an exclusive lease on the selected NUMA node. Shared Cube/E2B service experiments are excluded. Resume a sampled output with the same placement and a larger bounded `--limit` to verify and reuse completed jobs. All completed and failed raw records remain identifiable. Every entry locks its output before loading resume state: the same output and parent/child outputs cannot be written concurrently. The `checks/` subtree remains reserved for quick checks.
+Each new run writes to its own directory under `ae/results/selected/`, and quick checks write under `ae/results/checks/`. A run refuses to write into an existing directory unless you resume it. See [Resume and troubleshoot](#troubleshooting) to continue a run.
 
 ## 2. Experiment index and individual runs
 
@@ -130,31 +126,31 @@ This opt-in mode is restricted to supported VM experiments, preserves the result
 <a id="experiment-index"></a>
 <a id="individual-experiments"></a>
 
-The CPU reviewer command runs all 16 CPU groups with at most three inputs per group by default; optional GPU groups use the general entry described above. To evaluate one claim, run its section directly; you do not need to run the entire suite first.
+`ae/run_all_no_gpu.sh` runs every CPU experiment below; the GPU part of Figure 8 requires `ae/run_all.sh`. To check a single claim, run its section directly; you do not need to run the whole suite first.
 
-| Paper experiment | Evaluation question | Selection | Resources |
+| Paper experiment | Evaluation question | Command option | Resources |
 | --- | --- | --- | --- |
 | [Table 2](#table-02) | What is each system's checkpoint/restore overhead? | `--group table-02` | CPU, KVM, baseline services |
 | [Table 3](#table-03) | Which components contribute to DeltaBox overhead, and how do fast and slow restore differ? | `--group table-03` | CPU, KVM |
 | [Figure 2](#figure-02) | How much state changes per step relative to total state? | `--group figure-02` | CPU |
 | [Figure 6](#figure-06) | How do memory policies and lightweight-skip affect memory and latency? | `--group figure-06` | CPU, KVM |
-| [Figure 7](#figure-07) | How much overhead does state management add relative to LLM and action time? | Complete DeltaBox + E2B trajectories | CPU, KVM, E2B services |
+| [Figure 7](#figure-07) | How much overhead does state management add relative to LLM and action time? | Derived from Table 2 (DeltaBox and E2B) | CPU, KVM, E2B services |
 | [Figure 8(a)](#figure-08) | How does fan-out time grow with the number of branches? | `--group figure-08-cpu` | CPU, KVM, Cube/E2B services |
 | [Figure 8(b)(c)](#figure-08-gpu) | How do GPU stage times affect modeled occupation? | `--group figure-08`: CPU + GPU + calculations | One and four GPUs; CPU fan-out |
 | [Figure 9](#figure-09) | How does reflink affect copy-up and device writes during editing? | `--group figure-09` | CPU, KVM |
 | [§6.3.3](#correctness) | Does checkpoint/restore preserve filesystem semantics? | `--experiment correctness` | CPU, KVM |
 
-Table 1 and Figures 1, 3–5 present the design and problem motivation, with no separate measurement tasks.
+Table 1 and Figures 1 and 3–5 describe the motivation and design and have no associated experiments.
 
-Individual commands below share an output prefix. **Define it once in your current Bash terminal**, replacing `reviewer-A` with your identifier. Use a different identifier for each new evaluation:
+The commands below write under a common prefix. Set it once in your shell, replacing `reviewer-A` with your own identifier, and use a new identifier for each new evaluation:
 
 ```bash
 export AE_RUN="$(pwd -P)/ae/results/reviewer-A"
 ```
 
-Do not pre-create the individual output directories. The hosted launcher uses the supplied configuration and manages CPU/NUMA binding and frequency sampling. Run full evaluations, selected experiments and quick checks sequentially; all selected CPU experiments use the run-level NUMA placement. The drivers select their inputs; use `--limit N` to increase or reduce the input count within the configured job cap.
+Do not create the output directories yourself. The launcher applies the supplied configuration and handles CPU/NUMA pinning and frequency sampling. Run commands one at a time; every CPU experiment in a run uses that run's NUMA placement. Each driver selects its own inputs; use `--limit N` to use more or fewer, up to 10 jobs per experiment.
 
-Each section keeps the evaluation goal, command, output, and interpretation together. The side-by-side images are **examples of the one-click script's output**, illustrating the generated figures. Use the comparison pages from your own run for evaluation.
+Each section below gives the goal, the command, the output, and how to read it. The images on the right are example outputs of the full run, shown for illustration; evaluate the comparison pages from your own run.
 
 ### 2.1 Table 2: checkpoint/restore overhead
 
@@ -166,7 +162,7 @@ Each section keeps the evaluation goal, command, output, and interpretation toge
 <a id="step-1"></a>
 <a id="baseline-experiments"></a>
 
-**Goal.** Compare the cost of saving and restoring state in DeltaBox, Replay, CRIU, FC-Diff, CubeSandbox, and E2B, and evaluate whether DeltaBox reduces the cost of switching agent branches.
+**Goal.** Measure how long DeltaBox, Replay, CRIU, FC-Diff, CubeSandbox, and E2B take to save and restore sandbox state, which is the cost of switching between agent branches.
 
 **Run.**
 
@@ -174,9 +170,9 @@ Each section keeps the evaluation goal, command, output, and interpretation toge
 bash ae/run_all.sh --group table-02 --output "$AE_RUN/table-02"
 ```
 
-To select one backend, use an option such as `--experiment table-02-e2b` and choose a new output directory for it.
+To run a single backend, use an option such as `--experiment table-02-e2b` with a new output directory.
 
-**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within workload groups and then in the event-weighted `All` aggregate (labeled `Event Avg` in the figure). Values are milliseconds; lower is better. The paper's claim concerns DeltaBox's overhead advantage over the baselines. Check the configuration and timing definitions when comparing systems. `All` is not the unweighted mean of the four group averages.
+**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within each workload group and then in the `All` row (labeled `Event Avg` in the figure). `All` averages over all events, so it is not the plain mean of the four group averages. Values are in milliseconds; lower is better. The paper claims that DeltaBox has lower overhead than the baselines. When comparing systems, keep in mind how each system is configured and what its timings include.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -194,7 +190,7 @@ To select one backend, use an option such as `--experiment table-02-e2b` and cho
 <a id="对比table3"></a>
 <a id="table-3-comparison"></a>
 
-**Goal.** Break down checkpoint and restore costs, comparing fast restore from a retained template with slow restore that reconstructs processes through CRIU.
+**Goal.** Break DeltaBox's checkpoint and restore time into components, and compare fast restore, which reuses a retained template, with slow restore, which rebuilds processes with CRIU.
 
 **Run.**
 
@@ -202,9 +198,9 @@ To select one backend, use an option such as `--experiment table-02-e2b` and cho
 bash ae/run_all.sh --group table-03 --output "$AE_RUN/table-03"
 ```
 
-The same input set runs under fast and slow modes. See the [Table 3 guide](ae/docs/table3-method.md) for selecting runtime configurations such as lazy-pages.
+Both modes run on the same inputs. The [Table 3 guide](ae/docs/table3-method.md) explains runtime options such as lazy pages.
 
-**Output and interpretation.** Inspect Overlay, fork/CRIU, and coordination in `table-03-comparison.png` to identify the dominant costs and compare restore paths. Fast restore reuses templates to reduce process-reconstruction work. Component timings explain the total; distinguish component windows from complete API time when comparing with Table 2. `—` denotes a component that does not apply to that path.
+**Output and interpretation.** In `table-03-comparison.png`, look at the Overlay, fork/CRIU, and coordination components to find the dominant cost of each restore path. Fast restore is cheaper because reusing a template avoids most of the process reconstruction. The components add up to Table 3's total, but they cover narrower windows than the end-to-end API time in Table 2, so do not compare the two directly. `—` marks a component that does not apply to that path.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -224,7 +220,7 @@ The same input set runs under fast and slow modes. See the [Table 3 guide](ae/do
 <a id="figure-2-comparison"></a>
 <a id="step-3"></a>
 
-**Goal.** Test whether agent actions usually modify a small fraction of filesystem and memory state, motivating incremental checkpoints.
+**Goal.** Check whether an agent action usually changes only a small fraction of the filesystem and memory state, which motivates incremental checkpoints.
 
 **Run.**
 
@@ -232,7 +228,7 @@ The same input set runs under fast and slow modes. See the [Table 3 guide](ae/do
 bash ae/run_all.sh --group figure-02 --output "$AE_RUN/figure-02"
 ```
 
-**Output and interpretation.** In `figure-02-comparison.png`, panel (a) compares total state with per-step changes, while panel (b) shows changes over search steps. Examine the relative size of the changes and occasional large updates. Filesystem and memory use different axes and units; compare each within its own panel.
+**Output and interpretation.** In `figure-02-comparison.png`, panel (a) compares the total state size with the change per step, and panel (b) shows the changes over the course of the search. Look at how small a typical change is relative to the total, and at the occasional large update. Filesystem and memory use different axes and units, so compare each only within its own panel.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -252,7 +248,7 @@ bash ae/run_all.sh --group figure-02 --output "$AE_RUN/figure-02"
 <a id="figure-6-comparison"></a>
 <a id="step-4"></a>
 
-**Goal.** Examine memory growth as search deepens, and test whether lightweight checkpoints reduce the cost of steps eligible for skipping.
+**Goal.** Measure how memory grows as the search deepens, and check whether lightweight-skip (LW-skip) checkpoints reduce the cost of the steps that qualify for them.
 
 **Run.**
 
@@ -260,9 +256,9 @@ bash ae/run_all.sh --group figure-02 --output "$AE_RUN/figure-02"
 bash ae/run_all.sh --group figure-06 --output "$AE_RUN/figure-06"
 ```
 
-Panel (a) runs `none / skip / gc / warm` on the same SymPy workload. Panel (b) compares standard-only and adaptive policies on the same input set. Select `figure-06-memory` or `figure-06-adaptive` to run one panel separately.
+Panel (a) runs the `none`, `skip`, `gc`, and `warm` policies on the same SymPy workload. Panel (b) compares the standard-only and adaptive policies on the same inputs. To run one panel, use `--experiment figure-06-memory` or `--experiment figure-06-adaptive`.
 
-**Output and interpretation.** In panel (a) of `figure-06-comparison.png`, compare growth rates and peaks to assess whether LW-skip limits memory retained during search. In panel (b), compare standard and lightweight checkpoint distributions, including the low-latency events and the standard checkpoints still required by the adaptive policy. Latency is on a logarithmic horizontal axis; the vertical axis counts events. The two panels are analyzed separately; do not pool their policies or samples.
+**Output and interpretation.** In panel (a) of `figure-06-comparison.png`, compare the growth rate and peak of each policy to see whether LW-skip limits the memory retained during search. In panel (b), compare the latency distributions of standard and lightweight checkpoints, including the low-latency lightweight events and the standard checkpoints that the adaptive policy still takes. The horizontal axis (latency) is logarithmic, and the vertical axis counts events. Analyze the two panels separately; do not combine their policies or samples.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -282,7 +278,7 @@ Panel (a) runs `none / skip / gc / warm` on the same SymPy workload. Panel (b) c
 <a id="figure-7-comparison"></a>
 <a id="figure-7-mapping"></a>
 
-**Goal.** Assess state-management cost relative to agent execution time and whether DeltaBox keeps normalized time close to 1.0× across workloads.
+**Goal.** Measure state-management cost relative to the agent's own execution time, and check whether DeltaBox keeps the normalized time close to 1.0× across workloads.
 
 **Run.**
 
@@ -292,9 +288,9 @@ bash ae/run_all.sh \
   --output "$AE_RUN/figure-07"
 ```
 
-Figure 7 is generated from these complete trajectories; it has no separate timing task. If you have run complete Table 2 or the full suite, use that output directly.
+Figure 7 is computed from these complete trajectories and needs no separate timing run. If you have already run Table 2 or the full suite, use that output.
 
-**Output and interpretation.** Open `figure-07-comparison.png`. The 1.0× line represents LLM and action time; the excess above it is relative state-management overhead. Compare Django, SymPy, Scientific, and Tools/Small separately rather than inferring execution impact from absolute milliseconds alone. Bar heights normalize sums of timing components, using ratios of totals within each group.
+**Output and interpretation.** Open `figure-07-comparison.png`. The 1.0× line is the LLM and action time; anything above it is state-management overhead. Compare the Django, SymPy, Scientific, and Tools/Small groups separately, rather than judging the impact from absolute milliseconds. Each bar is a ratio of totals within its group (summed timing components), not an average of per-step ratios.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -314,7 +310,7 @@ Figure 7 is generated from these complete trajectories; it has no separate timin
 <a id="figure-8-comparison"></a>
 <a id="step-5"></a>
 
-**Goal.** Compare the cost of creating usable branches from one frozen state and its scaling with branch count.
+**Goal.** Measure how long it takes to create usable branches from one frozen state, and how this cost grows with the number of branches.
 
 **Run.**
 
@@ -322,9 +318,9 @@ Figure 7 is generated from these complete trajectories; it has no separate timin
 bash ae/run_all.sh --group figure-08-cpu --output "$AE_RUN/figure-08-cpu"
 ```
 
-DeltaBox, CubeSandbox, and E2B each evaluate N=1/4/16/64. Every child must read back and validate inherited content.
+DeltaBox and E2B create N = 1, 4, 16, and 64 branches; CubeSandbox creates N = 1 and 16. Every child reads back the state it inherited, but the check differs by system: DeltaBox compares every page with its expected value and CubeSandbox compares the memory checksum with its expected value, while the E2B verifier checks the token and only that the checksum and byte-count fields are present.
 
-**Output and interpretation.** In `figure-08-cpu-comparison.png`, compare ready time at the same N and the growth of each curve. The paper examines whether inexpensive branch creation supports wider search. Content validation is part of success: a branch is useful only if it inherits the correct state.
+**Output and interpretation.** In `figure-08-cpu-comparison.png`, compare the time until all branches are ready at the same N, and how each curve grows with N. The paper argues that cheap branch creation enables a wider search. Passing its system's check is part of a branch's success.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -342,10 +338,9 @@ DeltaBox, CubeSandbox, and E2B each evaluate N=1/4/16/64. Every child must read 
 <a id="figure-8b-gpu"></a>
 <a id="获得-gpu-后的命令"></a>
 
-**Goal.** Measure generation and training time, then combine them with sandbox time to calculate the paper's synchronous GPU occupation and policy staleness.
+**Goal.** Measure LLM generation and training time on GPUs, and combine it with sandbox time to compute the GPU occupation and policy staleness modeled in the paper.
 
-The one-click workflow and `--group figure-08` automatically run panel (b) over SSH using [remote configuration](ae/configs/figure08-remote.json). See the [automatic workflow and dependencies](ae/paper/figure-08/README.md) for setup, admission criteria and partial-result behavior. Quick-check and analysis-only runs do not start GPU work. To select only the remote GPU stage, use the command below.
-
+`ae/run_all.sh` and `--group figure-08` run panel (b) automatically over SSH, using the [remote configuration](ae/configs/figure08-remote.json). The [Figure 8 guide](ae/paper/figure-08/README.md) describes the setup, how GPUs are selected, and what happens when only some cases can run. Quick checks and analysis-only runs never start GPU work. To run only the GPU stage:
 
 ```bash
 bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
@@ -357,9 +352,9 @@ To rerun every panel of Figure 8:
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-The authors configure the remote model and Python environments. Admission probes GPUs 0–7 and records busy or unavailable resources as skipped; smaller available card sets produce explicitly partial results without reducing per-case parameters. See the [environment guide](ae/docs/self-hosting.md#gpu-setup).
+The authors maintain the remote model and Python environments. The script checks GPUs 0–7 and records busy or unavailable GPUs as skipped. If fewer GPUs are free, the run produces a result that is marked as partial; the parameters of each case stay the same. See the [GPU setup guide](ae/docs/self-hosting.md#gpu-setup).
 
-**Output and interpretation.** Panel (b) produces per-repeat generation/training timings and `gpu/attempt-NNN/plots/figure-08b.png`; compare corresponding stages at the same batch size. After CPU fan-out and GPU measurements both succeed, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and plots. Check whether reducing sandbox time increases modeled useful occupation and reduces staleness; (c) is a theoretical calculation. Both panels are included in this run's English and Chinese comparison pages.
+**Output and interpretation.** Panel (b) produces per-repeat generation and training times and `gpu/attempt-NNN/plots/figure-08b.png`; compare the same stage at the same batch size. Once both the CPU fan-out and the GPU measurements have succeeded, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and its plots. Panel (c) is a model, not a measurement: check whether shorter sandbox time raises the modeled useful GPU occupation and lowers staleness. Both panels appear in the run's English and Chinese comparison pages.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -379,9 +374,9 @@ The authors configure the remote model and Python environments. Admission probes
 <a id="figure-9-comparison"></a>
 <a id="step-6"></a>
 
-**Goal.** Compare copy-up data and device writes when editing files on ext4, XFS, and XFS+reflink, evaluating whether shared data blocks reduce write amplification.
+**Goal.** Measure copy-up data and device writes when editing files on ext4, XFS, and XFS with reflink, and check whether shared data blocks reduce write amplification.
 
-The fixed [80-trajectory cohort](ae/paper/figure-09/cohort-80.json) runs each complete input on ext4, XFS, and XFS+reflink: **240 jobs**. It covers four model/search combinations, ten projects, and long edit sequences. There is no 185-input execution mode; historical inputs remain evidence. `--baseline-inputs all` affects only the three Table 2 baselines and does not change this Figure 9 cohort.
+This artifact runs a fixed [set of 80 trajectories](ae/paper/figure-09/cohort-80.json), selected from the original [185-trajectory cohort](ae/paper/figure-09/cohort-war.csv); the selection covers four model/search combinations, ten projects, and long edit sequences, and is not a random sample. Each trajectory runs on all three filesystems, for 240 jobs in total; with the default limit, three trajectories (nine jobs) run. The 185-trajectory cohort is kept as evidence and cannot be rerun. `--baseline-inputs all` affects only the three Table 2 baselines, not Figure 9.
 
 **Run.**
 
@@ -389,9 +384,9 @@ The fixed [80-trajectory cohort](ae/paper/figure-09/cohort-80.json) runs each co
 bash ae/run_all.sh --group figure-09 --output "$AE_RUN/figure-09"
 ```
 
-A dedicated RAM-backed entry point and configuration are described in the [self-hosting and targeted-run guide](ae/docs/self-hosting.md#specialized-runs).
+A RAM-backed variant with its own entry point and configuration is described in the [self-hosting guide](ae/docs/self-hosting.md#specialized-runs).
 
-To continue an interrupted Figure 9 run in a new output, reuse verified successful jobs and execute only missing jobs:
+To continue an interrupted Figure 9 run in a new directory, reuse its verified jobs and run only the missing ones:
 
 ```bash
 bash ae/run_all.sh --group figure-09 \
@@ -399,9 +394,9 @@ bash ae/run_all.sh --group figure-09 \
   --output "$AE_RUN/figure-09-continued"
 ```
 
-Reuse verifies complete inputs, filesystem arms, resource settings, measurement code, and artifact hashes. Original results retain their original source identity, and reports distinguish reused and newly measured sources. Source and destination directories must be separate. This option reuses only Figure 9 and cannot be combined with `--resume`, quick checks, or input/event limits.
+Before reusing a job, the script verifies its inputs, filesystem, resource settings, measurement code, and artifact hashes. Reused jobs keep the record of the code version that produced them, and the report shows which jobs were reused and which were newly measured. The old and new directories must be separate. This option applies only to Figure 9 and cannot be combined with `--resume`, quick checks, `--limit`, or `--max-events`.
 
-**Output and interpretation.** In both panels of `figure-09-comparison.png`, compare the three curves within each file-size bin. Examine whether reflink reduces private copy-up data and how that reduction affects device I/O. Filesystem journals and metadata also generate writes, so these quantities need not be equal. The vertical axis is bytes/edit; device writes are measured using loop-device write counters.
+**Output and interpretation.** In both panels of `figure-09-comparison.png`, compare the three curves within each file-size bin: does reflink reduce the private copy-up data, and how much of that reduction reaches the device? Filesystem journals and metadata also cause writes, so the two quantities need not match. The vertical axis is bytes per edit; device writes are read from loop-device write counters.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -419,31 +414,31 @@ Reuse verifies complete inputs, filesystem arms, resource settings, measurement 
 <a id="步骤7"></a>
 <a id="step-7"></a>
 
-**Goal.** Check file contents before and after checkpoint/restore, the behavior of open file descriptors referring to deleted files, and isolation of writes across checkpoints.
+**Goal.** Check that file contents are the same before and after checkpoint/restore, that open file descriptors to deleted files behave correctly, and that writes are isolated across checkpoints.
 
 ```bash
 bash ae/run_all.sh --experiment correctness --output "$AE_RUN/correctness"
 ```
 
-The entry point runs `test_full.sh`, `test_deleted_open_resurrect.sh`, and `test_cross_checkpoint_fd_cow.sh`. Open their assertion logs through `SUMMARY.md`: each script should exit 0, and restored content and file-descriptor behavior should satisfy the named assertions.
+This runs `test_full.sh`, `test_deleted_open_resurrect.sh`, and `test_cross_checkpoint_fd_cow.sh`. Their assertion logs are linked from `SUMMARY.md`. Each script should exit with status 0 and pass all of its named assertions on file contents and file-descriptor behavior.
 
 ## 3. Inspect, validate, and replot results
 
 <a id="results"></a>
 <a id="实验结果"></a>
 
-Individual experiments and the full suite use the same output structure. Paths below are relative to the printed result directory; `review.json` identifies `attempt-NNN`.
+Single experiments and full runs produce the same directory layout. Paths below are relative to the printed result directory; `review.json` identifies the current `attempt-NNN`.
 
 | Path | Purpose |
 | --- | --- |
 | `result.md`, `SUMMARY.md`, `review.json` | Check status and locate outputs or failed steps |
 | `comparison/attempt-NNN/README.md`, `README-zh.md` | English and Chinese pages comparing the paper with your measurements |
-| `analysis/attempt-NNN/metrics.csv`, `series.csv` | Inspect numerical summaries and plotted series |
+| `analysis/attempt-NNN/metrics.csv`, `series.csv` | Numerical summaries and plotted series |
 | `gpu/attempt-NNN/` | GPU measurements, resource checks, plots, and Figure 8(c) calculations |
-| `runs/`, `logs/attempt-NNN/` | Inspect per-event data and execution logs |
-| `environment/attempt-NNN/` | Inspect configuration, CPU frequencies, and restoration records |
+| `runs/`, `logs/attempt-NNN/` | Per-event data and execution logs |
+| `environment/attempt-NNN/` | Configuration, CPU frequencies, and restoration records |
 
-First confirm that the selected experiments succeeded, then use each section's interpretation to evaluate the paper's claims. Small checks are for validating the workflow; `N/A` / `—` is not zero.
+First confirm that the experiments succeeded, then use the guidance in each section above to evaluate the paper's claims. Small runs, such as `--limit 1`, only show that the workflow works. `N/A` and `—` mean "not measured", not zero.
 
 <a id="绘图"></a>
 <a id="发布图片"></a>
@@ -451,7 +446,7 @@ First confirm that the selected experiments succeeded, then use each section's i
 <a id="plotting"></a>
 <a id="publishing-figures"></a>
 
-To regenerate figures from raw results, follow the [analysis guide](ae/docs/self-hosting.md#reanalyze); no new measurements are needed.
+To regenerate the figures from existing raw results without new measurements, follow the [analysis guide](ae/docs/self-hosting.md#reanalyze).
 
 ## 4. Resume and troubleshoot
 
@@ -463,7 +458,7 @@ To regenerate figures from raw results, follow the [analysis guide](ae/docs/self
 <a id="running-tips"></a>
 <a id="current-scope"></a>
 
-To resume, keep the original source, configuration, and experiment selection, replacing `--output` with `--resume`. For example, resume Figure 6 with:
+To resume a run, keep the same code, configuration, and experiment selection, and replace `--output` with `--resume`. For example, to resume Figure 6:
 
 ```bash
 bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
@@ -471,14 +466,16 @@ bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
 
 | Situation | Action |
 | --- | --- |
-| Output directory exists | Resume the same run, or choose a new directory for a new run |
-| No recent terminal output | Inspect the log linked from `SUMMARY.md`, or `logs/attempt-NNN/<step>/stdout.log` |
-| GPU resources are unavailable or all busy | Contact the authors to allocate GPUs for the AE machine, then resume the same output directory |
-| Dependency, permission, or template preflight fails | Save `SUMMARY.md` and relevant logs, and contact the authors through the AE submission system |
-| You want a smaller check | Add `--limit 1` to an individual command and use a separate output |
-| You want the experiment names | Run `bash ae/run_all.sh --list` |
+| The output directory already exists | Resume that run, or choose a new directory for a new run |
+| A command reports that another AE run is active | Wait for the other run to finish, then retry |
+| Your SSH session disconnected during a run | The run stops; continue it with `--resume <result-directory>` |
+| No new terminal output for a long time | Check the log linked from `SUMMARY.md`, or `logs/attempt-NNN/<step>/stdout.log` |
+| GPUs are unavailable or all busy | Ask the authors to allocate GPUs for the AE machine, then resume the same output directory |
+| A dependency, permission, or template check fails | Save `SUMMARY.md` and the relevant logs, and contact the authors through the AE submission system |
+| You want a smaller run | Add `--limit 1` to an individual command and use a separate output directory |
+| You want the list of experiment names | Run `bash ae/run_all.sh --list` |
 
-Keep the supplied resource configuration during measurement. On the shared machine, avoid simultaneous performance runs on the same CPUs/NUMA node. Account details are in the [hosted-access guide](ae/docs/hosted-access.md).
+Keep the supplied resource configuration while measuring. On this shared machine, do not start other performance runs on the same CPUs or NUMA node. Account details are in the [hosted-access guide](ae/docs/hosted-access.md).
 
 ## 5. Self-hosting and further reading
 
@@ -495,9 +492,39 @@ Keep the supplied resource configuration during measurement. On the shared machi
 <a id="measurement-conditions"></a>
 <a id="detailed-cli-guide"></a>
 
-Self-hosting requires Linux x86-64, KVM, a DeltaBox guest kernel and disks, workload environments, and the selected baseline services. See the [self-hosting guide](ae/docs/self-hosting.md) for resources, build commands, configuration, and preflight checks. The GPU environment is independent of the CPU/KVM environment.
+Running on your own machine requires Linux x86-64 with KVM, a DeltaBox guest kernel and disk images, the workload environments, and the baseline services you want to compare against. The [self-hosting guide](ae/docs/self-hosting.md) covers resources, build commands, configuration, and preflight checks. The GPU environment is separate from the CPU/KVM environment. `ae/run_all_no_gpu.sh` uses CPU and NUMA numbers specific to the AE machine; on other machines, use `ae/run_all.sh`.
 
 - [Experiment inputs and file manifests](ae/paper/README.md)
 - [Image builds and template preparation](ae/images/README.md)
 
-The Figure 8 Cube profile selects **N=1 and N=16**. Within the selected NUMA lease it creates private noswap RAM copies of Cube data and MySQL metadata, preserving database durability settings and verifying every copied file. It checks inherited bytes, checksum and token in every child, then restores services and storage. An unresolved resource or restoration failure retains the private environment with `RECOVERY_REQUIRED.json` for inspection. Setup and teardown are outside the official clone and verification timers. Before each guest command, the driver checks envd through a read-only request; the wait stays inside source preparation or child verification, shares the command deadline, and never replays a submitted command.
+## Appendix: hosted-machine details
+
+<a id="hosted-details"></a>
+
+These notes describe how the AE machine isolates and restores runs. You do not need them to evaluate the artifact.
+
+**Managed execution.** On the AE machine, `ae/run_all_no_gpu.sh` runs inside its own systemd unit, in which processes started by the AE scripts cannot use swap. If the run is interrupted, the main process receives SIGINT and runs its normal cleanup; after a grace period, the unit stops any remaining processes. The launcher records the unit name and the final cleanup state.
+
+**CubeSandbox memory.** When CubeSandbox runs from RAM, transparent huge pages are temporarily disabled for the Cube service. The AE machine's Cube VMM also includes a [pagemap classification fix](ae/patches/cube-pagemap-stable-classification.md): without it, the host relocating a page could change whether the VMM treats that page as anonymous, through a stale page-frame lookup. Source and child memory checksums are verified, and the original service settings are restored afterward.
+
+**Figure 8 CubeSandbox profile.** Figure 8 runs CubeSandbox with N = 1 and N = 16. Within the run's NUMA node, it makes private, swap-free RAM copies of the Cube data and MySQL metadata, keeps the database durability settings, and verifies every copied file. Every child's inherited bytes, checksum, and token are checked, and the services and storage are restored afterward. If a resource cannot be released or restored, the private environment is kept for inspection, together with `RECOVERY_REQUIRED.json`. Setup and teardown are excluded from the timed clone and verification phases. Before each guest command, the driver checks with a read-only request that the guest agent (envd) is ready. This wait is part of source preparation or child verification, shares the command's deadline, and never causes a submitted command to be sent again.
+
+**Background validation on NUMA nodes 0 and 3.** The authors use a second entry point to validate the artifact in the background, with a new output directory for each run:
+
+```bash
+bash ae/run_all_no_gpu_numa03.sh --output "$PWD/ae/results/selected/numa03-validation"
+```
+
+It runs the same 16 experiments with the same options, drivers, and reports, but on CPUs 0–3 of NUMA node 0 and CPUs 72–75 of NUMA node 3. Because both entry points use the same CubeSandbox and E2B services, the two runs never execute at the same time. A reviewer run takes priority: the background run cleans up its experiment and restores the services first, then later resumes in the same directory, reusing verified results. A stopped background run can also be resumed manually with `--resume` and the same directory; its CPU layout cannot change. Results are written under `ae/results/selected/<run-directory>/`, and the script prints the exact path. The run succeeded if it exits with status 0 and `SUMMARY.md` lists all 16 experiments as `ok`.
+
+**Isolated validation of a single VM experiment.** To rerun one small VM experiment while another NUMA node is busy, use an isolated output directory and an explicit placement:
+
+```bash
+bash ae/run_all.sh --experiment figure-06-adaptive --limit 1 \
+  --isolated-validation --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS" \
+  --output "$PWD/ae/results/selected/figure06-pilot"
+```
+
+This mode is limited to supported VM experiments; experiments that use the shared CubeSandbox or E2B services are excluded. It still takes exclusive use of the selected NUMA node and does not run during a results backup. To extend the run, resume the same directory with the same placement and a larger `--limit`; completed jobs are verified and reused, and completed and failed raw records stay separately identifiable. Every command locks its output directory before reading resume state, so two commands can never write to the same directory, or to a directory and one of its subdirectories, at the same time. `ae/results/checks/` is reserved for quick checks.
+
+**Result directories.** Bounded runs do not use the older full-run backup and rotation path. If backup space is insufficient or other jobs are active, the launch stops and leaves existing results untouched. Each run records the exact source code it used, without requiring a release lock.
