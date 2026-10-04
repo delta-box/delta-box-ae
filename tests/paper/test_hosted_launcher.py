@@ -38,7 +38,6 @@ class HostedTests(unittest.TestCase):
         (self.runtime / 'ae/scripts').mkdir(parents=True)
         (self.runtime / 'ae/scripts/run_review.py').write_text('# fixed runtime\n')
         (self.runtime / 'release').mkdir()
-        (self.runtime / 'release/candidate-lock.json').write_text(json.dumps({'source_commit': 'a' * 40}))
         self.python = self.root / 'venv/bin/python'
         self.python.parent.mkdir(parents=True)
         self.python.write_text('# fixed python\n')
@@ -282,7 +281,6 @@ class HostedTests(unittest.TestCase):
                 hosted.parse_arguments(['--checkout', str(self.runtime), *flags])
 
     def test_default_result_does_not_read_source_identity(self):
-        (self.runtime / 'release/candidate-lock.json').unlink()
         with self.owned_fixture(), patch.object(hosted.subprocess, 'check_output', side_effect=AssertionError('no Git admission')):
             result = hosted.default_result(self.policy, hosted.parse_arguments(['--checkout', str(self.runtime)]))
         self.assertEqual(result, Path('.'))

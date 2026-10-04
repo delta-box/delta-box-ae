@@ -67,8 +67,6 @@ def main():
     if args.limit is not None and args.limit <= 0:
         parser.error('limit must be positive')
     release = from_environment()
-    if not release:
-        raise ValueError('A frozen DELTABOX_RELEASE_LOCK is required')
     config = load_config(args.config)
     work = configured_path(config, 'work_dir')
     memory = require_memory_workdir(work)

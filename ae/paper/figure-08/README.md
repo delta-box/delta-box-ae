@@ -20,7 +20,7 @@ bash ae/run_all.sh
 bash ae/run_all.sh --group figure-08
 ```
 
-本机不需要 GPU。CPU 实验结束后、统一分析前，入口通过 SSH 自动探测 `allinai2plus` 的物理 GPU 0–7：
+本机不需要 GPU。CPU 实验结束后、统一分析前，入口通过 SSH 自动探测 `allinai2plus` 上远端配置 `devices` 列出的物理 GPU（AE 机器上为预留给本 artifact 的 GPU）：
 
 | 可用卡数 | 自动行为 |
 |---|---|

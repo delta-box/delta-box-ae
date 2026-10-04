@@ -5,14 +5,13 @@ import argparse
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT/'ae'), str(ROOT/'ae/runners')]
-from release.lock import verify
+from release.lock import runtime_identity
 from repro.common import configured_path, load_config, write_json
 from vm_experiment import require_memory_workdir, cached_digest
 
@@ -65,20 +64,16 @@ def main():
     parser.add_argument('--config',type=Path,default=ROOT/'ae/configs/spr4numa-review.json')
     parser.add_argument('--output',type=Path,required=True,help='New output directory')
     parser.add_argument('--limit',type=int,help='First N inputs only; explicitly marked quick-check')
-    parser.add_argument('--lock',type=Path,default=Path(os.environ.get('DELTABOX_RELEASE_LOCK',ROOT/'release/candidate-lock.json')))
     parser.add_argument('--inside',action='store_true',help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.limit is not None and args.limit <= 0:
         parser.error('limit must be positive')
     output = args.output.resolve()
     if args.inside:
-        os.environ['DELTABOX_RELEASE_LOCK'] = str(output/'source-lock.json')
-        verify(output/'source-lock.json')
         stage(args.config.resolve(),output)
         return 0
-    release = verify(args.lock.resolve())
+    release = runtime_identity()
     output.mkdir(parents=True,exist_ok=False)
-    shutil.copyfile(args.lock,output/'source-lock.json')
     write_json(output/'request.json',dict(config=str(args.config.resolve()),limit=args.limit,
                release=release,protocol='historical suffix write; fresh filesystem per input/arm',
                host=dict(numa_node=2,cpus='52-55',maximum_pstate=True),guest=dict(vcpus=4,mem_mib=8192)))

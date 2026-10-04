@@ -95,7 +95,7 @@ bash ae/run_all.sh --limit 3
 bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-它使用与上面相同的 3 条输入上限和输入池，运行结束后分析结果并生成对比页。CPU 实验之后，它会检查 GPU 主机 `allinai2plus` 上的 GPU 0–7：没有空闲 GPU 时，Figure 8(b) 记为跳过；有 1–3 张空闲时，运行八个案例中的六个；有 4 张时运行全部八个。GPU 是否可用不影响 CPU 结果。所有 CPU 和 GPU 输入都完成后会自动计算 Figure 8(c)；也可以[手动计算](#figure-08-gpu)。
+它使用与上面相同的 3 条输入上限和输入池，运行结束后分析结果并生成对比页。CPU 实验之后，它会检查 GPU 主机 `allinai2plus` 上为本 artifact 预留的 GPU：没有空闲 GPU 时，Figure 8(b) 记为跳过；有 1–3 张空闲时，运行八个案例中的六个；有 4 张时运行全部八个。GPU 是否可用不影响 CPU 结果。所有 CPU 和 GPU 输入都完成后会自动计算 Figure 8(c)；也可以[手动计算](#figure-08-gpu)。
 
 ### 输入集合
 
@@ -328,8 +328,21 @@ DeltaBox 和 E2B 创建 N = 1、4、16、64 个分支；CubeSandbox 创建 N = 1
 `ae/run_all.sh` 和 `--group figure-08` 会使用[远端配置](ae/configs/figure08-remote.json)通过 SSH 自动运行面板 (b)。[Figure 8 说明](ae/paper/figure-08/README.md)介绍了环境准备、GPU 的选择方式，以及只有部分案例能运行时的处理方式。快速检查和只分析已有数据的运行不会启动 GPU 任务。只运行 GPU 阶段：
 
 ```bash
-bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
+bash ae/run_all_gpu.sh
 ```
+
+命令结束时会直接打印 GPU 专用汇总，列出 8 项测试各自的状态、用卡数、重复次数和平均耗时，并给出准确的 `SUMMARY.md` 路径。同一份汇总也保存为 `result.md`，无需自己查找结果目录。
+
+GPU 专用入口使用 `allinai2plus` 上为本 artifact 预留的 GPU，并自动创建新的结果目录。完整 8 项测试需要 4 张空闲 GPU：生成阶段和 batch 1/4 的训练使用 1 张，batch 16/64 的训练使用 4 张。可用 `--output PATH` 指定结果目录。`--gpu-devices ID,...` 用于选择其他 GPU，只有作者为你分配了其他 GPU 时才需要使用。脚本排除繁忙设备，不会选择指定范围以外的卡；资源不足时明确报告部分完成或不可用。此入口只运行面板 (b)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。如需用这次 GPU 运行和之前 `ae/run_all_no_gpu.sh` 的结果生成面板 (c)，把下面两个目录换成这两次运行打印的目录：
+
+```bash
+"$AE_PYTHON" ae/repro/gpu_occupation.py \
+  --gpu-results <gpu-run>/gpu/attempt-001/results/summary.json \
+  --fanout-summary <cpu-run>/analysis/attempt-001/summary.json \
+  --output ae/results/selected/figure-08c --plot
+```
+
+图保存在 `ae/results/selected/figure-08c/plots/figure-08c.png`。CubeSandbox 只测 N = 1 和 16，因此 N = 64 一格标为未测量。
 
 重跑 Figure 8 的全部面板：
 
@@ -337,9 +350,9 @@ bash ae/run_all.sh --group gpu --output "$AE_RUN/figure-08-gpu"
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-远端的模型和 Python 环境由作者维护。脚本检查 GPU 0–7，并把繁忙或不可用的 GPU 记为跳过。空闲 GPU 不足时，运行会产生一个标为部分结果的输出；每个案例的参数保持不变。见[GPU 环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
+远端的模型和 Python 环境由作者维护。脚本只检查为本 artifact 预留的 GPU（远端配置中的 `devices` 列表），并把繁忙或不可用的 GPU 记为跳过。空闲 GPU 不足时，运行会产生一个标为部分结果的输出；每个案例的参数保持不变。见[GPU 环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
 
-**输出与判断。** 面板 (b) 输出每次重复的生成与训练时间，以及 `gpu/attempt-NNN/plots/figure-08b.png`；请在相同 batch size 下比较同一阶段。CPU fan-out 和 GPU 测量都成功后，面板 (c) 输出 `gpu/attempt-NNN/comparison/theory/occupation.json` 及相应图表。面板 (c) 是模型计算，而不是测量：检查沙箱时间缩短后，模型中的有效 GPU 占用率是否提高、staleness 是否降低。两个面板都会出现在本次运行的中英文对比页中。
+**输出与判断。** 面板 (b) 输出每次重复的生成与训练时间，以及 `gpu/attempt-NNN/plots/figure-08b.png`；请在相同 batch size 下比较同一阶段。CPU fan-out 和 GPU 测量都成功后，面板 (c) 输出 `gpu/attempt-NNN/comparison/theory/occupation.json` 及相应图表。面板 (c) 采用论文的 Equation 1，与论文 Figure 8(c) 的方法相同：检查沙箱时间缩短后，预期 GPU 占用率是否提高、staleness 是否降低。两个面板都会出现在本次运行的中英文对比页中。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>

@@ -114,7 +114,7 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertEqual(historical["DELTABOX_ASYNC_TEMPLATE_FULL_DUMP"], "1")
         self.assertEqual(checkpoint_environment(mode="slow")["DELTABOX_FORCE_CRIU_RESTORE"], "1")
 
-    def test_runtime_identity_accepts_dirty_source_and_ignores_stale_lock(self):
+    def test_runtime_identity_records_dirty_source_without_a_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             def git(*args):
@@ -136,43 +136,9 @@ class ReleaseIdentityTests(unittest.TestCase):
             source.unlink()
             self.assertNotEqual(added['source_sha256'], lock.runtime_identity(root)['source_sha256'])
             with patch.object(lock, 'ROOT', root), \
-                 patch.dict(os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/old-lock.json'}), \
-                 patch.object(lock, 'verify', side_effect=AssertionError('No runtime lock verification')):
+                 patch.dict(os.environ, {'DELTABOX_RELEASE_LOCK': '/missing/old-lock.json'}):
                 self.assertEqual(lock.from_environment(), lock.runtime_identity(root))
-
-    def test_source_lock_accepts_docs_but_rejects_modified_or_extra_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            def git(*args):
-                subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
-            git("init", "-q")
-            (root / "agent").mkdir()
-            source = root / "agent/run.py"
-            source.write_text("pass\n")
-            (root / "ae").mkdir()
-            launcher = root / "ae/run_all.sh"
-            launcher.write_text("#!/bin/sh\nexit 0\n")
-            git("add", ".")
-            git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "test")
-            frozen = lock.create(root)
-            path = root / "release/candidate-lock.json"
-            path.parent.mkdir()
-            path.write_text(json.dumps(frozen))
-            lock.verify(path, root)
-            (root / "agent/README.md").write_text("Documentation only")
-            lock.verify(path, root)
-            launcher.write_text("#!/bin/sh\nexit 1\n")
-            with self.assertRaisesRegex(ValueError, "source mismatch.*ae/run_all.sh"):
-                lock.verify(path, root)
-            launcher.write_text("#!/bin/sh\nexit 0\n")
-            source.write_text("raise RuntimeError()\n")
-            with self.assertRaisesRegex(ValueError, "source mismatch"):
-                lock.verify(path, root)
-            source.write_text("pass\n")
-            (root / "agent/shadow.py").write_text("pass\n")
-            with self.assertRaisesRegex(ValueError, "untracked"):
-                lock.verify(path, root)
-
+            self.assertFalse(hasattr(lock, 'verify') or hasattr(lock, 'create'))
 
 if __name__ == "__main__":
     unittest.main()

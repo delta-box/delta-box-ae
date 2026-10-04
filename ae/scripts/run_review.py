@@ -39,7 +39,7 @@ from repro.common import (configured_path, configured_value, file_record, host_s
                           repository_state, write_json)
 from repro.process import execute
 from vendor.finalbench.fc_diff_dm.fc_capacity import job_size_gib
-from release.lock import PATHS as SOURCE_PATHS, fingerprint, from_environment, source_records
+from release.lock import from_environment
 
 GROUPS = {
     'table-03': ['table-02-deltabox', 'table-03-slow'],
@@ -57,6 +57,14 @@ GROUPS = {
 }
 
 
+def gpu_device_selection(value):
+    items = value.split(',')
+    if (not items or any(item not in tuple(str(i) for i in range(8)) for item in items)
+            or len(set(items)) != len(items)):
+        raise argparse.ArgumentTypeError('--gpu-devices requires unique physical GPU indices from 0 to 7')
+    return [int(item) for item in items]
+
+
 def gpu_case_selection(value):
     cases = value.split(',')
     if not cases or len(set(cases)) != len(cases) or any(case not in GPU_CASES for case in cases):
@@ -72,14 +80,15 @@ class GPUCases(argparse.Action):
 
 
 def validate_gpu_selection(args):
-    if getattr(args, 'gpu_cases', None) is None:
+    if (getattr(args, 'gpu_cases', None) is None
+            and getattr(args, 'gpu_devices', None) is None):
         return
     explicit = bool(args.experiment or args.group)
     if (not explicit or set(args.experiment or []) - {GPU} or set(args.group or []) - {'gpu'}
             or args.all or args.quick_check or args.available or args.list or args.analyze_existing
             or args.limit is not None or args.max_events is not None
             or args.execute_plan or args.probe_plan or args.publish_output):
-        raise ValueError('--gpu-cases requires explicit GPU-only selection without quick-check, limits or analysis-only modes')
+        raise ValueError('--gpu-cases/--gpu-devices requires explicit GPU-only selection without quick-check, limits or analysis-only modes')
 
 
 def parser():
@@ -96,6 +105,8 @@ def parser():
                    help='CPU parallel layout: numa12 for reviewers (default); numa03 for the background CPU run')
     p.add_argument('--cube-profile', choices=('paper-disk',), help='Cube-only documented disk/NUMA reconstruction')
     p.add_argument('--e2b-profile', choices=('paper-nested',), action=GPUCases, help='E2B-only documented nested reconstruction; original eight complete inputs')
+    p.add_argument('--gpu-devices', type=gpu_device_selection, action=GPUCases, metavar='ID,...',
+                   help='GPU-only physical device allowlist on the configured remote host; never falls back outside it')
     p.add_argument('--gpu-cases', type=gpu_case_selection, action=GPUCases, metavar='CASE,...',
                    help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     p.add_argument('--config', type=Path, default=Path(os.environ.get('AE_CONFIG', REPO / 'ae/configs/spr4numa-review.json')))
@@ -168,18 +179,11 @@ def config_identity(config):
 
 
 def working_source():
-    records = source_records()
-    untracked = subprocess.check_output(['git', '-C', str(REPO), 'ls-files', '--others', '--exclude-standard', '-z', '--', *SOURCE_PATHS], text=True).split('\0')
-    for name in untracked:
-        if not name or name.endswith('.md'):
-            continue
-        path = REPO / name
-        records[name] = {'symlink': os.readlink(path)} if path.is_symlink() else {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-    return dict(source_commit=repository_state()['commit'], source_sha256=fingerprint(records), status='unlocked-working-source')
+    return from_environment()
 
 
 def current_source():
-    return from_environment() or working_source()
+    return from_environment()
 
 
 def complete_selection(args):
@@ -768,6 +772,7 @@ class Review:
                            config=str(args.config.resolve()), pinned=pin_requested(args, config), pin_policy='effective per-experiment measurement.pin; explicit CPU/NUMA flags enable; --no-pin disables',
                            release={} if args.analyze_existing else current_source(), measurement_request=dict(pinned=pin_requested(args, config), node=args.numa_node, cpus=args.cpus, env_node=os.environ.get('AE_NUMA_NODE'), env_cpus=os.environ.get('AE_CPUS')),
                            declared_unavailable=config.get('review', {}).get('declared_unavailable', []), skipped=[], coverage=[], steps=[], started_at=datetime.now(timezone.utc).isoformat())
+        self.record['gpu_requested_devices'] = getattr(args, 'gpu_devices', None)
         self.record['gpu_requested_cases'] = list(args.gpu_cases or GPU_CASES) if GPU in self.experiments else []
         self.record['gpu'] = dict(mode='auto', status='skipped', successful_cases=0,
                                   reason='GPU stage not reached or not selected')
@@ -797,6 +802,8 @@ class Review:
             self.previous_record = previous
             validate_isolated_baseline_resume(args, previous, self.record['release'])
             if GPU in self.experiments:
+                if previous.get('gpu_requested_devices') != self.record['gpu_requested_devices']:
+                    raise ValueError('Resume GPU device selection differs; use the original --gpu-devices choice')
                 prior_cases = previous.get('gpu_requested_cases', previous.get('gpu', {}).get('requested_cases', list(GPU_CASES)))
                 if prior_cases != self.record['gpu_requested_cases']:
                     raise ValueError('Resume GPU case selection differs; use the original --gpu-cases choice')
@@ -829,6 +836,12 @@ class Review:
 
     def save(self):
         write_json(self.output / 'review.json', self.record)
+        if self.experiments == [GPU]:
+            from ae.scripts.figure08_remote import gpu_summary_lines
+            text = '\n'.join(gpu_summary_lines(self.record, self.output))
+            for name in ('SUMMARY.md', 'result.md'):
+                (self.output / name).write_text(text)
+            return
         lines = ['# DeltaBox AE execution', '', f'Status: **{self.record["status"]}**', '',
                  '| Experiment | Status | Jobs selected / planned | Reason |', '|---|---|---|---|']
         for row in self.record['coverage']:
@@ -865,6 +878,11 @@ class Review:
         for name in ('SUMMARY.md', 'result.md'):
             (self.output / name).write_text('\n'.join(lines))
 
+    def print_summary(self):
+        if self.experiments == [GPU]:
+            print((self.output / 'SUMMARY.md').read_text(), flush=True)
+        print(f'{self.record["status"]}: {self.output / "SUMMARY.md"}', flush=True)
+
     def terminal_error(self, error):
         interrupted = isinstance(error, KeyboardInterrupt)
         state = 'interrupted' if interrupted else 'failed'
@@ -877,6 +895,8 @@ class Review:
         self.record.update(status=state, terminal_error=f'{type(error).__name__}: {error}',
                            finished_at=datetime.now(timezone.utc).isoformat())
         self.save()
+        if self.experiments == [GPU]:
+            self.print_summary()
 
     def step(self, name, command, timeout=14400, *, unavailable_on_failure=False, termination_grace=30):
         control_cpus = self.config.get('review', {}).get('control_cpus')
@@ -1244,8 +1264,11 @@ class Review:
                     config_path = Path(self.config['_config_dir']) / config_path
             else:
                 config_path = DEFAULT_CONFIG
+            options = {}
+            if self.record['gpu_requested_devices'] is not None:
+                options['device_indices'] = self.record['gpu_requested_devices']
             self.record['gpu'] = run_auto(self.output / relative, config_path,
-                                          requested_case_ids=self.record['gpu_requested_cases'])
+                                          requested_case_ids=self.record['gpu_requested_cases'], **options)
         except Exception as error:
             self.record['gpu'] = dict(mode='auto', status='failed', successful_cases=0,
                                       reason=f'{type(error).__name__}: {error}')
@@ -1500,7 +1523,7 @@ def main(argv=None):
     except ValueError as error:
         p.error(str(error))
     if args.list:
-        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU 0–7 admission; required when selected, reported in result.md'}}, indent=2))
+        print(json.dumps({'experiments': EXPERIMENTS, 'groups': GROUPS, 'automatic': {'figure-08-gpu': 'SSH GPU admission on the configured devices; required when selected, reported in result.md'}}, indent=2))
         return 0
     if args.execute_plan:
         return execute_plan(args.execute_plan)
@@ -1678,7 +1701,7 @@ def run_locked_selection(args, p, config, output, *, gate=None):
         runner.terminal_error(error)
         print(f'AE failed: {error}; evidence kept at {output}', file=sys.stderr)
         return 1
-    print(f'{runner.record["status"]}: {output / "SUMMARY.md"}', flush=True)
+    runner.print_summary()
     return code
 
 

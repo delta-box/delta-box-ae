@@ -262,6 +262,14 @@ def positive_integer(value):
     return number
 
 
+def gpu_device_selection(value):
+    items = value.split(',')
+    if (not items or any(item not in tuple(str(i) for i in range(8)) for item in items)
+            or len(set(items)) != len(items)):
+        raise argparse.ArgumentTypeError('--gpu-devices requires unique physical GPU indices from 0 to 7')
+    return [int(item) for item in items]
+
+
 def gpu_case_selection(value):
     cases = value.split(',')
     if not cases or len(set(cases)) != len(cases) or any(case not in GPU_CASES for case in cases):
@@ -293,6 +301,8 @@ def parse_arguments(argv):
                         help='E2B-only documented nested reconstruction; complete original eight inputs')
     parser.add_argument('--cube-profile', choices=('paper-disk',), action=Once,
                         help='Cube-only documented disk/NUMA reconstruction; full twelve inputs')
+    parser.add_argument('--gpu-devices', type=gpu_device_selection, action=Once, metavar='ID,...',
+                        help='GPU-only physical device allowlist on the fixed remote host')
     parser.add_argument('--gpu-cases', type=gpu_case_selection, action=Once, metavar='CASE,...',
                         help='Explicit GPU-only case selection; default all eight; paper coverage still requires eight')
     parser.add_argument('--baseline-inputs', choices=('44', 'all'), action=Once,
@@ -335,11 +345,11 @@ def parse_arguments(argv):
                 or args.gpu_cases is not None or args.resume is not None
                 or args.numa_node is not None or args.cpus is not None):
             parser.error('--cube-profile requires complete explicit table-02-cube only; profile controls placement')
-    if args.gpu_cases is not None:
+    if args.gpu_cases is not None or args.gpu_devices is not None:
         explicit = bool(args.experiment or args.group)
         if (not explicit or set(args.experiment or []) - {'figure-08-gpu'} or set(args.group or []) - {'gpu'}
                 or args.all or args.quick_check or args.list or args.limit is not None or args.max_events is not None):
-            parser.error('--gpu-cases requires explicit GPU-only selection without quick-check or limits')
+            parser.error('--gpu-cases/--gpu-devices requires explicit GPU-only selection without quick-check or limits')
     if args.quick_check and (args.experiment or args.group or args.limit is not None or args.max_events is not None):
         parser.error('--test already selects one DeltaBox instance and three events')
     if args.all and (args.experiment or args.group):
@@ -486,6 +496,8 @@ def command_line(policy, args, output):
         command += ['--e2b-profile', args.e2b_profile]
     if getattr(args, 'cube_profile', None) is not None:
         command += ['--cube-profile', args.cube_profile]
+    if args.gpu_devices is not None:
+        command += ['--gpu-devices', ','.join(map(str, args.gpu_devices))]
     if args.gpu_cases is not None:
         command += ['--gpu-cases', ','.join(args.gpu_cases)]
     if args.baseline_inputs is not None:

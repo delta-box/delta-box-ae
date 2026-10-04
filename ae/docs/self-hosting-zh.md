@@ -86,7 +86,7 @@ bash ae/run_test.sh --config "$AE_CONFIG"
 
 <a id="gpu-setup"></a>
 
-一键流程仅使用 auto 模式，通过 SSH 在 `allinai2plus` 探测 GPU 0–7；运行本机无需 GPU。复制并调整 `ae/configs/figure08-remote.json`，在主 `AE_CONFIG` 中设置 `"gpu_remote_config": "/absolute/path/to/remote.json"`。相对路径以主配置目录为基准。配置包含 SSH 主机、远端目录、模型和 Python 路径、空闲阈值及顶层版本约束；不再使用 `gpu.config` 或 `gpu.enabled`。
+一键流程仅使用 auto 模式，通过 SSH 在 `allinai2plus` 探测 `devices` 列出的物理 GPU（AE 机器上为预留给本 artifact 的 GPU）；运行本机无需 GPU。复制并调整 `ae/configs/figure08-remote.json`，在主 `AE_CONFIG` 中设置 `"gpu_remote_config": "/absolute/path/to/remote.json"`。相对路径以主配置目录为基准。配置包含 SSH 主机、远端目录、模型和 Python 路径、空闲阈值及顶层版本约束；不再使用 `gpu.config` 或 `gpu.enabled`。
 
 准备非交互 SSH、两端 rsync、本地绘图依赖和远端 GPU 环境。默认复用已部署的 py312，不自动安装软件；版本漂移会被预检记录。完整参数和准备说明见 [Figure 8 指南](../paper/figure-08/README.md)。
 

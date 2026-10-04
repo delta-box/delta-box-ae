@@ -4,7 +4,7 @@ spr4numa 只使用 `/mnt/disk2/dyp/deltabox-runtime` 作为当前开发、调试
 
 ## 当前实验结果
 
-所有新测结果放在仓库的 `ae/results/`，按源码锁中的 `source_commit` 前 12 位分组：
+所有新测结果放在仓库的 `ae/results/`，按结果 `release` 字段记录的 `source_commit` 前 12 位分组：
 
 ```text
 ae/results/

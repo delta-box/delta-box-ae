@@ -1,6 +1,6 @@
 # 源码冻结与验收范围
 
-当前发布仓库是 [GitHub delta-box/deltabox-runtime](https://github.com/delta-box/deltabox-runtime)，评审入口在 `main` 和 `feat/ae-oneclick-validation`。日常 AE 运行记录当前 checkout 的提交及实际源码哈希，不再要求匹配 `candidate-lock.json`；旧锁仅保留为历史归档审计材料。当前 CPU 环境已配齐依赖，**完整 1,404 作业性能评测尚未执行**，源码锁保留 `candidate-not-final` 状态。
+当前发布仓库是 [GitHub delta-box/deltabox-runtime](https://github.com/delta-box/deltabox-runtime)，评审入口在 `main` 和 `feat/ae-oneclick-validation`。AE 运行记录当前 checkout 的提交及实际源码哈希，仓库不再维护源码锁。当前 CPU 环境已配齐依赖，**完整 1,404 作业性能评测尚未执行**。
 
 spr4numa 的开发和验收统一使用 `/mnt/disk2/dyp/deltabox-runtime`。托管配置是 `/etc/deltabox-ae/review.json`，可公开的路径说明见 [`spr4numa-review.json`](../ae/configs/spr4numa-review.json)。API 凭据留在机器的私有环境文件中，不进入仓库。评审账号登录后直接执行：
 
@@ -37,37 +37,7 @@ Table 2、Table 3、Figure 1 的默认 fresh 输出按论文布局生成，覆�
 默认 checkpoint 协议来自 `common/runtime_profile.py`，为固定 PID 100 的增量配置，prewarm off。
 历史 async-full 是明确的独立对照 profile，不能用它补齐增量验证。
 
-`candidate-lock.json`（生成后纳入 git）记录源代码提交、源树和每个源文件/兼容链接的身份。
-文档和结果提交可以后续增加，但被锁定的实现文件必须保持一致。
-镜像、kernel、trace/schedule 和实际配置的哈希由各 runner 记录；源码锁不能替代它们。
-
-```bash
-# 可选：审计历史锁；不是日常运行的前置条件。
-python3 release/lock.py verify
-```
-
-开发者完成源码提交后才能生成新的源码锁；`python3 release/lock.py create --file PATH` 只接受尚不存在的目标文件。更换锁以后，必须用新结果目录验证改动涉及的实验。当前配置的完整一键入口见上文；下面保留历史 `spr4numa-replay-fixes.json` 的手动复测命令，不能把它的结果重标为当前托管配置。
-
-```bash
-python3 ae/reproduce.py prepare
-python3 replay/run_release.py --config ae/configs/spr4numa-replay-fixes.json --plan --out ae/results/release-table2
-sudo -n python3 replay/run_release.py --config ae/configs/spr4numa-replay-fixes.json --out ae/results/release-table2
-```
-
-`run_release.py` 每次启动及 suite 每个 job 前验证源码锁；实验结束再次验证。
-默认跑 Table 2 DeltaBox 12 条完整轨迹（317 checkpoint / 334 restore），NUMA 2 / CPU 52–55，
-请求最高 P-state 并保存实际频率。结果目录不可复用。`--limit`、`--max-events` 总是标为 快速检查。
-`--plan` 只生成计划。本轮配置和镜像路径见 `ae/configs/spr4numa-replay-fixes.json`。
-
-```bash
-# Table 3 slow 使用同一份实现，强制选择 cold CRIU 路径
-sudo -n python3 replay/run_release.py --config ae/configs/spr4numa-replay-fixes.json --experiment table-03-slow --out ae/results/release-slow
-# 所有 CPU 项，包括 baseline；未满足的依赖不能记为通过
-sudo -n python3 replay/run_release.py --config ae/configs/spr4numa-replay-fixes.json --all --out ae/results/release-all-cpu
-# 从新结果生成分析和图，不混入历史结果
-python3 ae/reproduce.py analyze --source fresh --input ae/results/release-table2/suite --output ae/results/release-table2/analysis
-python3 ae/reproduce.py plot --input ae/results/release-table2/analysis/summary.json --output ae/results/release-table2/plots
-```
+每次运行把当前 checkout 的提交号和可执行源码的哈希（`release/lock.py` 中的 `runtime_identity`）记入结果的 `release` 字段。仓库不维护冻结的源码锁，修改源码不会阻止或作废运行；镜像、kernel、trace/schedule 和实际配置的哈希由各 runner 另行记录。手动复测统一使用 `ae/run_all.sh`，见 [AE README](../README.md)。
 
 论文图表与实验入口的完整映射见 [AE README](../ae/README.md#实验索引)。
 
@@ -75,7 +45,7 @@ python3 ae/reproduce.py plot --input ae/results/release-table2/analysis/summary.
 
 | 项目 | 要求 / 当前边界 |
 |---|---|
-| 源码统一 | live/replay 共享核心，源码锁校验；历史多版本结果不计为候选证据 |
+| 源码统一 | live/replay 共享核心，每次结果记录源码身份；历史多版本结果不计为候选证据 |
 | Table 2 / Table 3 fast | 新锁下完整 Django warm 通过（29 checkpoint / 28 restore）；仍需 12 条完整 replay 及 parent pages 复用验证 |
 | Table 3 slow | 控制通道和 cold 回收屏障已修复；新锁下完整 Django 29 checkpoint / 28 cold restore 通过；其余 cohort 待验收 |
 | 增量链与异步 dump | 默认旧 profile 保持历史语义；新 async-incremental profile 通过独立页链、真实 warm/cold 与有界队列检查，范围及源锁见本轮报告；完整 cohort 尚待验证 |
@@ -87,5 +57,5 @@ python3 ae/reproduce.py plot --input ae/results/release-table2/analysis/summary.
 | 真实 LLM agent | 仅代码整理和无 AK 单元测试；按用户要求不做服务端到端验证 |
 | GPU | Figure 8(b) 的脚本已提供，实际 GPU 测量待资源；Figure 8(c) CPU 理论计算和历史输入校验不计作新 GPU 数据 |
 
-性能修复后应重跑受影响实验；新结果自动记录实际源码身份，不必重建源码锁，不能把旧结果重标成新结果。
+性能修复后应重跑受影响实验；新结果自动记录实际源码身份，不能把旧结果重标成新结果。
 测试通过、目录完成和短测通过都不足以声称“所有论文数据已复现”。

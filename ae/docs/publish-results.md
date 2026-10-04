@@ -21,13 +21,13 @@
 1. 检查 `SUMMARY.md`、顶层 `review.json` 的结束状态及覆盖列表；中断或仍 running 的目录需保留原件并另写终止说明，不能伪改为成功。
 2. 选择 `review.json.outputs` 指向的一次 `attempt-NNN`。确认 analysis、plots、comparison 和冻结的 coverage 都来自同一 attempt。
 3. 核对原始成功 job 的事件数、完整/限量标记和计时配置。缺项或失败必须与成功图一起公开；Figure 8(b) 使用独立 GPU 计时入口，(c) 使用 CPU 理论计算入口，分别记录验证范围与输入来源。
-4. 从测量源码锁读取完整 `source_sha256`。统计量不能跨 source、profile、zero/recorded 等口径混合。Table 2 的系统列、Table 3 的 fast/slow 列可以在原布局中并列，必须保留各自身份与样本数；同一格存在冲突来源时不隐式选择或平均。
+4. 从测量结果 `review.json` 的 `release` 字段读取完整 `source_sha256`。统计量不能跨 source、profile、zero/recorded 等口径混合。Table 2 的系统列、Table 3 的 fast/slow 列可以在原布局中并列，必须保留各自身份与样本数；同一格存在冲突来源时不隐式选择或平均。
 
 ## 需要保留的产物
 
 | 产物 | 用途 |
 |---|---|
-| 正式测量的源码锁、`review.json`、`SUMMARY.md` | commit、完整源码 SHA、选择范围及结束状态 |
+| 正式测量的 `review.json`（含源码身份）、`SUMMARY.md` | commit、完整源码 SHA、选择范围及结束状态 |
 | `plans/`、`configs/`、各组 suite / 各 job `run.json` | 有效配置、计划、输入和测量条件 |
 | `runs/` 中 analysis 使用的原始文件 | JSON/JSONL、CSV、schedule、mock audit、后台 dump 和失败证据；不能只归档均值 |
 | `environment/attempt-NNN/` | NUMA、CPU 频率采样及配置恢复证据 |

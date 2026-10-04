@@ -347,8 +347,9 @@ def supplemental_markdown(panels, *, language):
             alt = "本次运行结果" if zh else "This run's result"
             lines += [f"![{title}: {alt}]({png})", "", f"[PDF]({pdf})", ""]
             if panel["experiment"] == "figure-08-theory":
-                lines += [("由本次 CPU fan-out 和 GPU 时延计算的理论占用率与 staleness。" if zh else
-                           "Modeled occupation and staleness calculated from this run's CPU fan-out and GPU timings."), ""]
+                lines += [("与论文 Figure 8(c) 相同，按论文 Equation 1 由本次 fan-out 和 GPU 时间得到预期占用率与 staleness。" if zh else
+                           "As in the paper's Figure 8(c), expected occupation and staleness follow the paper's Equation 1, "
+                           "using this run's fan-out and GPU times."), ""]
         else:
             lines += [("本项未成功生成结果；请查看运行日志。GPU 资源问题请联系作者。" if zh else
                        "This item did not produce a successful result; inspect its logs. Contact the authors for GPU resources."), ""]
