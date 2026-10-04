@@ -70,6 +70,7 @@ class E2BCleanupBudgetTests(unittest.TestCase):
                              pin_requested=lambda args, config: True,
                              measurement_placement=lambda args, config: {'node': node, 'cpus': cpus},
                              file_record=lambda path: {'path': str(path)}, write_json=write_json,
+                             write_effective_config=lambda path, config: path,
                              check_timeout=lambda config: 10, config_identity=lambda config: 'fixed',
                              bounded_plan_limits=lambda *args: [], validation_job_limit=lambda config: 10,
                              nvme_work_root=lambda config: None)

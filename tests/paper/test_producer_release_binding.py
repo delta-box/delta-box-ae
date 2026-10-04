@@ -56,12 +56,12 @@ class ProducerReleaseBindingTests(unittest.TestCase):
     def verify(self):
         return lock.runtime_identity(self.checkout)
 
-    def assert_bound(self, output):
+    def assert_bound(self, output, artifacts=1):
         run = FreshRun(Evidence(output, 'fresh'), output / 'run.json', set())
         self.assertEqual(run.config['release'], self.release)
         self.assertEqual(source_identity(run.config), 'release-sha256:' + self.release['source_sha256'])
         self.assertEqual(run.config['runtime']['commit'], 'later-doc-commit')
-        self.assertEqual(len(run.artifacts), 1)
+        self.assertEqual(len(run.artifacts), artifacts)
         for name, path in run.artifacts.items():
             expected = next(record for record in run.config['artifacts'] if record['path'] == name)
             self.assertEqual(expected['sha256'], file_record(path)['sha256'])
@@ -118,11 +118,12 @@ class ProducerReleaseBindingTests(unittest.TestCase):
                     self.assertEqual(manifest['release'], self.release)
                     if backend == 'cube':
                         self.assertEqual(manifest['cube_environment']['template_memory_mb'], 512)
+                        write_json(output / 'cube-audit.json', dict(cleanup_ok=True))
                     write_json(output / 'fanout.json', [dict(forks=1, success=True, success_count=1, ready_e2e_ms=3.0)])
                     return dict(status='ok')
                 stack.enter_context(patch.object(FANOUT, 'execute', side_effect=measured))
                 self.assertEqual(FANOUT.main(), 0)
-                self.assert_bound(output)
+                self.assert_bound(output, artifacts=2 if backend == 'cube' else 1)
 
     def test_changed_source_is_recorded_without_blocking_the_producer(self):
         (self.checkout / 'ae/runners/fixture.py').write_text('frozen = False\n')

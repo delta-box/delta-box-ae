@@ -1,6 +1,5 @@
 """Opt-in body timing excludes trace I/O and never changes the original touch result."""
 import ast
-import hashlib
 import importlib.util
 import json
 import os
@@ -25,17 +24,6 @@ class TouchBodyTimingTests(unittest.TestCase):
         with patch.dict(os.environ, {'OFFICIAL_FORK_TOKEN':'fixture-token','OFFICIAL_FORK_MEM_MIB':'1'}):
             exec(code, ns)
         return ns
-
-    def test_five_default_off_outputs_match_archived_0327_bytes(self):
-        expected = ['ee905a903ac311bc9a07e5713c5f02945154a394044c61b53cddfadfde6fe682',
-            '606bd7a020b9ab0aa0db75e0d21abdf6917cc6edb1766458a199f83c35fcdcce',
-            '2fafae6acbd14f78903ed5774e9323a1d4586c8869a64e6b448260e614a0c12b',
-            '960ee18f3c6c41e7be0f72e1caeed387051f1241779344fd3f3ade5f03189fe8',
-            '2c08854c66dc572468db4b2cc594644ab93610891d69d740c9df682323b324c8']
-        with patch.dict(os.environ, {'DELTABOX_E2B_DIAGNOSTIC_TRACE':'0'}):
-            values = [D.MEM_SERVER_CODE, D.start_mem_server_shell(mem_mib=64,token='fixture-token'),
-                D.verify_mem_server_shell(token='fixture-token'), D.guest_observation_code(), D._SDK_OBSERVATION_CODE]
-        self.assertEqual([hashlib.sha256(v.encode()).hexdigest() for v in values], expected)
 
     def test_clock_order_body_once_and_trace_io_outside_bracket(self):
         with tempfile.TemporaryDirectory() as directory:

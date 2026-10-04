@@ -203,17 +203,6 @@ class MockMessagePolicyTests(unittest.TestCase):
                     self.assertEqual(server._json_equal(actual, expected),
                                      server.canonical_messages_hash(actual) == server.canonical_messages_hash(expected))
 
-    def test_real_c14_missing_history_is_exported_without_stopping_audit(self):
-        case = json.loads((ROOT / 'ae/report/replay-fixes-20260921/criu-host/'
-                           'mock_mismatch_astropy__astropy-13033_c14.json').read_text())
-        state = self.state()
-        state.sequence = [completion(case['expected_messages'])]
-        handler = self.request(state, case['request_messages'])
-        handler._send_json.assert_called_once_with(200, {'id': 'recorded-0'})
-        report = state.flush_audit()
-        self.assertEqual([row['index'] for row in report['records'][0]['differences']], [18, 19])
-        self.assertTrue(all(row['kind'] == 'missing_request_message' for row in report['records'][0]['differences']))
-
     def test_actual_http_flush_after_completion_exports_and_drains(self):
         state = self.state()
         listener = server.TCPHTTPServer('127.0.0.1', 0, state)

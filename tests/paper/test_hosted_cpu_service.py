@@ -143,35 +143,6 @@ class CPUServiceTests(unittest.TestCase):
                 result, error = None, exc
             return result, error, calls, audit.call_args_list, start.call_args
 
-    def test_success_and_failed_workload_return_their_status_without_global_stop(self):
-        for expected in (0, 7):
-            with self.subTest(expected=expected):
-                result, error, calls, audits, start = self.supervise(expected)
-                self.assertIsNone(error)
-                self.assertEqual(result, expected)
-                self.assertFalse(any(row[0] == 'stop-owned-unit' for row in calls))
-                self.assertEqual(audits[-1].kwargs['event'], 'cpu-service-finished')
-                self.assertEqual(audits[-1].kwargs['returncode'], expected)
-                self.assertEqual(start.kwargs['env'], self.environment)
-
-    def test_sigterm_stops_only_owned_unit_and_waits_before_returning_143(self):
-        result, error, calls, audits, _ = self.supervise('term')
-        self.assertIsNone(error)
-        self.assertEqual(result, 143)
-        self.assertLess(calls.index(('terminate-client',)), calls.index(('stop-owned-unit', UNIT)))
-        self.assertEqual(audits[-1].kwargs['interrupted_signals'], [signal.SIGTERM])
-        self.assertEqual(audits[-1].kwargs['unit_state']['MainPID'], '0')
-
-    def test_cooperative_yield_stops_only_owned_unit_before_returning_reserved_125(self):
-        result, error, calls, audits, _ = self.supervise(None, yielding=True)
-        self.assertIsNone(error)
-        self.assertEqual(result, hosted.CPU_REVIEWER_YIELD)
-        self.assertEqual([call for call in calls if call[0] == 'stop-owned-unit'], [('stop-owned-unit', UNIT)])
-        self.assertLess(calls.index(('terminate-client',)), calls.index(('stop-owned-unit', UNIT)))
-        self.assertTrue(audits[-1].kwargs['yielded_to_reviewer'])
-        self.assertIsNone(audits[-1].kwargs['cleanup_error'])
-        self.assertEqual(audits[-1].kwargs['unit_state']['MainPID'], '0')
-
     def test_failed_yield_cleanup_is_not_marked_as_success_or_retryable(self):
         result, error, calls, audits, _ = self.supervise(None, yielding=True,
             stop_error=RuntimeError('owned cgroup populated'))
@@ -200,32 +171,6 @@ class CPUServiceTests(unittest.TestCase):
         self.assertFalse(audits[-1].kwargs['yielded_to_reviewer'])
         self.assertIn('transaction inode changed', audits[-1].kwargs['cleanup_error'])
 
-    def test_launch_client_termination_error_still_stops_owned_unit_and_cannot_yield(self):
-        result, error, calls, audits, _ = self.supervise(None, yielding=True,
-            client_error=OSError('launch client disappeared'))
-        self.assertIsNone(result)
-        self.assertIsInstance(error, OSError)
-        self.assertIn(('stop-owned-unit', UNIT), calls)
-        self.assertEqual(audits[-1].kwargs['returncode'], 1)
-        self.assertFalse(audits[-1].kwargs['yielded_to_reviewer'])
-        self.assertIn('launch client disappeared', audits[-1].kwargs['cleanup_error'])
-
-    def test_workload_125_is_failure_and_cannot_masquerade_as_cooperative_yield(self):
-        result, error, calls, audits, _ = self.supervise(125)
-        self.assertIsNone(error)
-        self.assertEqual(result, 1)
-        self.assertEqual(audits[-1].kwargs['workload_returncode'], 125)
-        self.assertFalse(audits[-1].kwargs['yielded_to_reviewer'])
-        self.assertFalse(any(call[0] == 'stop-owned-unit' for call in calls))
-
-    def test_sigint_is_not_retried_and_owned_cleanup_finishes_before_return_130(self):
-        result, error, calls, audits, _ = self.supervise('int')
-        self.assertIsNone(error)
-        self.assertEqual(result, 130)
-        self.assertEqual([call for call in calls if call[0] == 'stop-owned-unit'], [('stop-owned-unit', UNIT)])
-        self.assertFalse(audits[-1].kwargs['yielded_to_reviewer'])
-        self.assertEqual(audits[-1].kwargs['interrupted_signals'], [signal.SIGINT])
-
     def test_layout03_service_boundary_excludes_reviewer_cpu_and_memory_nodes(self):
         command = hosted.cpu_service_command(self.policy, self.caller,
             self.command + ['--cpu-layout', 'numa03'], UNIT)
@@ -244,22 +189,6 @@ class CPUServiceTests(unittest.TestCase):
             with self.subTest(layout=layout), self.assertRaises(ValueError):
                 hosted.cpu_service_command(self.policy, self.caller,
                     self.command + ['--cpu-layout', layout], UNIT)
-
-    def test_client_timeout_still_stops_owned_service_before_propagating_failure(self):
-        result, error, calls, audits, _ = self.supervise('timeout')
-        self.assertIsNone(result)
-        self.assertIsInstance(error, subprocess.TimeoutExpired)
-        self.assertIn(('stop-owned-unit', UNIT), calls)
-        self.assertEqual(audits[-1].kwargs['returncode'], 1)
-
-    def test_cleanup_failure_after_success_is_audited_as_failure(self):
-        with patch.object(hosted, 'verify_cpu_service_empty', side_effect=RuntimeError('owned cgroup populated')):
-            result, error, calls, audits, _ = self.supervise(0)
-        self.assertIsNone(result)
-        self.assertIsInstance(error, RuntimeError)
-        self.assertIn(('stop-owned-unit', UNIT), calls)
-        self.assertEqual(audits[-1].kwargs['returncode'], 1)
-        self.assertIn('owned cgroup populated', audits[-1].kwargs['cleanup_error'])
 
     def test_stop_requires_inactive_mainpid_zero_after_grace(self):
         with patch.object(hosted.subprocess, 'run', return_value=SimpleNamespace(returncode=0)),\

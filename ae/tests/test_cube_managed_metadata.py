@@ -203,7 +203,9 @@ class Tests(unittest.TestCase):
                     return '1 2 0:1 / /var/lib/mysql rw - tmpfs tmpfs rw\n'
                 return read(path, *a, **kw)
             with patch.object(m, 'MYSQL_DROP', drop), patch.object(m, 'inspect', side_effect=inspect), \
-                 patch.object(m, 'run', side_effect=run), \
+                 patch.object(m, 'run', side_effect=run), patch.object(m, 'mysql_volume_removal_disabled'), \
+                 patch.object(m, 'service_cgroup_masks', return_value={'path': '/fixture'}), \
+                 patch.object(m, 'restore_service_cgroup_masks'), \
                  patch.object(m, 'output', side_effect=lambda *a: 'simple' if 'Type' in a else '{}' if a[0]=='findmnt' else 'original'), \
                  patch.object(m, 'variables', return_value='flush=1;binlog=1'), \
                  patch.object(m, 'idle'), patch.object(m, 'node_available', return_value=100*m.GIB), \
@@ -310,6 +312,9 @@ class Tests(unittest.TestCase):
                     return original
                 with patch.object(m,'MYSQL_DROP',drop),patch.object(m,'inspect',side_effect=inspect), \
                      patch.object(m,'run',side_effect=run),patch.object(Path,'unlink',remove), \
+                     patch.object(m,'mysql_volume_removal_disabled'), \
+                     patch.object(m,'service_cgroup_masks',return_value={'path':'/fixture'}), \
+                     patch.object(m,'restore_service_cgroup_masks'), \
                      patch.object(m,'output',side_effect=lambda *a:'simple' if 'Type' in a else 'fixed'):
                     with self.assertRaises(RuntimeError):
                         with m.mysql_launcher(root,guard):pass

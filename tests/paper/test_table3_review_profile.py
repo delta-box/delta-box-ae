@@ -50,9 +50,10 @@ class Table3ReviewProfile(unittest.TestCase):
 
  def test_every_default_experiment_inherits_the_selected_runtime_placement(self):
   self.config['measurement']={'pin':True,'numa_node':5,'cpus':'100-103'}
-  for name in self.config['review']['experiment_overrides']:
+  for name,override in self.config['review']['experiment_overrides'].items():
    with self.subTest(experiment=name):
-    self.assertEqual(self.effective(name)['measurement'],self.config['measurement'])
+    expected={**self.config['measurement'],**override.get('measurement',{})}
+    self.assertEqual(self.effective(name)['measurement'],expected)
 
 class RuntimePlacement(unittest.TestCase):
  def test_missing_pinned_placement_has_no_hardcoded_node_or_cpu_fallback(self):

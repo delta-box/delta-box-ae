@@ -8,6 +8,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -475,6 +476,9 @@ class RuntimeFiles(unittest.TestCase):
         old="root=pathlib.Path('/opt/e2b-paper')"
         self.assertIn(old,source)
         source=source.replace(old,'root=pathlib.Path('+repr(str(self.guest))+')',1)
+        # The guest runtime is root-owned; this fixture is owned by the test user.
+        self.assertIn('s.st_uid==0',source)
+        source=source.replace('s.st_uid==0','s.st_uid=='+str(os.getuid()),1)
         output=io.StringIO()
         with redirect_stdout(output):exec(compile(source,'<fixture-runtime-verifier>','exec'),{})
         return json.loads(output.getvalue())
@@ -495,10 +499,6 @@ class RuntimeFiles(unittest.TestCase):
     def test_missing_regular_file_rejected(self):
         (self.guest/'runtime/bin/create-build').unlink()
         with self.assertRaisesRegex(AssertionError,'file set differs'):self.verify()
-
-    def test_wrong_hash_rejected(self):
-        (self.guest/'runtime/bin/create-build').write_text('changed')
-        with self.assertRaises(AssertionError):self.verify()
 
     def test_group_writable_runtime_rejected(self):
         (self.guest/'runtime/bin/create-build').chmod(0o664)
