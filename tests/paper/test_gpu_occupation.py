@@ -292,8 +292,37 @@ class MeasurementImportTests(unittest.TestCase):
             with self.subTest(suite=suite), self.assertRaises(ValueError):
                 self.import_inputs(suite, fanout_summary())
 
+    def test_unmeasured_fanout_point_is_declared_unavailable_not_filled(self):
+        summary = fanout_summary()
+        series = summary["experiments"]["figure-08"]["series"]
+        series[:] = [row for row in series if not (row.get("backend") == "e2b" and row["x"] == 64)]
+        inputs = self.import_inputs(timing_suite(), summary)
+        self.assertEqual([(r["backend"], r["n"]) for r in inputs["unavailable"]], [("e2b", 64)])
+        self.assertIn("this run measured N=16", inputs["unavailable"][0]["reason"])
+        result = self.calculate(inputs)
+        self.assertEqual((result["status"], result["coverage"]), ("ok", "partial"))
+        self.assertEqual([(r["backend"], r["n"]) for r in result["rows"]],
+                         [("deltabox", 16), ("deltabox", 64), ("e2b", 16)])
+        self.assertEqual(self.calculate(self.import_inputs(timing_suite(), fanout_summary()))["coverage"],
+                         "complete")
+
+    def test_explicit_inputs_still_reject_undeclared_or_conflicting_gaps(self):
+        from ae.repro.gpu_occupation import validate_inputs
+        inputs = theory_inputs()
+        inputs["sandbox_timings"].pop()
+        with self.assertRaisesRegex(ValueError, "Missing sandbox timing for e2b N=64"):
+            validate_inputs(inputs)
+        for point in (dict(backend="e2b", n=16, reason="measured"), dict(backend="cube", n=64, reason="x"),
+                      dict(backend="e2b", n=32, reason="x"), dict(backend="e2b", n=64, reason="")):
+            broken = copy.deepcopy(inputs)
+            broken["unavailable"] = [dict(backend="e2b", n=64, reason="not measured"), point]
+            with self.subTest(point=point), self.assertRaises(ValueError):
+                validate_inputs(broken)
+        inputs["unavailable"] = [dict(backend="e2b", n=64, reason="not measured")]
+        self.assertEqual(validate_inputs(inputs)["unavailable"], inputs["unavailable"])
+
     def test_rejects_missing_bad_unit_duplicate_or_conflicting_fanout(self):
-        for mutation in (lambda rows: rows.pop(0),
+        for mutation in (lambda rows: rows.clear(),
                          lambda rows: rows[0].update(unit="s"),
                          lambda rows: rows[0].update(y=-1),
                          lambda rows: rows.append(copy.deepcopy(rows[0])),
@@ -390,6 +419,19 @@ class PlotTests(unittest.TestCase):
             self.assertIn("Assumed-input model", metadata["provenance_label"])
             for name in ("figure-08c.png", "figure-08c.pdf"):
                 self.assertGreater((output / name).stat().st_size, 1000)
+
+    def test_theory_plot_labels_unmeasured_points_without_a_bar(self):
+        from ae.repro.figure08_plots import plot_gpu_occupation
+        from ae.repro.gpu_occupation import calculate_occupation
+        inputs = theory_inputs()
+        inputs["sandbox_timings"] = [r for r in inputs["sandbox_timings"]
+                                     if (r["backend"], r["n"]) != ("e2b", 64)]
+        inputs["unavailable"] = [dict(backend="e2b", n=64, reason="not measured")]
+        with tempfile.TemporaryDirectory() as tmp:
+            metadata = plot_gpu_occupation(calculate_occupation(inputs), Path(tmp) / "theory")
+            self.assertEqual(metadata["unavailable_points"], [{"backend": "e2b", "n": 64}])
+            self.assertEqual(metadata["estimated_points"], [])
+            self.assertGreater((Path(tmp) / "theory/figure-08c.png").stat().st_size, 1000)
 
     def test_invalid_plot_inputs_do_not_create_output(self):
         from ae.repro.figure08_plots import plot_gpu_timing, plot_gpu_occupation

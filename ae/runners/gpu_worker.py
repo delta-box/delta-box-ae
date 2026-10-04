@@ -189,8 +189,9 @@ def generation(config, case, torch):
     prompts, input_lengths, caps = generation_inputs(settings, case['batch'], llm.get_tokenizer())
     sampling = [SamplingParams(temperature=settings['temperature'], top_p=settings['top_p'],
                               max_tokens=cap, ignore_eos=True, seed=config['seed']) for cap in caps]
+    # Warm the timed batch shape: sampling kernels JIT-compile per batch size.
     for _ in range(case['warmup_reps']):
-        llm.generate(prompts[:2], sampling[:2], use_tqdm=False)
+        llm.generate(prompts, sampling, use_tqdm=False)
     torch.cuda.synchronize()
     samples = []
     for repeat in range(case['reps']):
@@ -223,7 +224,7 @@ def generation(config, case, torch):
                     actual_input_lengths=input_lengths, effective_output_caps=caps, max_model_len=settings['max_model_len'],
                     context_limited=any(n + settings['out_tokens'] > settings['max_model_len'] for n in input_lengths),
                     prefix_caching=settings['enable_prefix_caching'],
-                    warmup_batch=min(case['batch'], 2),
+                    warmup_batch=case['batch'],
                     timing='synchronous llm.generate API duration; explicit warmup/load excluded; first-use work may remain'),
                 hardware=[hardware(torch, 0)])
 

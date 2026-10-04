@@ -94,7 +94,7 @@ python3 ae/runners/gpu_timing.py plan --test
 
 **前缀缓存：**默认配置显式设置 `generation.enable_prefix_caching=true`，对应历史 vLLM 的开启状态；实际值写入 `config.json` 和逐任务 `generation_protocol.prefix_caching`。这些 prompts 共享长前缀，重复测量又使用同一批输入，因此缓存开关会显著影响大 batch 耗时。禁用缓存的诊断应另建配置，显式设为 `false` 并使用独立输出目录。旧版本未记录该配置项，复跑旧的禁缓存协议时必须显式补上 `false`。
 
-生成保留历史的最多两个请求预热；它不保证覆盖大 batch 的全部首次 JIT 开销，正式样本不剔除慢点。当前仍显式设置请求 seed，与历史未设置请求 seed 有差异。软件版本、配置差异和缓存对照证据统一记录在[总账](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md#figure-8b-gpu)。
+生成用与计时相同的完整 batch 预热：vLLM 的采样 kernel 按 batch 形状即时编译，只用两个请求预热时，B16 的一次计时曾落入这次编译（单次 6.30 s，其余两次 1.93 s）。预热不计入时延，正式样本不剔除慢点。当前仍显式设置请求 seed，与历史未设置请求 seed 有差异。软件版本、配置差异和缓存对照证据统一记录在[总账](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md#figure-8b-gpu)。
 
 ## GPU 机器需要提供什么
 
@@ -154,6 +154,6 @@ python3 ae/repro/gpu_occupation.py \
   --output ae/results/figure08-theory-new --plot
 ```
 
-缺失或重复的输入不会被补成零，失败的 GPU 任务不会成为有效时延。历史输入、新测输入和混合输入分别标记；(c) 始终标为理论推导。
+缺失或重复的输入不会被补成零，失败的 GPU 任务不会成为有效时延。历史输入、新测输入和混合输入分别标记；(c) 始终标为理论推导。某个后端在某个 N 没有测 fan-out 时（例如 Cube 的 Figure 8 配置只测 N=1 和 16），该格在 `occupation.json` 的 `unavailable` 中写明原因，图上显示 not measured，其余格照常计算；对比页把 (c) 标为 partial。
 
 原有九输入 fork primitive 与 synthetic fanout 数据保持独立。`data/` 是不进入 Git 的解包目录，每个记录的来源与哈希见 `files.jsonl`。需要解包原始数据时运行 `python3 ae/reproduce.py prepare`。

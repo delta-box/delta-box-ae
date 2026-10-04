@@ -293,7 +293,8 @@ def coverage_lines(rows, *, language="en"):
             status = f"{statuses[status]}（{status}）"
         lines.append(f"{row.get('experiment', '?')}: {status}" +
                      ("; " + ", ".join(counts) if counts else ""))
-        reasons = row.get("reasons", []) + row.get("prerequisite_failures", []) + row.get("notes", [])
+        reasons = [reason for reason in row.get("reasons", []) + row.get("prerequisite_failures", [])
+                   + row.get("notes", []) if reason]
         if reasons:
             lines.append("  " + "; ".join(str(reason) for reason in reasons))
         for arm in row.get("unavailable_arms", []):
@@ -351,7 +352,7 @@ def supplemental_markdown(panels, *, language):
         else:
             lines += [("本项未成功生成结果；请查看运行日志。GPU 资源问题请联系作者。" if zh else
                        "This item did not produce a successful result; inspect its logs. Contact the authors for GPU resources."), ""]
-        lines += ["- " + reason for reason in panel.get("reasons", [])]
+        lines += ["- " + reason for reason in panel.get("reasons", []) if reason]
         lines.append("")
     return lines
 
