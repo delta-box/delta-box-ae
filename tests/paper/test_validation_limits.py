@@ -81,7 +81,7 @@ class ValidationLimitTests(unittest.TestCase):
             flags=['--isolated-validation','--experiment','figure-06-adaptive','--limit','1','--numa-node','0','--cpus','0-3','--output',str(out)]
             with patch.object(review,'REPO',root),patch.object(review,'load_config',return_value={'review':{'validation_max_jobs':10}}),patch.object(review,'run_selected',return_value=0) as run,patch.object(review,'run_lock',side_effect=lambda *a,**k:contextlib.nullcontext()) as locks:
                 self.assertEqual(review.main(flags),0)
-                self.assertEqual(locks.call_args_list[0].kwargs,{'shared':True})
+                self.assertEqual(locks.call_args_list[0].kwargs,{'shared':True,'wait':False})
                 self.assertEqual(locks.call_count,1)
                 run.assert_called_once()
 

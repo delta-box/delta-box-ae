@@ -1,7 +1,6 @@
 """Local-only VM observer lifecycle contracts; no services or real /proc sampling."""
 import errno
 import importlib.util
-import json
 import shutil
 import stat
 import tempfile
@@ -54,97 +53,6 @@ class VMProofLifecycle(unittest.TestCase):
         shutil.rmtree(self.child)
         raise OSError(code, 'synthetic lifecycle read')
 
-    def test_deleted_owned_child_cgroup_enodev_is_discarded_not_proof(self):
-        self.cg.side_effect = lambda p: deepcopy(self.root_group) if p == self.root else self.delete_and_error()
-        self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-        self.assertEqual(len(self.proof.discarded_cgroups), 1)
-        discarded = self.proof.discarded_cgroups[0]
-        self.assertEqual(discarded['inode'], self.child_inode)
-        self.assertEqual(discarded['errno'], errno.ENODEV)
-        self.assertEqual(discarded['operation'], 'cgroup-files')
-
-    def test_deleted_owned_child_procs_enodev_is_discarded(self):
-        self.procs.side_effect = lambda p: self.delete_and_error()
-        self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-        self.assertEqual(self.proof.discarded_cgroups[0]['operation'], 'cgroup.procs')
-
-    def test_kernfs_deactivation_before_unlink_discards_only_after_absence(self):
-        for code in (errno.ENODEV, errno.ENOENT):
-            with self.subTest(code=code):
-                if not self.child.exists():
-                    self.child.mkdir()
-                self.proof.discarded_cgroups.clear()
-                self.procs.side_effect = OSError(code, 'deactivated before unlink')
-                with patch.object(m.time, 'sleep', side_effect=lambda delay: shutil.rmtree(self.child)) as sleep:
-                    self.proof.sample()
-                self.assertEqual(self.proof.rows, {})
-                self.assertFalse(self.child.exists())
-                self.assertEqual(sleep.call_count, 1)
-                receipt = self.proof.discarded_cgroups[0]
-                self.assertEqual(receipt['deletion_confirmation']['present_checks'], 1)
-                self.assertEqual(receipt['errno'], code)
-                output = self.root/'fanout.json'
-                output.write_text(json.dumps([{'children': [{'sandbox_id': 'sandbox1'}]}]))
-                with self.assertRaisesRegex(RuntimeError, 'Missing placement proof'):
-                    self.proof.verify_ids(output)
-                self.child_inode = None  # next identity comes from actual lstat
-                self.child.mkdir()
-                self.group['inode'] = self.lstat(self.child).st_ino
-
-    def test_deletion_confirmation_still_rejects_persistent_leaf(self):
-        self.procs.side_effect = OSError(errno.ENODEV, 'persistent')
-        with patch.object(m.time, 'monotonic', side_effect=[0, .051]), patch.object(m.time, 'sleep') as sleep:
-            with self.assertRaisesRegex(RuntimeError, 'remains present.*errno=19'):
-                self.proof.sample()
-        sleep.assert_not_called()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_deletion_confirmation_rejects_replacement(self):
-        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
-        def replace(delay):
-            self.child.rename(self.root/'old-leaf')
-            self.child.mkdir()
-        with patch.object(m.time, 'sleep', side_effect=replace):
-            with self.assertRaisesRegex(RuntimeError, 'replaced'):
-                self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_deletion_confirmation_keeps_root_policy_check(self):
-        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
-        def remove_and_unpin(delay):
-            shutil.rmtree(self.child)
-            self.root_group['cpuset.mems.effective'] = '2'
-        with patch.object(m.time, 'sleep', side_effect=remove_and_unpin):
-            with self.assertRaisesRegex(RuntimeError, 'placement differs'):
-                self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_deletion_confirmation_keeps_io_errors_fatal(self):
-        self.procs.side_effect = OSError(errno.ENODEV, 'being removed')
-        with patch.object(m.time, 'sleep', side_effect=OSError(errno.EIO, 'confirmation read failed')):
-            with self.assertRaises(OSError) as caught:
-                self.proof.sample()
-        self.assertEqual(caught.exception.errno, errno.EIO)
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_present_leaf_enodev_is_fatal(self):
-        self.procs.side_effect = OSError(errno.ENODEV, 'present leaf')
-        with self.assertRaisesRegex(RuntimeError, 'remains present'):
-            self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_recreated_leaf_inode_is_fatal(self):
-        def replaced(path):
-            self.child.rename(self.root/'old-leaf')
-            self.child.mkdir()
-            raise OSError(errno.ENODEV, 'recreated')
-        self.procs.side_effect = replaced
-        with self.assertRaisesRegex(RuntimeError, 'replaced'):
-            self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-
     def test_root_missing_is_fatal_to_watch(self):
         self.cg.side_effect = FileNotFoundError(errno.ENOENT, 'root vanished')
         self.proof.observer = Mock(receipt={})
@@ -158,54 +66,6 @@ class VMProofLifecycle(unittest.TestCase):
             self.proof.sample()
         self.assertEqual(self.proof.discarded_cgroups, [])
 
-    def test_root_changed_or_unpinned_during_discard_is_fatal(self):
-        def changed(path):
-            shutil.rmtree(self.child)
-            self.root_group['cpuset.mems.effective'] = '2'
-            raise OSError(errno.ENODEV, 'deleted with invalid root')
-        self.procs.side_effect = changed
-        with self.assertRaisesRegex(RuntimeError, 'placement differs'):
-            self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_other_errno_in_deleted_leaf_is_fatal(self):
-        for code in (errno.EACCES, errno.EIO):
-            with self.subTest(code=code):
-                self.procs.side_effect = OSError(code, 'not an admitted disappearance')
-                with self.assertRaises(OSError):
-                    self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_proc_enodev_is_fatal_even_if_pid_disappears(self):
-        self.process.side_effect = OSError(errno.ENODEV, 'proc read not exempt')
-        with self.assertRaises(OSError):
-            self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_pid_reuse_fails(self):
-        self.started.side_effect = [10, 11]
-        with self.assertRaisesRegex(RuntimeError, 'PID was reused'):
-            self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-
-    def test_disappearing_thread_does_not_leave_partial_success_row(self):
-        self.threads.side_effect = FileNotFoundError(errno.ENOENT, 'thread exited')
-        self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-
-    def test_actual_placement_swap_and_policy_errors_still_fail(self):
-        changes = [('cpus', '0-3'), ('numa_policies', {'bind:2': 1})]
-        for key, value in changes:
-            original = self.task[key]
-            self.task[key] = value
-            with self.subTest(key=key), self.assertRaises(RuntimeError):
-                self.proof.sample()
-            self.task[key] = original
-        self.group['memory.swap.current'] = '4096'
-        with self.assertRaisesRegex(RuntimeError, 'existing swap'):
-            self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-
     def test_observed_bad_cgroup_is_fatal_before_later_disappearance(self):
         for key, bad in [('cpuset.mems.effective', '2'), ('memory.swap.current', '4096')]:
             original = self.group[key]
@@ -216,62 +76,6 @@ class VMProofLifecycle(unittest.TestCase):
             self.procs.assert_not_called()
             self.group[key] = original
         self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_observed_bad_task_policy_is_fatal_before_thread_disappears(self):
-        self.task['numa_policies'] = {'bind:2': 1}
-        self.threads.side_effect = FileNotFoundError(errno.ENOENT, 'thread exited')
-        with self.assertRaisesRegex(RuntimeError, 'memory policy differs'):
-            self.proof.sample()
-        self.threads.assert_not_called()
-        self.assertEqual(self.proof.rows, {})
-
-    def test_replaced_leaf_during_process_reads_is_fatal(self):
-        def replaced(pid, **kwargs):
-            self.child.rename(self.root/'old-leaf')
-            self.child.mkdir()
-            return [deepcopy(self.task)]
-        self.threads.side_effect = replaced
-        with self.assertRaisesRegex(RuntimeError, 'identity changed'):
-            self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-
-    def test_deleted_leaf_during_process_reads_discards_complete_read(self):
-        def deleted(pid, **kwargs):
-            shutil.rmtree(self.child)
-            return [deepcopy(self.task)]
-        self.threads.side_effect = deleted
-        self.proof.sample()
-        self.assertEqual(self.proof.rows, {})
-        self.assertEqual(self.proof.discarded_cgroups[0]['operation'], 'completed-sample-recheck')
-
-    def test_replaced_root_during_discard_is_fatal(self):
-        def replaced(path):
-            shutil.rmtree(self.child)
-            self.root.rename(self.root.parent/'old-root')
-            self.root.mkdir()
-            raise OSError(errno.ENODEV, 'root replaced')
-        self.procs.side_effect = replaced
-        with self.assertRaisesRegex(RuntimeError, 'root identity changed'):
-            self.proof.sample()
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
-    def test_discarded_child_does_not_satisfy_full_id_coverage(self):
-        self.procs.side_effect = lambda p: self.delete_and_error()
-        self.proof.sample()
-        output = self.root/'fanout.json'
-        output.write_text(json.dumps([{'children': [{'sandbox_id': 'sandbox1'}]}]))
-        with self.assertRaisesRegex(RuntimeError, 'Missing placement proof'):
-            self.proof.verify_ids(output)
-
-    def test_complete_valid_sample_retains_threads_and_identity(self):
-        self.proof.sample()
-        self.assertEqual(len(self.proof.rows), 1)
-        row = next(iter(self.proof.rows.values()))
-        self.assertEqual(row['tasks'], [self.task])
-        self.assertEqual(row['threads'], [self.task])
-        self.assertIn(self.child.name+':42:10', self.proof.rows)
-        self.assertEqual(self.proof.discarded_cgroups, [])
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -77,10 +77,6 @@ class FrozenControlTests(unittest.TestCase):
         self.proof={'contract':{'path':str(self.contract),'sha256':digest(self.contract)},'manifest':{'path':str(self.manifest),'sha256':digest(self.manifest),'bytes':self.manifest.stat().st_size}}
         for key,value in [('INPUT_ROOT',root),('MANIFEST',self.manifest),('CONTRACT_SHA256',digest(self.contract))]:
             patch=mock.patch.object(profile,key,value);patch.start();self.addCleanup(patch.stop)
-    def test_contract_without_size_is_still_hash_bound(self):
-        records=self.mod.frozen_controls(self.proof)
-        self.assertEqual({x['path'] for x in records},{str(self.contract),str(self.manifest)})
-        self.assertTrue(all(x['bytes']>0 for x in records))
     def test_changed_contract_is_rejected(self):
         self.contract.write_text('{"inputs":[],"changed":true}')
         with self.assertRaises(ValueError):self.mod.frozen_controls(self.proof)

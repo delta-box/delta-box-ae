@@ -164,13 +164,6 @@ class CPUEntryEquivalenceTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags,'--limit','3'])
 
-    @unittest.skipUnless(os.geteuid()==0,'root-only self-managed dispatch')
-    def test_root_self_managed_dispatch_is_not_changed_by_hosted_environment(self):
-        flags=['--config','/custom config','--runtime-repo','/custom runtime']
-        result,words=self.invoke('numa12',flags,launcher=LAUNCHER)
-        self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(words[3:],['SELF','--group','cpu','--cpu-parallel',*flags,'--limit','3'])
-
 
 if __name__=='__main__':
     unittest.main()

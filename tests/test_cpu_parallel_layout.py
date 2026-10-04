@@ -185,7 +185,8 @@ class LayoutTests(unittest.TestCase):
             result = subprocess.run(['bash', str(wrapper), '--output', '/tmp/test-output'], env=env, text=True, capture_output=True, check=True)
         self.assertEqual(result.stdout.splitlines(), ['--all', '--physcpubind=4-7', '--membind=0',
             '-n', '--', '/usr/local/sbin/deltabox-ae-run', '--checkout', str(root.parent),
-            '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03', '--output', '/tmp/test-output'])
+            '--group', 'cpu', '--cpu-parallel', '--cpu-layout', 'numa03', '--output', '/tmp/test-output',
+            '--limit', '3'])
 
 
 if __name__ == '__main__':

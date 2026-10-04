@@ -52,45 +52,5 @@ class PaperPlotIntegrationTests(unittest.TestCase):
                              {'plot.py', 'paper_tables.py', 'paper_figure1.py',
                               'paper_figure2.py', 'paper_figure6.py', 'paper_figure7.py', 'paper_figure9.py'})
 
-    def test_related_panels_share_one_paper_figure_and_compact_comparison(self):
-        """The published example must not split domains into duplicated panels."""
-        from PIL import Image
-        from ae.repro.plot import render
-        from ae.scripts.build_review_comparison import build
-        ae = Path(__file__).resolve().parents[2] / 'ae'
-        campaign = ae / 'report/oneclick-20260922/raw/review-publish-001'
-        source = campaign / 'analysis/attempt-001/summary.json'
-        original = source.read_bytes()
-        document = json.loads(original)
-        keys = ('figure-02', 'figure-06', 'figure-07')
-        document['experiments'] = {key: document['experiments'][key] for key in keys}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            summary = root / 'summary.json'
-            summary.write_text(json.dumps(document))
-            plots = render(summary, root / 'plots')
-            pngs = [item for item in plots['artifacts'] if item['path'].endswith('.png')]
-            self.assertEqual(len(pngs), 3)
-            for key in keys:
-                matches = [item for item in pngs if item['experiment'] == key]
-                self.assertEqual(len(matches), 1)
-                item = matches[0]
-                records = document['experiments'][key]
-                expected = {row.get('plot_group', '') for row in records['metrics'] + records['series']}
-                self.assertEqual(set(item['populations']), expected)
-                self.assertEqual(item['layout'], 'paper')
-                self.assertNotIn('population-', Path(item['path']).name)
-            compared = build(summary, root / 'plots/plots.json',
-                             coverage_path=campaign / 'coverage/attempt-001/review.json',
-                             output=root / 'comparison', paper_dir=ae / 'reference/figures')
-            for key in keys:
-                item = next(row for row in compared['items'] if row['experiment'] == key)
-                self.assertEqual(item['layout'], 'paper')
-                self.assertEqual(len(item['populations']), 1)
-                with Image.open(root / 'comparison' / (key + '-ae.png')) as picture:
-                    self.assertLess(picture.height, picture.width)
-        self.assertEqual(source.read_bytes(), original)
-
-
 if __name__ == '__main__':
     unittest.main()

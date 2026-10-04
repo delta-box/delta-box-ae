@@ -29,7 +29,8 @@ def functions():
     names = {'save', 'restore_masks', 'service_cgroup_masks', 'restore_service_cgroup_masks',
              'mysql_inherited_masks_need_rebuild', 'restore_mysql_inherited_masks',
              'mysql_volume_removal_disabled', 'mysql_preserve_launcher',
-             'verify_mysql_container', 'service_start', 'placement', 'mysql_launcher', 'inspect'}
+             'verify_mysql_container', 'service_start', 'placement', 'mysql_launcher', 'inspect',
+             'canonical_independent_binds'}
     tree.body = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
     module = types.ModuleType('cube_mysql_fixture')
     module.__dict__.update(Path=Path, contextmanager=contextmanager, json=json, os=os,

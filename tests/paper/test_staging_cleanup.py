@@ -152,6 +152,8 @@ class E2BStagingCleanupTests(unittest.TestCase):
 
     def setUp(self):
         from ae.runners.e2b_environment import SNAPSHOT_FILES, _parent_dependencies
+        # Fixtures must not inherit a group-writable login umask such as 0002.
+        self.addCleanup(os.umask, os.umask(0o022))
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name).resolve()
