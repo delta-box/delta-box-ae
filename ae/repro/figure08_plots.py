@@ -18,7 +18,7 @@ from .gpu_occupation import (
 TIMING_BATCHES = (1, 4, 16, 64)
 BACKEND_LABELS = {"deltabox": "δSandbox", "cube": "CubeSandbox", "e2b": "E2B"}
 THEORY_LABELS = {
-    "historical": "Paper's archived measurements", "fresh": "This run's measurements",
+    "historical": "Paper's archived measurements", "fresh": "Measured in this evaluation",
     "assumed": "Assumed-input model", "mixed": "Mixed-input model",
 }
 TIMING_LABELS = {
@@ -184,7 +184,7 @@ def plot_gpu_occupation(result: dict, output_dir: Path) -> dict:
         footer += "\n" + textwrap.fill("* Estimated sandbox input: " + ", ".join(
             f"{BACKEND_LABELS.get(r['backend'], r['backend'])} N={r['n']}" for r in estimated), width=95)
     if missing:
-        footer += "\n" + textwrap.fill("Not measured in this run (no bar): " + ", ".join(
+        footer += "\n" + textwrap.fill("Not measured (no bar): " + ", ".join(
             f"{BACKEND_LABELS.get(r['backend'], r['backend'])} N={r['n']}" for r in missing), width=95)
     plt = _pyplot()
     with plt.rc_context(PAPER_RC):
