@@ -308,7 +308,8 @@ FRESH_COMPONENTS = FAST_COMPONENTS + (
     "checkpoint_api_wall_ms", "restore_api_wall_ms", "restore_critical_ms",
     "restore_table3_total_ms", "restore_fast_coordination_ms", "restore_slow_coordination_ms",
     "restore_slow_ioctl_ms", "restore_slow_criu_ms", "restore_slow_total_ms",
-    "restore_slow_pre_criu_ms", "restore_slow_lazy_daemon_ms", "restore_slow_post_criu_ms")
+    "restore_slow_pre_criu_ms", "restore_slow_lazy_daemon_ms", "restore_slow_post_criu_ms",
+    "restore_slow_lazy_daemon_prestart_ms")
 
 
 def table3(ev):
