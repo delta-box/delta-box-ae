@@ -346,18 +346,11 @@ DeltaBox and E2B create N = 1, 4, 16, and 64 branches; CubeSandbox creates N = 1
 bash ae/run_all_gpu.sh
 ```
 
-When the command finishes, it prints a GPU-only summary with the status, GPU count, repetitions and mean time for each of the eight cases, followed by the exact `SUMMARY.md` path. The same summary is saved as `result.md`; you do not need to locate the result directory yourself.
+When the command finishes, it prints a GPU-only summary with the status, GPU count, repetitions and mean time for each of the eight cases, then the Figure 8(c) result, followed by the exact `SUMMARY.md` path. The same summary is saved as `result.md`; you do not need to locate the result directory yourself.
 
-The GPU-only entry uses the GPUs reserved for this artifact on `allinai2plus` and creates a new result directory automatically. All eight cases need four idle GPUs: generation and training at batch 1/4 use one GPU; training at batch 16/64 uses four. Use `--output PATH` to choose the result directory. `--gpu-devices ID,...` selects a different set of GPUs; use it only if the authors assign you different GPUs. Busy devices are excluded, and the script never selects GPUs outside the specified set. Insufficient capacity is reported as partial or unavailable. This entry runs panel (b). As in the paper, panel (c) applies Equation 1 to these GPU times and the fan-out times of a CPU run. To produce it from this GPU run and your earlier `ae/run_all_no_gpu.sh` run, replace the two directories with the ones those runs printed:
+The GPU-only entry uses the GPUs reserved for this artifact on `allinai2plus` and creates a new result directory automatically. All eight cases need four idle GPUs: generation and training at batch 1/4 use one GPU; training at batch 16/64 uses four. Use `--output PATH` to choose the result directory. `--gpu-devices ID,...` selects a different set of GPUs; use it only if the authors assign you different GPUs. Busy devices are excluded, and the script never selects GPUs outside the specified set. Insufficient capacity is reported as partial or unavailable.
 
-```bash
-"$AE_PYTHON" ae/repro/gpu_occupation.py \
-  --gpu-results <gpu-run>/gpu/attempt-001/results/summary.json \
-  --fanout-summary <cpu-run>/analysis/attempt-001/summary.json \
-  --output ae/results/selected/figure-08c --plot
-```
-
-The plot is written to `ae/results/selected/figure-08c/plots/figure-08c.png`. CubeSandbox is measured at N = 1 and 16, so its N = 64 point is marked as not measured.
+After panel (b), the same command produces panel (c). As in the paper, panel (c) applies the paper's Equation 1 to these GPU times and the fan-out times of a CPU run. The command takes the fan-out times from your newest finished `ae/run_all_no_gpu.sh` run under `ae/results` and names that run in the summary. The plot is written to `gpu/attempt-001/comparison/theory/plots/figure-08c.png` in the GPU result directory. CubeSandbox is measured at N = 1 and 16, so its N = 64 point is marked as not measured. If no CPU run has finished yet, panel (c) is reported as unavailable; run `ae/run_all_no_gpu.sh` first.
 
 To rerun every panel of Figure 8:
 

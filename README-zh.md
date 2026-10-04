@@ -331,18 +331,11 @@ DeltaBox 和 E2B 创建 N = 1、4、16、64 个分支；CubeSandbox 创建 N = 1
 bash ae/run_all_gpu.sh
 ```
 
-命令结束时会直接打印 GPU 专用汇总，列出 8 项测试各自的状态、用卡数、重复次数和平均耗时，并给出准确的 `SUMMARY.md` 路径。同一份汇总也保存为 `result.md`，无需自己查找结果目录。
+命令结束时会直接打印 GPU 专用汇总，列出 8 项测试各自的状态、用卡数、重复次数和平均耗时，接着给出 Figure 8(c) 的结果，最后给出准确的 `SUMMARY.md` 路径。同一份汇总也保存为 `result.md`，无需自己查找结果目录。
 
-GPU 专用入口使用 `allinai2plus` 上为本 artifact 预留的 GPU，并自动创建新的结果目录。完整 8 项测试需要 4 张空闲 GPU：生成阶段和 batch 1/4 的训练使用 1 张，batch 16/64 的训练使用 4 张。可用 `--output PATH` 指定结果目录。`--gpu-devices ID,...` 用于选择其他 GPU，只有作者为你分配了其他 GPU 时才需要使用。脚本排除繁忙设备，不会选择指定范围以外的卡；资源不足时明确报告部分完成或不可用。此入口只运行面板 (b)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。如需用这次 GPU 运行和之前 `ae/run_all_no_gpu.sh` 的结果生成面板 (c)，把下面两个目录换成这两次运行打印的目录：
+GPU 专用入口使用 `allinai2plus` 上为本 artifact 预留的 GPU，并自动创建新的结果目录。完整 8 项测试需要 4 张空闲 GPU：生成阶段和 batch 1/4 的训练使用 1 张，batch 16/64 的训练使用 4 张。可用 `--output PATH` 指定结果目录。`--gpu-devices ID,...` 用于选择其他 GPU，只有作者为你分配了其他 GPU 时才需要使用。脚本排除繁忙设备，不会选择指定范围以外的卡；资源不足时明确报告部分完成或不可用。
 
-```bash
-"$AE_PYTHON" ae/repro/gpu_occupation.py \
-  --gpu-results <gpu-run>/gpu/attempt-001/results/summary.json \
-  --fanout-summary <cpu-run>/analysis/attempt-001/summary.json \
-  --output ae/results/selected/figure-08c --plot
-```
-
-图保存在 `ae/results/selected/figure-08c/plots/figure-08c.png`。CubeSandbox 只测 N = 1 和 16，因此 N = 64 一格标为未测量。
+面板 (b) 完成后，同一条命令接着生成面板 (c)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。命令从 `ae/results` 下你最近一次完成的 `ae/run_all_no_gpu.sh` 运行中读取 fan-out 时间，并在汇总中写明所用的运行。图保存在 GPU 结果目录的 `gpu/attempt-001/comparison/theory/plots/figure-08c.png`。CubeSandbox 只测 N = 1 和 16，因此 N = 64 一格标为未测量。如果还没有完成的 CPU 运行，面板 (c) 会标为不可用；请先运行 `ae/run_all_no_gpu.sh`。
 
 重跑 Figure 8 的全部面板：
 

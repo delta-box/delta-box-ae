@@ -1,6 +1,6 @@
 # Figure 8：fan-out、GPU 时延与理论占用率
 
-完整一键命令 `bash ae/run_all.sh` 或 `bash ae/run_all.sh --group figure-08` 会执行 CPU fan-out、自动接纳远端 GPU 生成/训练，并在输入完整时进行理论计算，并汇入同一份中英文对比页。下面保留各阶段的底层入口，供自建环境与定向诊断使用：
+完整一键命令 `bash ae/run_all.sh` 或 `bash ae/run_all.sh --group figure-08` 会执行 CPU fan-out、自动接纳远端 GPU 生成/训练，并在输入完整时进行理论计算，并汇入同一份中英文对比页。GPU 专用入口 `bash ae/run_all_gpu.sh` 运行 (b) 后，用 `ae/results` 下最近一次完成的 CPU 运行的 fan-out 时间生成 (c)，并在汇总中写明所用的运行。下面保留各阶段的底层入口，供自建环境与定向诊断使用：
 
 | 面板 | 含义 | 资源与入口 |
 |---|---|---|

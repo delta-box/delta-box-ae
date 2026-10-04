@@ -572,10 +572,52 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
     return record
 
 
+def latest_fanout_run(results, exclude):
+    """Newest finished CPU run under results whose three Figure 8(a) fan-outs succeeded."""
+    from repro.review_gpu import FANOUT
+    best = None
+    for path in [*results.glob('*/review.json'), *results.glob('*/*/review.json')]:
+        run = path.parent
+        if run.resolve() == Path(exclude).resolve():
+            continue
+        try:
+            record = json.loads(path.read_text())
+            if (record.get('status') not in ('ok', 'ok-with-unavailable') or record.get('analysis_only')
+                    or record.get('run_purpose') == 'quick-check' or record.get('event_limit') is not None
+                    or not all(any(row.get('experiment') == name and row.get('status') == 'ok'
+                                   for row in record.get('coverage', [])) for name in FANOUT)):
+                continue
+            summary = run / 'analysis' / record['attempt'] / 'summary.json'
+            finished = datetime.fromisoformat(record['finished_at'])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if summary.is_file() and (best is None or finished > best[0]):
+            best = (finished, run, summary, record)
+    return best[1:] if best else None
+
+
+def derive_theory(theory, summary, host_summary, destination):
+    """Apply the paper's Equation 1 to measured GPU and fan-out times."""
+    from repro.gpu_occupation import main as occupation_main, inputs_from_measurements
+    try:
+        inputs = inputs_from_measurements(json.loads(summary.read_text()), json.loads(host_summary.read_text()))
+        if (set(inputs['backends']) != {'deltabox', 'cube', 'e2b'} or inputs['source_kind'] != 'fresh'
+                or any(row['estimated'] for row in inputs['sandbox_timings'])):
+            raise ValueError('Theory requires fresh measured fan-out for all three backends')
+        code = occupation_main(['--gpu-results', str(summary), '--fanout-summary', str(host_summary),
+                                '--output', str(destination), '--plot'])
+        if code:
+            raise ValueError('Figure 8(c) calculation or plotting failed')
+        theory.update(status='ok', input=file_record(destination / 'occupation.json'),
+                      reasons=[row['reason'] for row in inputs['unavailable']],
+                      artifacts=[file_record(destination / 'plots' / ('figure-08c.' + ext)) for ext in ('png', 'pdf')])
+    except Exception as error:
+        theory.update(status='failed', reasons=[str(error)])
+
+
 def finish_remote(review, analysis_dir, analyzed):
     """Keep upstream Figure 8(b)/(c) comparison pages with optional remote inputs."""
     from repro.review_gpu import GPU, THEORY, FANOUT
-    from repro.gpu_occupation import main as occupation_main, inputs_from_measurements
     root = review.output / review.record['gpu_output']
     output = review.output / 'gpu' / review.attempt / 'comparison'
     output.mkdir(parents=True, exist_ok=True)
@@ -605,33 +647,36 @@ def finish_remote(review, analysis_dir, analyzed):
         panel.update(status='failed', reasons=[str(error)], artifacts=[])
         gpu['plot_error'] = str(error)
     selected = set(review.record['experiments'])
+    theory = None
     if set(FANOUT).issubset(selected) and not review.limits:
         theory = dict(experiment=THEORY, title='Figure 8(c)', status='unavailable', artifacts=[], reasons=[])
-        panels.append(theory)
         ready = (gpu['status'] == 'complete' and summary is not None and analyzed and
                  all(any(row['experiment'] == name and row['status'] == 'ok'
                          for row in review.record['coverage']) for name in FANOUT))
         if not ready:
             theory['reasons'] = ['Requires all eight fresh GPU cases and all three successful CPU fan-out measurements']
         else:
-            try:
-                host_summary = analysis_dir / 'summary.json'
-                inputs = inputs_from_measurements(json.loads(summary.read_text()), json.loads(host_summary.read_text()))
-                if (set(inputs['backends']) != {'deltabox', 'cube', 'e2b'} or inputs['source_kind'] != 'fresh'
-                        or any(row['estimated'] for row in inputs['sandbox_timings'])):
-                    raise ValueError('Theory requires fresh measured fan-out for all three backends')
-                destination = output / 'theory'
-                code = occupation_main(['--gpu-results', str(summary), '--fanout-summary', str(host_summary),
-                                        '--output', str(destination), '--plot'])
-                if code:
-                    raise ValueError('Figure 8(c) calculation or plotting failed')
-                theory.update(status='ok', input=file_record(destination / 'occupation.json'),
-                              artifacts=[file_record(destination / 'plots' / ('figure-08c.' + ext)) for ext in ('png', 'pdf')])
-            except Exception as error:
-                theory.update(status='failed', reasons=[str(error)])
+            derive_theory(theory, summary, analysis_dir / 'summary.json', output / 'theory')
+    elif selected == {GPU} and not review.limits:
+        # GPU-only runs take panel (a) from the newest finished CPU run.
+        theory = dict(experiment=THEORY, title='Figure 8(c)', status='unavailable', artifacts=[], reasons=[])
+        if gpu['status'] != 'complete' or summary is None:
+            theory['reasons'] = ['Requires all eight fresh GPU cases']
+        elif (found := latest_fanout_run(ROOT / 'ae/results', review.output)) is None:
+            theory['reasons'] = ['No finished CPU run with Figure 8(a) fan-out was found under ae/results. '
+                                 'Run bash ae/run_all_no_gpu.sh, then run bash ae/run_all_gpu.sh again.']
+        else:
+            run, host_summary, record = found
+            theory['fanout_run'] = dict(path=str(run), summary=file_record(host_summary),
+                                        release=record.get('release', {}), finished_at=record['finished_at'])
+            derive_theory(theory, summary, host_summary, output / 'theory')
+    if theory is not None:
+        panels.append(theory)
         review.record['coverage'] = [row for row in review.record['coverage'] if row['experiment'] != THEORY]
-        review.record['coverage'].append(dict(experiment=THEORY, optional=True, status=theory['status'],
-                                              successful_jobs=int(theory['status'] == 'ok'), reasons=theory['reasons']))
+        review.record['coverage'].append(dict(
+            experiment=THEORY, optional=True, status=theory['status'],
+            successful_jobs=int(theory['status'] == 'ok'), reasons=theory['reasons'],
+            artifacts=theory['artifacts'], **({'fanout_run': theory['fanout_run']} if 'fanout_run' in theory else {})))
     metadata = output / 'comparison.json'
     write_json(metadata, dict(schema_version=1, release=review.record['release'], panels=panels))
     review.record['outputs']['gpu'] = str(root)
@@ -648,7 +693,7 @@ def gpu_summary_lines(record, output):
     devices = ', '.join(map(str, candidates)) if candidates else 'see remote-config.json'
     selected = ', '.join(str(item['index']) for item in gpu.get('selected', [])) or 'none'
     attempt = record.get('attempt_number', 1)
-    lines = ['# GPU experiment summary — Figure 8(b)', '',
+    lines = ['# GPU experiment summary — Figure 8(b)(c)', '',
              f"Status: **{record['status']}**; GPU cases passed: **{gpu.get('successful_cases', 0)}/8**.", '',
              f"Host: `{gpu.get('host', 'allinai2plus')}`; requested physical GPUs: {devices}; selected: {selected}.",
              f"Attempt: {attempt} ({'fresh run' if attempt == 1 else 'resumed run'}).", '']
@@ -683,9 +728,7 @@ def gpu_summary_lines(record, output):
     reason = record.get('terminal_error') or gpu.get('reason')
     if reason:
         lines += ['', 'Details: ' + str(reason).replace('\n', ' ')]
-    lines += ['', 'Means use every recorded repetition; full GPU coverage requires all eight cases.',
-              'Scope: Figure 8(b). As in the paper, Figure 8(c) applies Equation 1 to these timings and a CPU run\'s '
-              'fan-out times; see the README.', '']
+    lines += ['', 'Means use every recorded repetition; full GPU coverage requires all eight cases.', '']
     if prefix:
         for relative, label in (('plots/figure-08b.png', 'Result plot'),
                                 ('results/summary.json', 'Raw timings'),
@@ -693,6 +736,19 @@ def gpu_summary_lines(record, output):
             path = Path(prefix) / relative
             if checked_path(output, str(path)).is_file():
                 lines.append(f'[{label}]({path.as_posix()})')
+    theory = next((row for row in record.get('coverage', []) if row.get('experiment') == 'figure-08-theory'), None)
+    if theory:
+        lines += ['', '## Figure 8(c)', '', f"Status: **{theory['status']}**."]
+        if theory.get('fanout_run'):
+            run = Path(theory['fanout_run']['path'])
+            shown = run.relative_to(ROOT) if run.is_relative_to(ROOT) else run
+            lines += ['', "As in the paper's Figure 8(c), expected GPU occupation and staleness follow the paper's "
+                      f'Equation 1, using these GPU timings and the fan-out times of the CPU run `{shown.as_posix()}`.']
+        lines += [''] + ['- ' + str(reason).replace('\n', ' ') for reason in theory.get('reasons', []) if reason]
+        plot = next((Path(item['path']) for item in theory.get('artifacts', []) if item['path'].endswith('.png')), None)
+        if plot is not None:
+            shown = plot.relative_to(output) if plot.is_relative_to(output) else plot
+            lines += ['', f'[Figure 8(c) plot]({shown.as_posix()})']
     lines += ['', '[Run record](review.json)', '']
     return lines
 

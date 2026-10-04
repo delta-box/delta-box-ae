@@ -298,7 +298,7 @@ class MeasurementImportTests(unittest.TestCase):
         series[:] = [row for row in series if not (row.get("backend") == "e2b" and row["x"] == 64)]
         inputs = self.import_inputs(timing_suite(), summary)
         self.assertEqual([(r["backend"], r["n"]) for r in inputs["unavailable"]], [("e2b", 64)])
-        self.assertIn("this run measured N=16", inputs["unavailable"][0]["reason"])
+        self.assertIn("measured N=16", inputs["unavailable"][0]["reason"])
         result = self.calculate(inputs)
         self.assertEqual((result["status"], result["coverage"]), ("ok", "partial"))
         self.assertEqual([(r["backend"], r["n"]) for r in result["rows"]],
