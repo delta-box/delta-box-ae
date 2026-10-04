@@ -346,7 +346,12 @@ def supplemental_markdown(panels, *, language):
             pdf = next(item["path"] for item in artifacts if item["path"].endswith(".pdf"))
             alt = "本次运行结果" if zh else "This run's result"
             lines += [f"![{title}: {alt}]({png})", "", f"[PDF]({pdf})", ""]
-            if panel["experiment"] == "figure-08-theory":
+            if panel["experiment"] == "figure-08-theory" and panel.get("fanout_run"):
+                run = Path(panel["fanout_run"]["path"]).name
+                lines += [(f"与论文 Figure 8(c) 相同，按论文 Equation 1 由本次 GPU 时间和 CPU 运行 `{run}` 的 fan-out 时间得到预期占用率与 staleness。" if zh else
+                           "As in the paper's Figure 8(c), expected occupation and staleness follow the paper's Equation 1, "
+                           f"using these GPU times and the fan-out times of the CPU run `{run}`."), ""]
+            elif panel["experiment"] == "figure-08-theory":
                 lines += [("与论文 Figure 8(c) 相同，按论文 Equation 1 由本次 fan-out 和 GPU 时间得到预期占用率与 staleness。" if zh else
                            "As in the paper's Figure 8(c), expected occupation and staleness follow the paper's Equation 1, "
                            "using this run's fan-out and GPU times."), ""]

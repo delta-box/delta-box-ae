@@ -14,7 +14,7 @@ while (($#)); do
             cat <<'HELP'
 Usage: bash ae/run_all_gpu.sh [--output PATH] [--gpu-devices ID,...]
 
-Run only Figure 8(b) on the configured allinai2plus host.
+Run Figure 8(b) on the configured allinai2plus host, then produce Figure 8(c).
 Defaults: physical GPUs 0,3,6,7; all eight generation/training cases;
 a new timestamped result directory. Four idle GPUs cover the full matrix.
 Busy GPUs are excluded; no fallback to devices outside the allowlist.
@@ -28,7 +28,8 @@ Options:
   --gpu-cases CASE,... Explicit case subset, e.g. training-B16,training-B64.
   --help              Show help without contacting the GPU host.
 
-Figure 8(c) also needs CPU fan-out results and is not part of this GPU-only run.
+As in the paper, Figure 8(c) applies Equation 1 to these GPU times and the
+fan-out times of the newest finished ae/run_all_no_gpu.sh run under ae/results.
 HELP
             exit 0
             ;;

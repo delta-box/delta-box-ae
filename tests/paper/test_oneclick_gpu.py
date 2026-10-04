@@ -135,7 +135,7 @@ class OneClickGPUTests(unittest.TestCase):
         panels = figure08_supplement(metadata)["panels"]
         self.assertEqual([panel["status"] for panel in panels], ["ok", "partial"])
         self.assertEqual(len(panels[1]["artifacts"]), 2)
-        self.assertIn("No cube fan-out was measured at N=64; this run measured N=1, 16.", panels[1]["reasons"])
+        self.assertIn("No cube fan-out was measured at N=64; measured N=1, 16.", panels[1]["reasons"])
         theory = next(row for row in self.subject.record["coverage"] if row["experiment"] == gpu.THEORY)
         self.assertEqual(theory["status"], "ok")
         self.assertEqual([(p["backend"], p["n"]) for p in theory["unavailable_points"]], [("cube", 64)])

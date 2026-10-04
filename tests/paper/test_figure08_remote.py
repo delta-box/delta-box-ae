@@ -351,33 +351,58 @@ class RemoteTests(unittest.TestCase):
                 self.assertIn('![Figure 8(b)', '\n'.join(supplemental_markdown(panels, language=language)))
             self.assertTrue(subject.record['coverage'][-1]['optional'])
 
+    def complete_gpu_run(self, root):
+        """Write an eight-case remote GPU run under root; return its collect_timings stub."""
+        from repro.common import stats
+        run = root / 'gpu/attempt-001'
+        evidence = run / 'results'
+        evidence.mkdir(parents=True)
+        remote.write_json(run / 'source.json', {})
+        remote.write_json(evidence / 'remote.json', dict(source={}))
+        cases = []
+        config = remote.protocol.load_config()
+        for case in remote.protocol.cases(config):
+            cases.append(dict(case, status='ok', timing_s=stats([1.0] * case['reps']),
+                              result=dict(path='fixture.json', sha256='a' * 64, bytes=1)))
+        suite = dict(schema_version=1, kind='gpu-timing-suite', source_kind='fresh', status='ok',
+                     model_label='fixture', cases=cases)
+        def collect(*args):
+            remote.write_json(evidence / 'summary.json', suite)
+            return suite
+        return collect
+
+    def fanout_summary(self, path, y=100):
+        series = [dict(panel='a', backend=b, x=n, y=y, unit='ms', estimated=False,
+                       plot_group='fixture', source_identity='release-sha256:' + 'b' * 64)
+                  for b in ('deltabox', 'cube', 'e2b') for n in (1, 4, 16, 64)]
+        remote.write_json(path, dict(schema_version=1, source='fresh',
+                                     experiments={'figure-08': dict(status='analyzed', series=series)}))
+
+    def cpu_run(self, results, name, finished, y, **record):
+        from repro.review_gpu import FANOUT
+        run = results / name
+        self.fanout_summary(run / 'analysis/attempt-001/summary.json', y)
+        remote.write_json(run / 'review.json', dict(
+            dict(status='ok', run_purpose='ae-cohorts', event_limit=None, attempt='attempt-001',
+                 finished_at=finished, release=dict(source_commit=name),
+                 coverage=[dict(experiment=n, status='ok') for n in FANOUT]), **record))
+        return run
+
+    def gpu_only_subject(self, output):
+        from types import SimpleNamespace
+        from repro.review_gpu import GPU
+        return SimpleNamespace(output=output, attempt='attempt-001', limits=[], record=dict(
+            status='ok', gpu_output='gpu/attempt-001', gpu=dict(status='complete', successful_cases=8),
+            release={}, outputs={}, experiments=[GPU], coverage=[]))
+
     def test_remote_full_inputs_preserve_automatic_theory(self):
         from types import SimpleNamespace
         from repro.review_gpu import FANOUT, GPU
-        from repro.common import stats
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            run = root / 'gpu/attempt-001'
-            evidence = run / 'results'
-            evidence.mkdir(parents=True)
-            remote.write_json(run / 'source.json', {})
-            remote.write_json(evidence / 'remote.json', dict(source={}))
-            cases = []
-            config = remote.protocol.load_config()
-            for case in remote.protocol.cases(config):
-                cases.append(dict(case, status='ok', timing_s=stats([1.0] * case['reps']),
-                                  result=dict(path='fixture.json', sha256='a' * 64, bytes=1)))
-            suite = dict(schema_version=1, kind='gpu-timing-suite', source_kind='fresh', status='ok',
-                         model_label='fixture', cases=cases)
-            def collect(*args):
-                remote.write_json(evidence / 'summary.json', suite)
-                return suite
+            collect = self.complete_gpu_run(root)
             analysis = root / 'analysis'
-            series = [dict(panel='a', backend=b, x=n, y=100, unit='ms', estimated=False,
-                           plot_group='fixture', source_identity='release-sha256:' + 'b' * 64)
-                      for b in ('deltabox', 'cube', 'e2b') for n in (1, 4, 16, 64)]
-            remote.write_json(analysis / 'summary.json', dict(schema_version=1, source='fresh',
-                experiments={'figure-08': dict(status='analyzed', series=series)}))
+            self.fanout_summary(analysis / 'summary.json')
             subject = SimpleNamespace(output=root, attempt='attempt-001', limits=[], record=dict(
                 gpu_output='gpu/attempt-001', gpu=dict(status='complete', successful_cases=8),
                 release={}, outputs={}, experiments=[*FANOUT, GPU], coverage=[dict(experiment=n, status='ok') for n in FANOUT]))
@@ -385,8 +410,54 @@ class RemoteTests(unittest.TestCase):
                 metadata = remote.finish_remote(subject, analysis, True)
             panels = json.loads(metadata.read_text())['panels']
             self.assertEqual([p['status'] for p in panels], ['ok', 'ok'])
-            occupation = json.loads((run / 'comparison/theory/occupation.json').read_text())
+            occupation = json.loads((root / 'gpu/attempt-001/comparison/theory/occupation.json').read_text())
             self.assertEqual(len(occupation['rows']), 6)
+
+    def test_gpu_only_run_takes_fanout_from_newest_finished_cpu_run(self):
+        from ae.scripts.build_review_comparison import figure08_supplement, supplemental_markdown
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = root / 'ae/results'
+            self.cpu_run(results / 'selected', 'numa12-old', '2026-10-01T00:00:00+00:00', 100)
+            self.cpu_run(results / 'selected', 'numa12-new', '2026-10-03T00:00:00+00:00', 200)
+            self.cpu_run(results, 'quick', '2026-10-04T00:00:00+00:00', 300, run_purpose='quick-check')
+            self.cpu_run(results, 'running', '2026-10-04T00:00:00+00:00', 300, status='running')
+            self.cpu_run(results, 'no-e2b', '2026-10-04T00:00:00+00:00', 300,
+                         coverage=[dict(experiment='figure-08-deltabox', status='ok')])
+            output = results / 'selected/gpu-only'
+            collect = self.complete_gpu_run(output)
+            subject = self.gpu_only_subject(output)
+            with patch.object(remote, 'ROOT', root), patch.object(remote, 'collect_timings', side_effect=collect):
+                metadata = remote.finish_remote(subject, output / 'analysis', False)
+                summary = '\n'.join(remote.gpu_summary_lines(subject.record, output))
+            panels = figure08_supplement(metadata)['panels']
+            self.assertEqual([p['status'] for p in panels], ['ok', 'ok'])
+            self.assertEqual(panels[1]['fanout_run']['path'], str(results / 'selected/numa12-new'))
+            occupation = json.loads((output / 'gpu/attempt-001/comparison/theory/occupation.json').read_text())
+            self.assertEqual({row['t_sandbox_s'] for row in occupation['rows']}, {0.2})
+            theory = subject.record['coverage'][-1]
+            self.assertEqual((theory['experiment'], theory['status'], theory['optional']), ('figure-08-theory', 'ok', True))
+            self.assertIn('## Figure 8(c)', summary)
+            self.assertIn("paper's Equation 1", summary)
+            self.assertIn('`ae/results/selected/numa12-new`', summary)
+            self.assertIn('[Figure 8(c) plot](gpu/attempt-001/comparison/theory/plots/figure-08c.png)', summary)
+            self.assertIn('`numa12-new`', '\n'.join(supplemental_markdown(panels, language='en')))
+
+    def test_gpu_only_run_without_cpu_fanout_reports_theory_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / 'ae/results/selected/gpu-only'
+            collect = self.complete_gpu_run(output)
+            subject = self.gpu_only_subject(output)
+            with patch.object(remote, 'ROOT', root), patch.object(remote, 'collect_timings', side_effect=collect):
+                metadata = remote.finish_remote(subject, output / 'analysis', False)
+                summary = '\n'.join(remote.gpu_summary_lines(subject.record, output))
+            panels = json.loads(metadata.read_text())['panels']
+            self.assertEqual([p['status'] for p in panels], ['ok', 'unavailable'])
+            self.assertTrue(subject.record['coverage'][-1]['optional'])
+            self.assertIn('Status: **unavailable**', summary)
+            self.assertIn('bash ae/run_all_no_gpu.sh', summary)
+            self.assertNotIn('Figure 8(c) plot', summary)
 
     def test_failed_suite_is_never_published_even_with_successful_rows(self):
         with tempfile.TemporaryDirectory() as directory:

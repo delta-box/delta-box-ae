@@ -327,7 +327,7 @@ def inputs_from_measurements(suite, summary, *, batches=DEFAULT_BATCHES):
     for backend in ordered:
         measured = ", ".join(str(n) for n in sorted(n for b, n in seen if b == backend))
         unavailable += [dict(backend=backend, n=n,
-                             reason=f"No {backend} fan-out was measured at N={n}; this run measured N={measured}.")
+                             reason=f"No {backend} fan-out was measured at N={n}; measured N={measured}.")
                         for n in batches if (backend, n) not in present]
     inputs = dict(
         schema_version=1, kind="gpu-occupation-inputs", source_kind=source_kind,
