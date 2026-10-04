@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "status": "candidate-not-final",
-  "source_commit": "0d62b3939776a0d9de079c1245735c8c955b1377",
-  "source_tree": "adfe57cb355b43cc6945a3c2c74d0e2cecd39b9d",
-  "source_sha256": "bba96c9bc2d8409241fbd4d3a430e87688f6a76167ca46a922117b6570551693",
+  "source_commit": "7ffd79ff07522611a47577c57fb39101f4593dc5",
+  "source_tree": "342542a009f1586cba9fde4d9c827c3dddfde7f5",
+  "source_sha256": "40aceb0458962d2f742ad3a23e9e9a53e8c906ae0985c521aadf6ded47b88a25",
   "files": {
     "ae/configs/diagnostics/api-profile.json": {
       "sha256": "5f457b99f6b7e60e31fee3421d119426ca8a00dfd944910920a61122ac6f416c"
@@ -366,7 +366,7 @@
       "sha256": "067b4398165bcfb403d6e41e3a67f8f4e30e1195caaa15b9c179f193a31b23c4"
     },
     "ae/scripts/run_no_gpu_entry.sh": {
-      "sha256": "c182e8a328906fd5a193a54a0e8367e430440a0b37fd472f6fb8a0aac1760c35"
+      "sha256": "8152309c8c94a26adba4c9901e0f45f0c840bddee55502654183dee7f00defca"
     },
     "ae/scripts/run_nvme_job.py": {
       "sha256": "669c77b865617f4bc4b0405b946f1fd3d86e0b9c6c07a0b8c62528b592dca275"
@@ -1387,6 +1387,20 @@
     "jobs_passed": 72,
     "attempts": 1,
     "resumes": 0,
-    "binding": "These committed runtime bytes equal the archived tested working tree. This is not a claim that the historical run started from this later commit."
+    "binding": "Historical CPU validation belongs to the immutable ae-cpu-20261003-limit5 archive and runtime fingerprint bba96c9bc2d8409241fbd4d3a430e87688f6a76167ca46a922117b6570551693. The current checkout additionally changes only run_no_gpu_entry.sh among runtime files, for hosted override rejection and help. No full experiment was rerun or claimed for the updated bytes."
+  },
+  "post_validation_changes": {
+    "runtime_paths": [
+      "ae/scripts/run_no_gpu_entry.sh"
+    ],
+    "reason": "Reject hosted --config/--runtime-repo before dispatch and separate hosted/self-managed help. Normal execution arguments, placement and workloads are unchanged.",
+    "tests": {
+      "root": "13 passed",
+      "atc-ae": "12 passed, 1 root-only skip",
+      "old_control": "Two regression methods fail against old wrapper",
+      "syntax": "bash -n passed"
+    },
+    "historical_archive_tag": "ae-cpu-20261003-limit5",
+    "historical_archive_commit": "2f82841016f92c78a8ae926c3685f27471faddc6"
   }
 }
