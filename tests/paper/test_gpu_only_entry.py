@@ -53,13 +53,13 @@ class GPUOnlyEntryTests(unittest.TestCase):
                 self.assertEqual(runtime.group, ['gpu'])
             return result, parsed
 
-    def test_default_is_gpu_only_four_devices_all_cases_fresh_output(self):
+    def test_default_scans_all_devices_for_gpu_only_all_cases_fresh_output(self):
         outputs=[]
         for _ in range(2):
             result,args=self.invoke(status=7)
             self.assertEqual(result.returncode,7,result.stderr)
             self.assertEqual(args.group,['gpu'])
-            self.assertEqual(args.gpu_devices,[0,3,6,7])
+            self.assertEqual(args.gpu_devices,list(range(8)))
             self.assertIsNone(args.gpu_cases)
             self.assertIsNone(args.limit)
             self.assertFalse(args.cpu_parallel)

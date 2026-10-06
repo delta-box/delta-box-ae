@@ -2,7 +2,8 @@
 """Start a fixed, trusted AE runtime through a restricted sudo entry point.
 
 Install this file as /usr/local/sbin/deltabox-ae-run, owned by root and not
-writable by reviewers. Its only policy is /etc/deltabox-ae/launcher.json.
+writable by reviewers. The default policy is /etc/deltabox-ae/launcher.json;
+an optional root-owned launchers.json registers policies for other checkouts.
 """
 from __future__ import annotations
 
@@ -43,9 +44,10 @@ class ReviewerYield(Exception):
     """Only the background unit yields; reviewer work is never signalled."""
 
 POLICY_PATH = Path('/etc/deltabox-ae/launcher.json')
+POLICY_REGISTRY_PATH = Path('/etc/deltabox-ae/launchers.json')
 POLICY_FIELDS = {'runtime_root', 'python', 'config', 'environment_file',
                  'output_root', 'allowed_user', 'lock_file'}
-OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root', 'results_backup_root', 'gpu_ssh_user'}
+OPTIONAL_POLICY_FIELDS = {'trusted_maintainer', 'trusted_developer', 'temporary_root', 'results_backup_root', 'gpu_ssh_user', 'coordination_root'}
 EXPERIMENTS = ('table-02-deltabox', 'table-03-slow', 'table-02-replay',
                'table-02-criu', 'table-02-fc-diff', 'table-02-cube', 'table-02-e2b',
                'figure-02-filesystem', 'figure-02-memory',
@@ -224,22 +226,51 @@ def read_root_json(path):
     return value
 
 
-def load_policy():
-    policy = read_root_json(POLICY_PATH)
+def registered_policy_path(checkout):
+    """Select only a fixed root-owned registration; never accept a policy flag.
+
+    Parent launchers and owned CPU services use the same --checkout argument.
+    Unknown checkouts still face the default policy's runtime identity check.
+    lstat distinguishes a missing registry from a dangling or forbidden link.
+    """
+    try:
+        POLICY_REGISTRY_PATH.lstat()
+    except FileNotFoundError:
+        return POLICY_PATH, False
+    registry = read_root_json(POLICY_REGISTRY_PATH)
+    for runtime, policy_path in registry.items():
+        for value in (runtime, policy_path):
+            if (not isinstance(value, str) or not value or '\x00' in value
+                    or not Path(value).is_absolute() or '..' in Path(value).parts
+                    or str(Path(value)) != value):
+                raise ValueError('Launcher registrations require canonical absolute checkout and policy paths')
+    selected = registry.get(str(checkout))
+    return (Path(selected), True) if selected is not None else (POLICY_PATH, False)
+
+
+def load_policy(checkout):
+    path, registered = registered_policy_path(checkout)
+    policy = read_root_json(path)
     if (not POLICY_FIELDS <= set(policy) or set(policy) - POLICY_FIELDS - OPTIONAL_POLICY_FIELDS
             or any(not isinstance(value, str) or not value for value in policy.values())):
         raise ValueError('Launcher policy requires: ' + ', '.join(sorted(POLICY_FIELDS)) +
                          '; optional: ' + ', '.join(sorted(OPTIONAL_POLICY_FIELDS)))
-    for key in (POLICY_FIELDS - {'allowed_user'}) | ({'temporary_root', 'results_backup_root'} & set(policy)):
+    for key in (POLICY_FIELDS - {'allowed_user'}) | ({'temporary_root', 'results_backup_root', 'coordination_root'} & set(policy)):
         path = Path(policy[key])
         if not path.is_absolute() or '..' in path.parts:
             raise ValueError(f'Policy {key} must be an absolute path without parent traversal')
         policy[key] = path
+    if registered and policy['runtime_root'] != checkout:
+        raise ValueError('Registered policy differs from its exact checkout')
     if 'gpu_ssh_user' in policy:
         account = pwd.getpwnam(policy['gpu_ssh_user'])
         if account.pw_uid == 0:
             raise ValueError('GPU SSH transport must use an unprivileged account')
     return policy
+
+
+def policy_coordination_root(policy):
+    return Path(policy.get('coordination_root', Path(policy['runtime_root']) / 'ae/work'))
 
 
 def caller_identity(policy):
@@ -409,6 +440,8 @@ def fixed_environment(policy, caller):
         'AE_HOSTED_CALLER_UID': str(caller.pw_uid),
         'AE_HOSTED_CALLER_USER': caller.pw_name,
     }
+    if 'coordination_root' in policy:
+        environment['AE_HOSTED_COORDINATION_ROOT'] = str(policy['coordination_root'])
     if 'temporary_root' in policy:
         environment['TMPDIR'] = str(policy['temporary_root'])
     if 'results_backup_root' in policy:
@@ -680,7 +713,7 @@ def cpu_git_environment(policy, runtime, trust):
 def verify_background_cleanup(policy, command, *, check_experiment_failure=True):
     """Direct-unit emptiness alone cannot prove shared backend restoration."""
     runtime = Path(policy['runtime_root'])
-    guard = runtime / 'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
+    guard = policy_coordination_root(policy) / 'E2B_SERVICE_RECOVERY_REQUIRED.json'
     if guard.exists():
         raise RuntimeError('E2B backend recovery remains required: ' + str(guard))
     destination = next((command[i + 1] for i, value in enumerate(command[:-1])
@@ -720,7 +753,7 @@ def verify_background_cleanup(policy, command, *, check_experiment_failure=True)
 
 
 def retain_backend_recovery(policy, command, error):
-    path = Path(policy['runtime_root']) / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json'
+    path = policy_coordination_root(policy) / 'CPU_SERVICE_RECOVERY_REQUIRED.json'
     # A failed restoration is persistent admission state, never an automatic
     # retry. The EX-protected reviewer gate consumes this marker after waiting.
     try:
@@ -735,7 +768,7 @@ def retain_backend_recovery(policy, command, error):
 
 
 def begin_background_transaction(policy, unit):
-    path = Path(policy['runtime_root']) / 'ae/work/CPU_BACKGROUND_TRANSACTION.json'
+    path = policy_coordination_root(policy) / 'CPU_BACKGROUND_TRANSACTION.json'
     for name in ('CPU_SERVICE_RECOVERY_REQUIRED.json', 'E2B_SERVICE_RECOVERY_REQUIRED.json'):
         guard = path.parent / name
         if guard.exists():
@@ -1090,7 +1123,7 @@ def run_cpu_campaign(policy, caller, args, output, environment, *, trust=None):
         try:
             for name in ('CPU_SERVICE_RECOVERY_REQUIRED.json', 'E2B_SERVICE_RECOVERY_REQUIRED.json',
                          'CPU_BACKGROUND_TRANSACTION.json'):
-                if (Path(policy['runtime_root']) / 'ae/work' / name).exists():
+                if (policy_coordination_root(policy) / name).exists():
                     raise RuntimeError('Shared backend admission remains blocked: ' + name)
             verify_background_cleanup(policy, command, check_experiment_failure=False)
         except BaseException as error:
@@ -1112,13 +1145,22 @@ def run_cpu_campaign(policy, caller, args, output, environment, *, trust=None):
     raise AssertionError('Unreachable campaign state')
 
 def managed_cpu_execution(args):
-    return args.cpu_parallel or (args.isolated_validation and args.cpu_layout == 'numa03')
+    if args.cpu_parallel or (args.isolated_validation and args.cpu_layout == 'numa03'):
+        return True
+    # The local Figure 8 E2B observer requires an admitted, owned CPU unit
+    # for selected serial runs as well as the full parallel CPU campaign.
+    if args.quick_check or args.list:
+        return False
+    return (not (args.experiment or args.group)
+            or 'figure-08-e2b' in (args.experiment or [])
+            or bool({'cpu', 'figure-08', 'figure-08-cpu'} & set(args.group or [])))
 
 
 def main(argv=None, *, service_context=None):
     lock_fd = priority_fd = None
     try:
-        policy = load_policy()
+        args = parse_arguments(argv)
+        policy = load_policy(args.checkout)
         if service_context is None:
             caller = caller_identity(policy)
         else:
@@ -1130,7 +1172,6 @@ def main(argv=None, *, service_context=None):
                 raise ValueError('CPU service caller is not allowed')
             caller = pwd.getpwuid(uid)
         trust = runtime_trust(policy)
-        args = parse_arguments(argv)
         if service_context is not None and (not managed_cpu_execution(args) or args.list):
             raise ValueError('CPU service admission requires a CPU execution')
         runtime = trusted_path(policy['runtime_root'], directory=True, trust=trust)
@@ -1138,6 +1179,8 @@ def main(argv=None, *, service_context=None):
             raise ValueError('Checkout differs from the fixed hosted runtime')
         trusted_path(policy['config'])
         trusted_path(policy['python'], symlinks=True, trust=trust)
+        if 'coordination_root' in policy:
+            trusted_path(policy['coordination_root'], directory=True, trust=trust)
         if 'temporary_root' in policy:
             temporary = policy['temporary_root']
             work = runtime / 'ae/work'
@@ -1192,6 +1235,12 @@ def main(argv=None, *, service_context=None):
                     command = ['/usr/bin/numactl', '--all', '--physcpubind=' + args.cpus,
                                '--membind=' + str(args.numa_node), *command]
                     executable = command[0]
+            if not args.cpu_parallel and args.cpu_layout == 'numa12':
+                # The service controller starts on auxiliary CPUs32-35.
+                # Serial run_review must see both allowed nodes before its
+                # existing pinner selects and validates measurement CPUs.
+                command = ['/usr/bin/numactl', '--all', '--physcpubind=24-71', *command]
+                executable = command[0]
             # HOME=/root also preserves root-owned dependency Git allowances.
             environment.update(cpu_git_environment(policy, runtime, trust))
             audit_launch(policy, caller, command, trust=trust, event='cpu-service-running', **identity)

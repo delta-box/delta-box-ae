@@ -1,5 +1,6 @@
 """Storage relocation preserves reservations and keeps JIT writes off full disks."""
 import json
+import contextlib
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,56 @@ from ae.runners import gpu_timing
 
 
 class StorageTests(unittest.TestCase):
+    def session_process(self, script, children):
+        real_popen = subprocess.Popen
+        def spawn(command, **kwargs):
+            child = real_popen([remote.sys.executable, '-u', '-c', script], **kwargs)
+            children.append(child)
+            return child
+        return patch.object(remote.subprocess, 'Popen', side_effect=spawn)
+
+    def test_tmpfs_session_lives_through_collection_and_closes_on_error(self):
+        config = dict(remote.load_settings(remote.DEFAULT_CONFIG), remote_root='/dev/shm/gpu-session-test')
+        ready = json.dumps(dict(ready=True, root=config['remote_root'], uid=123))
+        script = 'import sys; print(' + repr(ready) + ', flush=True); sys.stdin.buffer.read()'
+        for fail in (False, True):
+            children = []
+            with self.subTest(fail=fail), self.session_process(script, children):
+                expected = self.assertRaisesRegex(ValueError, 'collection failed') if fail else contextlib.nullcontext()
+                with expected:
+                    with remote.workspace_session(config) as evidence:
+                        self.assertTrue(evidence['ready'])
+                        self.assertIsNone(children[0].poll())
+                        if fail:
+                            raise ValueError('collection failed')
+                self.assertTrue(evidence['closed'])
+                self.assertEqual(evidence['exit_code'], 0)
+                self.assertEqual(children[0].poll(), 0)
+
+    def test_persistent_workspace_does_not_need_an_extra_session(self):
+        with patch.object(remote.subprocess, 'Popen') as spawn:
+            with remote.workspace_session(dict(remote_root='/mnt/work/gpu')) as evidence:
+                self.assertIsNone(evidence)
+            spawn.assert_not_called()
+
+    def test_tmpfs_startup_failure_and_timeout_reap_session(self):
+        config = dict(remote.load_settings(remote.DEFAULT_CONFIG), remote_root='/dev/shm/gpu-session-test')
+        scripts = ["print('{}', flush=True)", "print('bad-json', flush=True)", 'pass']
+        for script in scripts:
+            children = []
+            with self.subTest(script=script), self.session_process(script, children):
+                with self.assertRaises((RuntimeError, ValueError)):
+                    with remote.workspace_session(config):
+                        self.fail('invalid session must not yield')
+                self.assertIsNotNone(children[0].poll())
+        children = []
+        with self.session_process('import sys; sys.stdin.buffer.read()', children), \
+                patch.object(remote.select, 'select', return_value=([], [], [])):
+            with self.assertRaisesRegex(RuntimeError, 'Timed out'):
+                with remote.workspace_session(config):
+                    self.fail('timeout must not yield')
+            self.assertIsNotNone(children[0].poll())
+
     def good(self):
         return dict(requested='/work/run', existing_parent='/work',
                     available_bytes=40*1024**3, available_inodes=100000, writable=True)

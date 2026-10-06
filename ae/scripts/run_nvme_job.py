@@ -24,6 +24,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'ae')]
+from ae.repro.coordination import coordination_root
 from ae.scripts.job_mount_namespace import release_inherited_cube_mounts
 from repro.common import write_json
 from repro.staging_cleanup import cleanup_reconstructable_staging
@@ -292,7 +293,7 @@ def retain_recovery(meta, errors):
         json.dump(record, stream, indent=2)
         stream.write('\n')
     if 'AE_HOSTED_CALLER_UID' in os.environ:
-        guard = ROOT / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json'
+        guard = coordination_root(ROOT) / 'CPU_SERVICE_RECOVERY_REQUIRED.json'
         try:
             fd = os.open(guard, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         except FileExistsError:

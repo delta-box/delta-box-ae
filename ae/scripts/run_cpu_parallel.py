@@ -15,6 +15,7 @@ import time
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPO), str(REPO / 'ae')]
+from ae.repro.coordination import coordination_root
 CPU_LAYOUTS = {'numa12': {1: '28-31', 2: '48-51'},
                'numa03': {0: '0-3', 3: '72-75'}}
 PLACEMENT = CPU_LAYOUTS['numa12']
@@ -175,7 +176,7 @@ def run(args, parser, config, lease_fd, review):
     root = REPO / 'ae/results'
     if output == root or not output.is_relative_to(root / 'selected') or output == root / 'selected':
         raise ValueError('Two-lane results must use a dedicated ae/results/selected/<run> directory')
-    inherited_lease(lease_fd, REPO / 'ae/work/.results.lock')
+    inherited_lease(lease_fd, coordination_root(REPO) / '.results.lock')
     with review.output_tree_lock(REPO / 'ae/work', root, output):
         review.assert_backend_recovery(background=args.cpu_layout == 'numa03')
         runner = review.Review(args, config, output)
@@ -270,7 +271,7 @@ def worker(argv=None):
     options, rest = parser.parse_known_args(argv)
     if rest[:1] == ['--']:
         rest = rest[1:]
-    inherited_lease(options.lease_fd, REPO / 'ae/work/.results.lock')
+    inherited_lease(options.lease_fd, coordination_root(REPO) / '.results.lock')
     rp = review.parser()
     args = rp.parse_args(rest)
     expected = list(review.CPU_EXPERIMENTS)

@@ -26,6 +26,7 @@ from urllib.parse import urlsplit
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / 'ae'))
+from ae.repro.coordination import coordination_root
 from repro.catalog import EXPERIMENTS as CPU_EXPERIMENTS
 from repro.review_gpu import GPU, FANOUT, finish_gpu
 from repro.result_storage import (DEFAULT_BACKUP_ROOT, prepare_latest, run_lock, timestamp,
@@ -1552,11 +1553,11 @@ def main(argv=None):
         if args.isolated_validation:
             isolated_validation_output(args, config)
             background = isolated_background_baseline(args)
-            with run_lock(REPO / 'ae/work/.results.lock', shared=not background, wait=background):
+            with run_lock(coordination_root(REPO) / '.results.lock', shared=not background, wait=background):
                 return run_selected(args, p)
         if getattr(args, 'cpu_parallel', False):
             from ae.scripts.run_cpu_parallel import run
-            with run_lock(REPO / 'ae/work/.results.lock', wait=True) as lease_fd:
+            with run_lock(coordination_root(REPO) / '.results.lock', wait=True) as lease_fd:
                 return run(args, p, config, lease_fd, sys.modules[__name__])
         parallel = config.get('review', {}).get('parallel_quick_check', False)
         if type(parallel) is not bool:
@@ -1589,9 +1590,9 @@ def main(argv=None):
                 if config.get('cube', {}).get('manage_memory_service') and args.numa_node == config.get('measurement', {}).get('numa_node'):
                     raise ValueError('Quick check cannot use the managed Cube NUMA node')
             rotate = output.resolve() == (REPO / 'ae/results').resolve() and not args.resume
-            with parallel_run_locks(REPO / 'ae/work', quick=args.quick_check, rotate=rotate) as gate:
+            with parallel_run_locks(coordination_root(REPO), quick=args.quick_check, rotate=rotate) as gate:
                 return run_selected(args, p, gate=gate)
-        with run_lock(REPO / 'ae/work/.results.lock'):
+        with run_lock(coordination_root(REPO) / '.results.lock'):
             return run_selected(args, p)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f'AE refused: {error}', file=sys.stderr)
@@ -1616,8 +1617,8 @@ def run_selected(args, p, *, gate=None):
 def assert_backend_recovery(*, background=False):
     # Call only after obtaining the inherited/exclusive results lease. A live
     # background transaction may clear its guard while the reviewer waits.
-    guard = REPO / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json'
-    transaction = REPO / 'ae/work/CPU_BACKGROUND_TRANSACTION.json'
+    guard = coordination_root(REPO) / 'CPU_SERVICE_RECOVERY_REQUIRED.json'
+    transaction = coordination_root(REPO) / 'CPU_BACKGROUND_TRANSACTION.json'
     deadline = time.monotonic() + 730
     incomplete_deadline = None
     while transaction.exists():

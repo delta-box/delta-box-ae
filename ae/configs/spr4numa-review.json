@@ -80,7 +80,9 @@
           "memory_size_gib": 12,
           "fanout_forks": [
             1,
-            16
+            4,
+            16,
+            64
           ]
         },
         "baseline_storage": "tmpfs"

@@ -305,7 +305,7 @@ Figure 7 由这些完整轨迹计算得出，不需要单独的计时运行。�
 bash ae/run_all.sh --group figure-08-cpu --output "$AE_RUN/figure-08-cpu"
 ```
 
-DeltaBox 和 E2B 创建 N = 1、4、16、64 个分支；CubeSandbox 创建 N = 1 和 16 个。每个子实例都会读回继承到的状态，但各系统的校验方式不同：DeltaBox 逐页比较读到的值与期望值，CubeSandbox 比较内存 checksum 与期望值。E2B 精确比较 token、分配字节数以及每个 4096 字节页的首字节加和。64 MiB 源实例的期望字节数为 67,108,864，期望 checksum 为 2,041,721；每个子实例的期望值和实际值保存在 `memory_validation` 中。此校验验证确定性的逐页触摸模式，不覆盖分配区域的每个字节。此次修正前，已发布的 E2B 校验器只检查 checksum 和字节数字段是否存在，且未保存其数值。
+DeltaBox、CubeSandbox 和 E2B 都创建 N = 1、4、16、64 个分支，与论文 Figure 8(a) 一致。每个子实例都会读回继承到的状态，但各系统的校验方式不同：DeltaBox 逐页比较读到的值与期望值，CubeSandbox 比较内存 checksum 与期望值。E2B 精确比较 token、分配字节数以及每个 4096 字节页的首字节加和。64 MiB 源实例的期望字节数为 67,108,864，期望 checksum 为 2,041,721；每个子实例的期望值和实际值保存在 `memory_validation` 中。这验证的是确定性的逐页触摸模式，不是对分配区域逐字节校验。`e8b46b0` 及此前的历史 E2B 结果只检查 checksum 和字节数字段是否存在，且未保存其数值。
 
 **输出与判断。** 在 `figure-08-cpu-comparison.png` 中，比较相同 N 下所有分支就绪所需的时间，以及各曲线随 N 增长的趋势。论文认为，低成本的分支创建使更宽的搜索成为可能。通过各自系统的校验，是分支成功的一部分。
 
@@ -335,9 +335,11 @@ bash ae/run_all_gpu.sh
 
 命令结束时会直接打印 GPU 专用汇总，列出 8 项测试各自的状态、用卡数、重复次数和平均耗时，接着给出 Figure 8(c) 的结果，最后给出准确的 `SUMMARY.md` 路径。同一份汇总也保存为 `result.md`，无需自己查找结果目录。
 
-GPU 专用入口使用 `allinai2plus` 上为本 artifact 预留的 GPU，并自动创建新的结果目录。完整 8 项测试需要 4 张空闲 GPU：生成阶段和 batch 1/4 的训练使用 1 张，batch 16/64 的训练使用 4 张。可用 `--output PATH` 指定结果目录。`--gpu-devices ID,...` 用于选择其他 GPU，只有作者为你分配了其他 GPU 时才需要使用。脚本排除繁忙设备，不会选择指定范围以外的卡；资源不足时明确报告部分完成或不可用。
+GPU 临时工作和编译缓存放在 `allinai2plus` 的 `/dev/shm/deltabox-ae-1066`，模型文件仍在原位置复用。日志和结果会回传到 `spr4numa` 本仓库的 `ae/results/selected/gpu-only-*` 中持久保存。远端临时目录位于内存文件系统，GPU 主机重启后会清空。
 
-面板 (b) 完成后，同一条命令接着生成面板 (c)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。命令从 `ae/results` 下你最近一次完成的 `ae/run_all_no_gpu.sh` 运行中读取 fan-out 时间，并在汇总中写明所用的运行。图保存在 GPU 结果目录的 `gpu/attempt-001/comparison/theory/plots/figure-08c.png`。CubeSandbox 只测 N = 1 和 16，因此 N = 64 一格标为未测量。如果还没有完成的 CPU 运行，面板 (c) 会标为不可用；请先运行 `ae/run_all_no_gpu.sh`。
+GPU 专用入口检查 `allinai2plus` 上编号 0–7 的 GPU，自动选择并锁定 4 张空闲卡。不足 4 张空闲且未被预留的 GPU 时，在加载模型或开始测量前报错退出。脚本会连续检查占用情况，并在加锁后再次核实。生成阶段和 batch 1/4 的训练使用选中卡中的 1 张，batch 16/64 的训练使用全部 4 张。脚本自动创建新的结果目录，也可用 `--output PATH` 指定；`--gpu-devices ID,...` 可将自动选择范围限制为指定 GPU。
+
+面板 (b) 完成后，同一条命令接着生成面板 (c)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。命令从 `ae/results` 下你最近一次完成的 `ae/run_all_no_gpu.sh` 运行中读取 fan-out 时间，并在汇总中写明所用的运行。图保存在 GPU 结果目录的 `gpu/attempt-001/comparison/theory/plots/figure-08c.png`。三个系统都测量 N = 16 和 64，供面板 (c) 使用。旧 CPU 结果中缺失的点仍明确标为未测量；重新运行 `--group figure-08-cpu` 可获得完整的 fan-out 数据。如果还没有完成的 CPU 运行，面板 (c) 会标为不可用；请先运行 `ae/run_all_no_gpu.sh`。
 
 重跑 Figure 8 的全部面板：
 
@@ -489,7 +491,7 @@ bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
 
 **CubeSandbox 内存。** CubeSandbox 从内存运行时，会临时为 Cube 服务关闭透明大页。AE 机器上的 Cube VMM 还包含一个 [pagemap 分类修复](ae/patches/cube-pagemap-stable-classification.md)：没有它时，主机迁移内存页后，VMM 可能通过过期的物理页号查询，错误判断该页是否为匿名页，从而漏存匿名页。源实例和子实例的内存校验和都会被核验，实验结束后恢复原有的服务设置。
 
-**Figure 8 的 CubeSandbox 配置。** Figure 8 中 CubeSandbox 测试 N = 1 和 N = 16。脚本在本次运行的 NUMA 节点内，把 Cube 数据和 MySQL 元数据复制到私有、不使用 swap 的内存盘，保留数据库的持久化设置，并校验每个复制的文件。每个子实例继承的字节数、校验和与 token 都会被检查，结束后恢复服务和存储。如果某项资源无法释放或恢复，私有环境会连同 `RECOVERY_REQUIRED.json` 一起保留，供检查。准备和清理不计入克隆和校验的计时。每条 guest 命令执行前，驱动会通过一次只读请求确认 guest 代理（envd）已就绪；这段等待属于源准备或子实例校验阶段，与命令共用超时预算，且不会导致已提交的命令被重复发送。
+**Figure 8 的 CubeSandbox 配置。** Figure 8 中 CubeSandbox 测试 N = 1、4、16、64。脚本在本次运行的 NUMA 节点内，把 Cube 数据和 MySQL 元数据复制到私有、不使用 swap 的内存盘，保留数据库的持久化设置，并校验每个复制的文件。每个子实例继承的字节数、校验和与 token 都会被检查，结束后恢复服务和存储。如果某项资源无法释放或恢复，私有环境会连同 `RECOVERY_REQUIRED.json` 一起保留，供检查。准备和清理不计入克隆和校验的计时。每条 guest 命令执行前，驱动会通过一次只读请求确认 guest 代理（envd）已就绪；这段等待属于源准备或子实例校验阶段，与命令共用超时预算，且不会导致已提交的命令被重复发送。
 
 **NUMA 节点 0 和 3 上的后台验证。** 作者使用第二个入口在后台验证 artifact，每次运行使用新的输出目录：
 

@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 import stat
 
+from ae.repro.coordination import coordination_root
+
 REQUEST_ENV = 'AE_E2B_UFFD_AGGREGATE_REQUEST'
 SELECTED_ENV = 'E2B_OWNED_UFFD_AGGREGATE_CONFIG'
 CONTROL = 'c904a7e4e365d0366693c76312779d965b2de870c970f60f30033ea9ae5e45ae'
@@ -195,7 +197,7 @@ class Session:
         self.directory_identity = {k: v for k, v in _identity(self.directory.lstat()).items() if k != 'nlink'}
         self.check_directory()
         self.config = self.directory/'config.json'
-        self.guard = self.root/'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
+        self.guard = coordination_root(self.root)/'E2B_SERVICE_RECOVERY_REQUIRED.json'
         self.guard_record = None
         self.active = None
         self.config_record = None

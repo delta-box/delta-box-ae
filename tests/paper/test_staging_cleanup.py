@@ -190,6 +190,7 @@ class E2BStagingCleanupTests(unittest.TestCase):
         self.config_path = self.base / 'fixed.json'
         write_json(self.config_path, self.fixed)
         self.policy_path = self.base / 'launcher.json'
+        self.registry_path = self.base / 'launchers.json'
         self.policy = dict(runtime_root=str(self.runtime), output_root=str(self.run.parent),
                            python=str(self.runtime / '.venv/bin/python'), config=str(self.config_path),
                            environment_file=str(self.base / 'private-environment.json'),
@@ -233,6 +234,8 @@ class E2BStagingCleanupTests(unittest.TestCase):
         accounts = {'fixture-author': SimpleNamespace(pw_uid=1010),
                     'fixture-reviewer': SimpleNamespace(pw_uid=1012)}
         with patch.object(Path, 'lstat', metadata), patch.object(hosted, 'POLICY_PATH', self.policy_path), \
+             patch.object(hosted, 'POLICY_REGISTRY_PATH', self.registry_path), \
+             patch('repro.staging_cleanup.REPO', self.runtime), \
              patch.object(hosted.pwd, 'getpwnam', side_effect=accounts.__getitem__), \
              patch.dict(os.environ, {'AE_HOSTED_CALLER_UID': '1012'} if hosted_context else {}, clear=True), \
              patch.object(hosted.os, 'getxattr', side_effect=OSError(errno.ENODATA, 'No ACL'), create=True):
@@ -265,6 +268,51 @@ class E2BStagingCleanupTests(unittest.TestCase):
         self.assertEqual(report['e2b']['parent_verification'], 'unchanged after cleanup')
         self.assertGreater(report['removed_allocated_bytes'], 0)
         self.assertEqual(report['absent_allocated_bytes'], 0)
+
+    def registered_policy(self):
+        selected = self.base / 'registered-launcher.json'
+        write_json(selected, self.policy)
+        write_json(self.registry_path, {str(self.runtime): str(selected)})
+        # A second checkout's default policy must neither authorize nor bind this cleanup.
+        self.policy_path.write_text('{}')
+        return selected
+
+    def test_registered_checkout_uses_selected_policy_for_storage_and_cleanup(self):
+        from repro.staging_cleanup import validate_e2b_storage
+        self.registered_policy()
+        with self.owned_fixture():
+            self.assertEqual(validate_e2b_storage(self.fixed), (self.storage, self.parent_path))
+        self.assertEqual(self.cleanup()['status'], 'ok')
+        self.assertFalse(any(path.exists() for path in self.children))
+        self.assertEqual(self.policy_path.read_text(), '{}')
+
+    def test_selected_policy_and_registry_are_bound_to_cleanup_authority(self):
+        from repro.staging_cleanup import _e2b_cleanup_plan, _verify_e2b_context
+        selected = self.registered_policy()
+        with self.owned_fixture():
+            context = _e2b_cleanup_plan(self.run, self.producer)
+            bound = {item['path'] for item in context['bindings']}
+            self.assertIn(str(selected), bound)
+            self.assertIn(str(self.registry_path), bound)
+            self.assertNotIn(str(self.policy_path), bound)
+            for path in (selected, self.registry_path):
+                original = path.read_bytes()
+                path.write_bytes(original + b' ')
+                with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'cleanup identity changed'):
+                    _verify_e2b_context(context)
+                path.write_bytes(original)
+        self.assert_children_kept()
+
+    def test_new_registration_cannot_change_cleanup_authority_after_plan(self):
+        from repro.staging_cleanup import _e2b_cleanup_plan, _verify_e2b_context
+        with self.owned_fixture():
+            context = _e2b_cleanup_plan(self.run, self.producer)
+            selected = self.base / 'new-launcher.json'
+            write_json(selected, self.policy)
+            write_json(self.registry_path, {str(self.runtime): str(selected)})
+            with self.assertRaisesRegex(ValueError, 'policy selection changed'):
+                _verify_e2b_context(context)
+        self.assert_children_kept()
 
     def test_already_absent_child_is_recorded_without_claiming_reclaimed_bytes(self):
         shutil.rmtree(self.children[0])
