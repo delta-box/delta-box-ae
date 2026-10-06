@@ -27,6 +27,12 @@ the four-CPU, 3 GiB container and 2 GiB server memory budgets.
    proceeding. A copy of a running database can mix metadata and part states.
    A configuration-only backup cannot recover table rotations or retained log
    data. Keep a documented restore path for the complete stopped state.
+   Inside the protected AE checkout, keep original database ownership, modes,
+   ACLs and extended attributes in a root-private archive, verify it against
+   the cold copy, and retain its checksum. The archive and any unpacked copy
+   must satisfy the launcher's existing trusted-owner/write rules; do not
+   relax those rules to admit database-owned backup files. Restore original
+   metadata from the verified archive when recovering the database.
 
 3. **Merge the policy into the existing override.** Identify the host file
    mounted read-only as `/etc/clickhouse-server/config.d/ae.xml`, using the
