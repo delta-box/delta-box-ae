@@ -1,0 +1,88 @@
+# Hosted ClickHouse logging policy
+
+[The policy fragment](../configs/clickhouse-logging.xml) sets information-level
+server/text logging, one-day text/metric log TTLs, disables the trace log, and
+sets the global thread-pool limit to 256. It contains no credentials. This
+procedure applies to the hosted ClickHouse 25.4 deployment. Record deployment
+evidence and subsequent measurements in the existing [deviation ledger](https://github.com/delta-box/deltabox-runtime/blob/main/ae/report/README.md#figure-08).
+
+This host's recorded query probes identified thread-admission starvation at
+the previous global limit of 128: the server could report ready and listen for
+connections while `SELECT 1` timed out, even after old log tables were isolated.
+The 256 setting addresses that observed host condition; it is not a universal
+requirement for ClickHouse deployments. Preserve every other pool setting and
+the four-CPU, 3 GiB container and 2 GiB server memory budgets.
+
+1. **Reserve a maintenance window.** Acquire the existing hosted maintenance and
+   results locks and confirm that no experiment is active. Record the container
+   and image identity, resource limits, configuration hashes, and the names,
+   UUIDs, CREATE definitions and data paths of the current system log tables.
+   Keep an explicit list of the old internal-log UUIDs that require isolation.
+   Record application-table identities separately so they remain outside this
+   operation.
+
+2. **Take a complete cold backup.** Stop the E2B producers and ClickHouse cleanly.
+   Back up its persistent configuration and entire state, including metadata,
+   UUID data directories and ownership/permissions; verify the backup before
+   proceeding. A copy of a running database can mix metadata and part states.
+   A configuration-only backup cannot recover table rotations or retained log
+   data. Keep a documented restore path for the complete stopped state.
+   Inside the protected AE checkout, keep original database ownership, modes,
+   ACLs and extended attributes in a root-private archive, verify it against
+   the cold copy, and retain its checksum. The archive and any unpacked copy
+   must satisfy the launcher's existing trusted-owner/write rules; do not
+   relax those rules to admit database-owned backup files. Restore original
+   metadata from the verified archive when recovering the database.
+
+3. **Merge the policy into the existing override.** Identify the host file
+   mounted read-only as `/etc/clickhouse-server/config.d/ae.xml`, using the
+   container's mount metadata. Merge the fragment's logging sections and
+   `max_thread_pool_size` setting into that host file. Preserve all other pool,
+   CPU, memory, deployment, connection and application settings; do not replace
+   the full configuration with this fragment or edit generated
+   `preprocessed_configs/config.xml`.
+   Preserve the file owner, group, mode and ACLs when replacing it, and verify
+   that the container's ClickHouse user can still read the mounted file.
+
+4. **Restart and isolate the old internal logs.** Restart ClickHouse under the
+   same resource policy. In ClickHouse 25.4, changing a system-log CREATE
+   definition, including its TTL, can rotate the existing table to another
+   name and create a new table. The rotated table remains attached and can
+   continue costly merges. Resolve the old tables by their recorded UUIDs;
+   do not guess suffixes or select tables by a name wildcard. For each old
+   internal-log UUID on the maintenance list, recheck its current name and UUID,
+   then use `DETACH TABLE system.<verified_name> PERMANENTLY SYNC`. Retain its
+   data and metadata and record the corresponding `ATTACH TABLE` recovery
+   command. An old trace-log table may also survive disabling its writer.
+   Preserve the newly active log tables and all application tables. Do not
+   delete or truncate old logs, or apply the new TTL to the preserved old tables.
+
+5. **Restart again and verify persistence.** Check the effective merged
+   configuration for information-level logger/text logging, no trace-log
+   writer, and `max_thread_pool_size=256`. Require a successful `SELECT 1`
+   probe; a listening port or ready message alone does not establish query
+   readiness. Use `SHOW CREATE TABLE system.text_log` and
+   `SHOW CREATE TABLE system.metric_log` to verify the actual new-table TTLs;
+   ClickHouse may render `INTERVAL 1 DAY` as `toIntervalDay(1)`. Confirm that the
+   recorded old UUIDs remain detached, their retained files are present, and
+   application-table identities and resource limits are unchanged. Observe
+   fresh log writes, idle CPU and log growth over a recorded interval, and check
+   that repeated memory-limit merge failures do not recur on any system table.
+   TTL expiration follows the event-date boundary and background processing;
+   it is not an immediate deletion or a precise rolling 24-hour guarantee.
+
+6. **Run the unchanged four-point validation.** Restore normal E2B service
+   operation and use the hosted launcher as `atc-ae` from `~/delta-box-ae`, with
+   the existing four-CPU/NUMA policy and a new result directory. Run all
+   `N=1,4,16,64` points with the strict child token, byte-count and page-touch
+   checksum checks, cleanup checks, placement proof and resource sampling.
+   Verify normal application telemetry through the sandbox IDs generated by
+   this run, reading both the distributed and local event/host-stat tables;
+   do not inject synthetic application rows. Short-lived children need not
+   each produce a periodic host-stat sample. Preserve the raw results and
+   configuration identity and update the existing ledger with the outcome.
+
+If verification fails, keep maintenance ownership while restoring service.
+Reattaching retained tables requires checking their UUIDs and any collisions
+with newly created table names. Restore the original configuration and the
+verified cold backup when a safe table-level rollback is not available.

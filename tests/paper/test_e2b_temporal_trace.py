@@ -20,7 +20,7 @@ D = FIXTURE.DRIVER
 
 
 class Connection:
-    def __init__(self, reply=b'OK token=fixture-token checksum=1 bytes=1\n', failure=None):
+    def __init__(self, reply=b'OK token=fixture-token bytes=1048576 checksum=31385 requests=2 pid=14\n', failure=None):
         self.reply, self.failure, self.calls = reply, failure, []
     def getsockname(self): return ('127.0.0.1', 50123)
     def getpeername(self): return ('127.0.0.1', 38765)
@@ -38,10 +38,10 @@ class TemporalTraceTests(unittest.TestCase):
 
     def run_client(self, directory, connection, *, trace_io_fails=False):
         with patch.dict(os.environ, {'DELTABOX_E2B_DIAGNOSTIC_TRACE':'1'}):
-            shell = D.verify_mem_server_shell(token='fixture-token')
+            shell = D.verify_mem_server_shell(token='fixture-token', mem_mib=1)
         code = shell.split("python3 - <<'PY'\n",1)[1].rsplit('\nPY\n',1)[0]
         code = code.replace('/tmp/official_fork_', str(directory / 'official_fork_'))
-        (directory/'official_fork_state.txt').write_text('official-fork-state token=fixture-token')
+        (directory/'official_fork_state.txt').write_text('official-fork-state token=fixture-token bytes=1048576 pid=14\n')
         if trace_io_fails:
             code = code.replace("with open(_trace_path, 'ab') as stream:", "with open('/no-such-trace-parent/file', 'ab') as stream:")
         def connect(address, timeout):

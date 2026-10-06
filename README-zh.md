@@ -305,7 +305,7 @@ Figure 7 由这些完整轨迹计算得出，不需要单独的计时运行。�
 bash ae/run_all.sh --group figure-08-cpu --output "$AE_RUN/figure-08-cpu"
 ```
 
-DeltaBox 和 E2B 创建 N = 1、4、16、64 个分支；CubeSandbox 创建 N = 1 和 16 个。每个子实例都会读回继承到的状态，但各系统的校验方式不同：DeltaBox 逐页比较读到的值与期望值，CubeSandbox 比较内存 checksum 与期望值，而 E2B 的校验器核对 token，对 checksum 和字节数字段只检查是否存在。
+DeltaBox 和 E2B 创建 N = 1、4、16、64 个分支；CubeSandbox 创建 N = 1 和 16 个。每个子实例都会读回继承到的状态，但各系统的校验方式不同：DeltaBox 逐页比较读到的值与期望值，CubeSandbox 比较内存 checksum 与期望值。E2B 精确比较 token、分配字节数以及每个 4096 字节页的首字节加和。64 MiB 源实例的期望字节数为 67,108,864，期望 checksum 为 2,041,721；每个子实例的期望值和实际值保存在 `memory_validation` 中。此校验验证确定性的逐页触摸模式，不覆盖分配区域的每个字节。此次修正前，已发布的 E2B 校验器只检查 checksum 和字节数字段是否存在，且未保存其数值。
 
 **输出与判断。** 在 `figure-08-cpu-comparison.png` 中，比较相同 N 下所有分支就绪所需的时间，以及各曲线随 N 增长的趋势。论文认为，低成本的分支创建使更宽的搜索成为可能。通过各自系统的校验，是分支成功的一部分。
 

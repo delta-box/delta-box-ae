@@ -320,7 +320,7 @@ Figure 7 is computed from these complete trajectories and needs no separate timi
 bash ae/run_all.sh --group figure-08-cpu --output "$AE_RUN/figure-08-cpu"
 ```
 
-DeltaBox and E2B create N = 1, 4, 16, and 64 branches; CubeSandbox creates N = 1 and 16. Every child reads back the state it inherited, but the check differs by system: DeltaBox compares every page with its expected value and CubeSandbox compares the memory checksum with its expected value, while the E2B verifier checks the token and only that the checksum and byte-count fields are present.
+DeltaBox and E2B create N = 1, 4, 16, and 64 branches; CubeSandbox creates N = 1 and 16. Every child reads back the state it inherited, but the check differs by system: DeltaBox compares every page with its expected value and CubeSandbox compares the memory checksum with its expected value. E2B checks the exact token, allocation byte count, and expected sum of the first byte in each 4096-byte page. For the 64 MiB source, the expected byte count is 67,108,864 and the checksum is 2,041,721. Each child's expected and observed values are retained in `memory_validation`. This verifies the deterministic page-touch pattern, rather than every byte in the allocation. Before this correction, the released E2B verifier checked only whether checksum and byte-count fields were present and did not retain their numeric values.
 
 **Output and interpretation.** In `figure-08-cpu-comparison.png`, compare the time until all branches are ready at the same N, and how each curve grows with N. The paper argues that cheap branch creation enables a wider search. Passing its system's check is part of a branch's success.
 
