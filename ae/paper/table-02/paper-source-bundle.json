@@ -1,0 +1,130 @@
+{
+  "format": 1,
+  "dataset_id": "table2-original-deltabox-20260603-0030",
+  "repository_path": "datasets/deltabox-table2-paper-source.tar.gz",
+  "sha256": "92d06434c5fbaa8df3598e8283511d764fef5f9228637cb9cc8dac4b07479f7e",
+  "compressed_bytes": 1206418,
+  "files": [
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/astropy__astropy-13453.replay-deltabox-no-adapt-e85587.results.jsonl",
+      "member": "table2-paper-source/records/astropy__astropy-13453.replay-deltabox-no-adapt-e85587.results.jsonl.gz",
+      "sha256": "89b3d8437cf423138f96f5bfdbb53d0023e2796079698f2bad3a0f8f102f0561",
+      "bytes": 670087,
+      "instance": "astropy__astropy-13453",
+      "run_id": "replay-deltabox-no-adapt-e85587",
+      "gzip_sha256": "7104cc2021757bc917ce694c1f334ae703b1a10c6fa824be55baf0461b1ae6cd",
+      "gzip_bytes": 121393
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/astropy__astropy-14182.replay-deltabox-no-adapt-a6ca31.results.jsonl",
+      "member": "table2-paper-source/records/astropy__astropy-14182.replay-deltabox-no-adapt-a6ca31.results.jsonl.gz",
+      "sha256": "6889b605569eb514018eb7bfab3e4e36ba1685b2b1a404dea14885264c69f649",
+      "bytes": 285275,
+      "instance": "astropy__astropy-14182",
+      "run_id": "replay-deltabox-no-adapt-a6ca31",
+      "gzip_sha256": "4a99d50409ac946794f0407976b20c0f44c24ce3d86383881eab1feab857329f",
+      "gzip_bytes": 41167
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/astropy__astropy-7746.replay-deltabox-no-adapt-056dba.results.jsonl",
+      "member": "table2-paper-source/records/astropy__astropy-7746.replay-deltabox-no-adapt-056dba.results.jsonl.gz",
+      "sha256": "d1fbbdba44b35b3ab71984ed5aff41611037acace8e50987fc4d95330b73cf53",
+      "bytes": 1852615,
+      "instance": "astropy__astropy-7746",
+      "run_id": "replay-deltabox-no-adapt-056dba",
+      "gzip_sha256": "4799ebe30a8d1d617ed222a8820f023d4f474f2232c1cfc908145d8d74576e28",
+      "gzip_bytes": 427511
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/django__django-14672.replay-deltabox-no-adapt-c90fc6.results.jsonl",
+      "member": "table2-paper-source/records/django__django-14672.replay-deltabox-no-adapt-c90fc6.results.jsonl.gz",
+      "sha256": "eb41320116e9fda85d86b7a6fcae0b1faaceeab903c05e5df029804001c837a2",
+      "bytes": 364403,
+      "instance": "django__django-14672",
+      "run_id": "replay-deltabox-no-adapt-c90fc6",
+      "gzip_sha256": "717e1bc6a32fa305129ead1e4e93a154d0c0ad70b161070f4af52543eb6736c4",
+      "gzip_bytes": 23496
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/django__django-14997.replay-deltabox-no-adapt-ee76c3.results.jsonl",
+      "member": "table2-paper-source/records/django__django-14997.replay-deltabox-no-adapt-ee76c3.results.jsonl.gz",
+      "sha256": "fcf49cc2fd35dca33e8c028280df84d54f6a08059fdc89579885f6a952b9aae4",
+      "bytes": 218518,
+      "instance": "django__django-14997",
+      "run_id": "replay-deltabox-no-adapt-ee76c3",
+      "gzip_sha256": "6c186c4bf243d60e196a0ebaf199c934703f2fb4b63fd8c3990c343125ca99b3",
+      "gzip_bytes": 19204
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/matplotlib__matplotlib-23964.replay-deltabox-no-adapt-e19899.results.jsonl",
+      "member": "table2-paper-source/records/matplotlib__matplotlib-23964.replay-deltabox-no-adapt-e19899.results.jsonl.gz",
+      "sha256": "d32d35208163fba69d1e4bed567c269d98c4652a4670d933da5ce1fcca7750b2",
+      "bytes": 1055140,
+      "instance": "matplotlib__matplotlib-23964",
+      "run_id": "replay-deltabox-no-adapt-e19899",
+      "gzip_sha256": "a3102d5bf74848e1bebf53c5ea8e832c20ac47d54cfb57bdf33d89e561332054",
+      "gzip_bytes": 275696
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/matplotlib__matplotlib-26020.replay-deltabox-no-adapt-0a51d2.results.jsonl",
+      "member": "table2-paper-source/records/matplotlib__matplotlib-26020.replay-deltabox-no-adapt-0a51d2.results.jsonl.gz",
+      "sha256": "3d37c18f50d0abd104b7555d0682574d6826dc4a33be98bb15835f50686f7a98",
+      "bytes": 459527,
+      "instance": "matplotlib__matplotlib-26020",
+      "run_id": "replay-deltabox-no-adapt-0a51d2",
+      "gzip_sha256": "3bcee48b5d74bc7bf5a5958c4304f69117c279c80f0713be6dc94061bace2f6e",
+      "gzip_bytes": 30378
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/psf__requests-863.replay-deltabox-no-adapt-d99409.results.jsonl",
+      "member": "table2-paper-source/records/psf__requests-863.replay-deltabox-no-adapt-d99409.results.jsonl.gz",
+      "sha256": "95ebec211159373d205637a47c0213d8270c3e76d101b7f5ff33a67dca7919c6",
+      "bytes": 761437,
+      "instance": "psf__requests-863",
+      "run_id": "replay-deltabox-no-adapt-d99409",
+      "gzip_sha256": "092c539dce807a40cd3e7e72b3bdd0ea6690b1b4c0a288b8c4b4ae30b1370e81",
+      "gzip_bytes": 150112
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/pylint-dev__pylint-7080.replay-deltabox-no-adapt-78f443.results.jsonl",
+      "member": "table2-paper-source/records/pylint-dev__pylint-7080.replay-deltabox-no-adapt-78f443.results.jsonl.gz",
+      "sha256": "d24845cf808e19cc1d6c8f71538f05bfb253e3397e3de3e883e6cfb313cd34bc",
+      "bytes": 264099,
+      "instance": "pylint-dev__pylint-7080",
+      "run_id": "replay-deltabox-no-adapt-78f443",
+      "gzip_sha256": "b5d8ced1f118dea8dce80805c1737c1d4bae70496c3914a0c8ff89855eb580a1",
+      "gzip_bytes": 29974
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/pylint-dev__pylint-7228.replay-deltabox-no-adapt-835b46.results.jsonl",
+      "member": "table2-paper-source/records/pylint-dev__pylint-7228.replay-deltabox-no-adapt-835b46.results.jsonl.gz",
+      "sha256": "ef77431c6003094c160f983f6bef9736b9f5fc5ff55ad8bb3deafee46a177bea",
+      "bytes": 175668,
+      "instance": "pylint-dev__pylint-7228",
+      "run_id": "replay-deltabox-no-adapt-835b46",
+      "gzip_sha256": "c69fc0d6e4b0d83288dbfdd24f65e470cf4917da35c3f86f87235ece50bf92a8",
+      "gzip_bytes": 10317
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/sympy__sympy-17630.replay-deltabox-no-adapt-3eb6b7.results.jsonl",
+      "member": "table2-paper-source/records/sympy__sympy-17630.replay-deltabox-no-adapt-3eb6b7.results.jsonl.gz",
+      "sha256": "54b78609166a9b90a616043cd794dae39f7a83f68a0a6cb5c32273e93a8f961f",
+      "bytes": 504555,
+      "instance": "sympy__sympy-17630",
+      "run_id": "replay-deltabox-no-adapt-3eb6b7",
+      "gzip_sha256": "ce34c87d5ed73973261279fee55fae6e70b09e4d29a4f7e654ba40dd22476193",
+      "gzip_bytes": 31029
+    },
+    {
+      "target": "paper/table-02/data/records/deltabox-paper/results/sympy__sympy-22840.replay-deltabox-no-adapt-706dd0.results.jsonl",
+      "member": "table2-paper-source/records/sympy__sympy-22840.replay-deltabox-no-adapt-706dd0.results.jsonl.gz",
+      "sha256": "bcee90fb0644be3f761d3d9e10ce14ed7da340748036ef43ab3d4bea640d9a0d",
+      "bytes": 428064,
+      "instance": "sympy__sympy-22840",
+      "run_id": "replay-deltabox-no-adapt-706dd0",
+      "gzip_sha256": "9462b3e888186b3ed90333d2f7c7a3e0274ed4abfb9e4929406a98ff4364a021",
+      "gzip_bytes": 79939
+    }
+  ],
+  "description": "Original historical Table 2 DeltaBox records. Separate objects preserve all later-batch paths and other experiments."
+}

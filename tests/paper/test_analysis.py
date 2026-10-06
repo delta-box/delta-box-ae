@@ -423,7 +423,7 @@ class AggregationTests(unittest.TestCase):
         all_rows={(r['backend'],r['metric']):r for r in table['metrics'] if r['group']=='All'}
         for backend,counts in {'deltabox':(317,334),'cube':(317,334),'e2b':(185,185),'fc-diff':(7093,6518),'criu':(7123,6546),'replay':(244,6606)}.items():
             self.assertEqual(tuple(all_rows[backend,op+'_ms']['n'] for op in ('checkpoint','restore')),counts)
-        self.assertAlmostEqual(all_rows['deltabox','checkpoint_ms']['value'],8.32461483471025)
+        self.assertAlmostEqual(all_rows['deltabox','checkpoint_ms']['value'],10.827002089106323)
         slow=summary['experiments']['table-03']['selection']['slow'];self.assertEqual(slow['complete_runs'],8)
         fig6=summary['experiments']['figure-06'];self.assertEqual(fig6['selection']['population_counts'],{'adaptive_lightweight':831,'adaptive_standard':250,'standard_only':1081})
         estimated=[r for r in summary['experiments']['figure-08']['series'] if r.get('estimated')]
