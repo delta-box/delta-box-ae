@@ -17,6 +17,7 @@ import uuid
 from .common import file_record, write_json
 
 
+REPO = Path(__file__).resolve().parents[2]
 TARGETS = ('payload/repos', 'nltk_data')
 
 
@@ -82,7 +83,7 @@ def _e2b_child(path, storage, trust):
 
 def validate_e2b_storage(config):
     from ae.scripts import hosted_launcher as hosted
-    policy = hosted.load_policy()
+    policy = hosted.load_policy(REPO)
     trust = hosted.runtime_trust(policy)
     fixed = hosted.read_root_json(policy['config']).get('e2b', {})
     chosen = config.get('e2b', {})
@@ -103,7 +104,7 @@ def _e2b_cleanup_plan(root, producer):
     """Bind deletion authority to root policy and this producer's hashed result."""
     from ae.runners.e2b_environment import _parent_dependencies, verify_snapshot_inputs
     from ae.scripts import hosted_launcher as hosted
-    policy = hosted.load_policy()
+    policy = hosted.load_policy(REPO)
     trust = hosted.runtime_trust(policy)
     hosted.trusted_path(root, directory=True, trust=trust)
     hosted.trusted_path(root / 'run.json', trust=trust, root_leaf=True)
@@ -188,8 +189,12 @@ def _e2b_cleanup_plan(root, producer):
         rows.append(dict(path=str(target), kind='e2b-child', build_id=build,
                          status='pending' if inspected else 'absent',
                          **(inspected or dict(identity=None, logical_bytes=0, allocated_bytes=0, regular_files=0))))
-    bindings = [file_record(path) for path in (hosted.POLICY_PATH, policy['config'], parent, pilot)]
-    context = dict(storage=storage, trust=trust, evidence=evidence, bindings=bindings,
+    selection = hosted.registered_policy_path(REPO)
+    controls = [selection[0], policy['config'], parent, pilot]
+    if hosted.POLICY_REGISTRY_PATH.exists():
+        controls.append(hosted.POLICY_REGISTRY_PATH)
+    bindings = [file_record(path) for path in controls]
+    context = dict(storage=storage, trust=trust, evidence=evidence, bindings=bindings, policy_selection=selection,
                    protected_builds=sorted(protected), parent_manifest=parent_identity,
                    pilot_result=actual, rows=rows)
     return context
@@ -197,6 +202,9 @@ def _e2b_cleanup_plan(root, producer):
 
 def _verify_e2b_context(context):
     from ae.runners.e2b_environment import verify_snapshot_inputs
+    from ae.scripts import hosted_launcher as hosted
+    if hosted.registered_policy_path(REPO) != context['policy_selection']:
+        raise ValueError('E2B cleanup policy selection changed')
     for expected in context['bindings']:
         if file_record(Path(expected['path'])) != expected:
             raise ValueError(f'E2B cleanup identity changed: {expected["path"]}')

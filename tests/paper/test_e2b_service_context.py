@@ -53,7 +53,7 @@ def fixture():
 
 
 class FakeProof:
-    def __init__(self, node, cpus, *, observer=None):
+    def __init__(self, node, cpus, *, observer=None, interval_s=.025):
         self.stop = threading.Event()
         self.worker = Mock(ident=None)
         self.worker.is_alive.return_value = False

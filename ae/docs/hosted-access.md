@@ -24,6 +24,21 @@ bash ae/run_all.sh --list
 ```
 
 
+## 独立目录共用同一源码版本
+
+多个独立 checkout 可使用同一公开提交和同一份 `hosted_launcher.py`。管理员在 root 管理的 `/etc/deltabox-ae/launchers.json` 中，将每个 checkout 的绝对路径映射到各自的 root 策略文件，例如：
+
+```json
+{
+  "/home/atc-ae/delta-box-ae": "/etc/deltabox-ae/launcher.json",
+  "/home/atc-ae/a12-evaluation/repo": "/etc/deltabox-ae/a12-launcher.json"
+}
+```
+
+入口按 `--checkout` 选择策略，并核对策略的 `runtime_root`。注册表和策略文件须由 root 所有且不可被其他账号修改；没有注册表时保留默认策略。各目录仍使用各自的 Python 环境、结果和临时目录，无需为环境差异维护源码分支。管理员安装的各入口别名应来自同一份源码。
+
+使用同一后端服务的策略应将 `coordination_root` 指向共同的协调目录；它只存放共享服务的锁和运行保护记录，不合并实验结果。
+
 ## 快速检查与完整实验入口
 
 评审账号的 `~/delta-box-ae` 应指向策略中 `runtime_root` 配置的发布仓库。发布时一并更新 `ae/run_test.sh` 和 `ae/run_all.sh`。
@@ -32,7 +47,7 @@ bash ae/run_all.sh --list
 
 在 root 管理的 `/etc/deltabox-ae/review.json` 中设置 `gpu_remote_config`，指向作者维护的远端配置（默认 `ae/configs/figure08-remote.json`），删除旧的 `gpu.config` / `gpu.enabled`。本机无需 GPU，入口通过原调用用户的非交互 SSH 身份访问 allinai2plus；管理员应为该用户配置可用的主机别名和访问权限，不向评审者复制其他用户私钥。具体字段见[自建环境指南](self-hosting-zh.md#gpu-setup)。
 
-仅 auto：GPU 全忙或 SSH/环境不可用则跳过，有 1–3 张空闲卡运行六案例，四张运行完整八案例。GPU 状态独立记录在 `result.md`，不使已完成的 CPU 实验失败；CPU 成功不表示 GPU 完整。
+GPU 运行在加载模型前检查并预约四张空闲卡；不足四张时不开始测量，显式选择单个案例也遵守该资源要求。auto 模式下 SSH、环境或资源不可用则跳过。GPU 状态独立记录在 `result.md`，不使已完成的 CPU 实验失败；CPU 成功不表示 GPU 完整。
 
 ## 最新结果与历史备份
 

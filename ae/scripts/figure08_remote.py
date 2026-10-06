@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shlex
 import tempfile
 import subprocess
@@ -276,8 +277,11 @@ def remote_run(root, *, probe_only=False):
             report['selected'].append(device)
             if len(acquired) == 4:
                 break
-        if not acquired:
-            report['reason'] = 'No idle/unreserved GPU among configured physical indices ' + ','.join(map(str, config['devices']))
+        if len(acquired) < 4:
+            report.update(status='failed', reason=(
+                f'At least 4 idle, unreserved GPUs are required; found {len(acquired)} '
+                'among configured physical indices ' + ','.join(map(str, config['devices'])) +
+                '. No model or measurement started.'))
             return report
         report['recheck'] = probe(config)
         available = {(g['index'], g['uuid']) for g in report['recheck']['idle']}
@@ -372,6 +376,55 @@ def ssh_transport(config):
 def ssh(config, argv, *, timeout=60, **kwargs):
     return subprocess.run([*ssh_transport(config), config['host'], shlex.join(list(map(str, argv)))],
                           timeout=timeout, check=True, **kwargs)
+
+
+@contextlib.contextmanager
+def workspace_session(config):
+    """Keep tmpfs work alive until collection despite last-login IPC cleanup."""
+    if not Path(config['remote_root']).is_relative_to('/dev/shm'):
+        yield None
+        return
+    code = '''import json, os, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+root.mkdir(mode=0o700, exist_ok=True)
+if root.is_symlink() or not root.is_dir() or root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
+    raise RuntimeError("GPU tmpfs workspace must be a private directory owned by this account")
+print(json.dumps(dict(ready=True, root=str(root), uid=os.getuid())), flush=True)
+sys.stdin.buffer.read()
+'''
+    command = [*ssh_transport(config), config['host'],
+               shlex.join([config['python'], '-u', '-c', code, config['remote_root']])]
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    evidence = dict(kind='ssh-workspace-session', root=config['remote_root'], ready=False)
+    try:
+        deadline = time.monotonic() + config['connect_timeout_s'] + 10
+        response = b''
+        while b'\n' not in response:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                raise RuntimeError('Timed out establishing the GPU tmpfs workspace session')
+            block = os.read(process.stdout.fileno(), 4096)
+            if not block or len(response) + len(block) > 4096:
+                raise RuntimeError('GPU tmpfs workspace session did not return a valid readiness record')
+            response += block
+        ready = json.loads(response.split(b'\n', 1)[0])
+        if ready.get('ready') is not True or ready.get('root') != config['remote_root']:
+            raise RuntimeError('GPU tmpfs workspace session readiness differs from the requested directory')
+        evidence.update(ready=True, remote_uid=ready['uid'])
+        yield evidence
+    finally:
+        process.stdin.close()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        process.stdout.close()
+        evidence.update(closed=True, exit_code=process.returncode)
 
 
 def snapshot(output, config):
@@ -485,6 +538,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
                   requested_case_count=len(wanted), successful_selected_cases=0,
                   selected_status='unavailable', missing_selected_cases=list(wanted))
     started = False
+    sessions = contextlib.ExitStack()
     try:
         config = load_settings(config_path)
         if device_indices is not None:
@@ -500,6 +554,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
                       capture_output=True, text=True)
         record['storage_admission'] = storage_admission(json.loads(storage.stdout))
         archive = snapshot(output, config)
+        record['workspace_session'] = sessions.enter_context(workspace_session(config))
         remote_root = str(Path(config['remote_root']) / ('run-' + uuid.uuid4().hex))
         record['remote_directory'] = remote_root
         # mkdir without -p for the run itself prevents accidental evidence replacement.
@@ -562,6 +617,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
             stderr = error.stderr
             record['detail'] = stderr.decode(errors='replace') if isinstance(stderr, bytes) else stderr
     finally:
+        sessions.close()
         record['finished_at'] = datetime.now(timezone.utc).isoformat()
         with (output / 'ssh.log').open('a') as log:
             log.write('\n' + json.dumps(record, ensure_ascii=False) + '\n')
@@ -608,7 +664,8 @@ def derive_theory(theory, summary, host_summary, destination):
                                 '--output', str(destination), '--plot'])
         if code:
             raise ValueError('Figure 8(c) calculation or plotting failed')
-        theory.update(status='ok', input=file_record(destination / 'occupation.json'),
+        theory.update(status='partial' if inputs['unavailable'] else 'ok',
+                      input=file_record(destination / 'occupation.json'),
                       reasons=[row['reason'] for row in inputs['unavailable']],
                       artifacts=[file_record(destination / 'plots' / ('figure-08c.' + ext)) for ext in ('png', 'pdf')])
     except Exception as error:
@@ -648,7 +705,9 @@ def finish_remote(review, analysis_dir, analyzed):
         gpu['plot_error'] = str(error)
     selected = set(review.record['experiments'])
     theory = None
-    if set(FANOUT).issubset(selected) and not review.limits:
+    # Input caps do not truncate these fixed fan-out jobs. Judge coverage from
+    # their measured points, including N=16 and N=64, rather than CLI limits.
+    if set(FANOUT).issubset(selected):
         theory = dict(experiment=THEORY, title='Figure 8(c)', status='unavailable', artifacts=[], reasons=[])
         ready = (gpu['status'] == 'complete' and summary is not None and analyzed and
                  all(any(row['experiment'] == name and row['status'] == 'ok'

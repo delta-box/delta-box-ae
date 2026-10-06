@@ -28,9 +28,13 @@ class ReviewTests(unittest.TestCase):
         original = review.run_lock
         def isolated_lock(path, **kwargs):
             return original(Path(directory.name) / Path(path).name, **kwargs)
-        redirect = patch.object(review, 'run_lock', side_effect=isolated_lock)
-        redirect.start()
-        self.addCleanup(redirect.stop)
+        # run_review imports run_lock directly, while output_tree_lock and
+        # parallel_run_locks resolve it in the result_storage module itself.
+        # Redirect both bindings so main() cannot touch real hosted locks.
+        for redirect in (patch.object(review, 'run_lock', side_effect=isolated_lock),
+                         patch('repro.result_storage.run_lock', side_effect=isolated_lock)):
+            redirect.start()
+            self.addCleanup(redirect.stop)
 
 
     def test_resume_compares_cube_settings_not_generated_proof_path(self):

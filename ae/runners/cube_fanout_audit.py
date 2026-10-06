@@ -36,7 +36,7 @@ def validate_memory_response(text, *, token, expected_bytes, min_requests):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', type=Path)
-    ap.add_argument('--forks', default='1,16')
+    ap.add_argument('--forks', default='1,4,16,64')
     ap.add_argument('--mem-mib', type=int, default=64)
     ap.add_argument('--cube-api-url', required=True)
     ap.add_argument('--cube-template', required=True)

@@ -44,10 +44,10 @@ class RemoteTests(unittest.TestCase):
         return dict(gpus=[dict(index=i, uuid=f'GPU-{i}', memory_mib=4, utilization_pct=0)
                           for i in range(count)], processes=[])
 
-    def test_shipped_config_only_admits_the_reserved_gpus(self):
-        self.assertEqual(self.settings()['devices'], [0, 3, 6, 7])
+    def test_shipped_config_scans_all_eight_gpus(self):
+        self.assertEqual(self.settings()['devices'], list(range(8)))
         self.assertEqual([g['index'] for g in remote.idle_devices([self.observation()] * 3, self.settings())],
-                         [0, 3, 6, 7])
+                         list(range(8)))
 
     def test_idle_requires_stable_identity_no_pid_and_low_memory(self):
         config = dict(self.settings(), devices=list(range(8)))
@@ -77,7 +77,7 @@ class RemoteTests(unittest.TestCase):
         remote.write_json(root / 'source.json', {'files': {}})
         return config
 
-    def test_all_busy_skips_without_loading_or_checking_model(self):
+    def test_all_busy_fails_without_loading_or_checking_model(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.remote_root(root)
@@ -85,8 +85,8 @@ class RemoteTests(unittest.TestCase):
                     patch.object(gpu_timing, 'check_resources') as check, \
                     patch.object(gpu_timing, 'run_suite') as run:
                 result = remote.remote_run(root)
-            self.assertEqual(result['status'], 'skipped')
-            self.assertIn('No idle', result['reason'])
+            self.assertEqual(result['status'], 'failed')
+            self.assertIn('required; found 0', result['reason'])
             check.assert_not_called()
             run.assert_not_called()
             self.assertTrue((root / 'results/remote.json').is_file())
@@ -95,7 +95,7 @@ class RemoteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = self.remote_root(root)
-            initial = dict(idle=[dict(index=0, uuid='GPU-0')], observations=[])
+            initial = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
             with patch.object(remote, 'probe', side_effect=[initial, dict(idle=[], observations=[])]), \
                     patch.object(gpu_timing, 'run_suite') as run:
                 result = remote.remote_run(root)
@@ -116,7 +116,49 @@ class RemoteTests(unittest.TestCase):
                 with patch.object(remote, 'probe', return_value=dict(idle=[dict(index=0, uuid='GPU-0')], observations=[])):
                     result = remote.remote_run(root)
             self.assertEqual(result['selected'], [])
-            self.assertEqual(result['status'], 'skipped')
+            self.assertEqual(result['status'], 'failed')
+
+    def test_auto_selection_skips_busy_devices_and_locked_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.remote_root(root)
+            observation = self.observation()
+            observation['processes'] = [dict(pid=123, uuid='GPU-0'), dict(pid=456, uuid='GPU-3')]
+            locks = Path(config['lock_root'])
+            locks.mkdir(parents=True)
+            with (locks / 'GPU-1.lock').open('a') as held:
+                remote.fcntl.flock(held, remote.fcntl.LOCK_EX)
+                with patch.object(remote, 'inventory', return_value=observation), \
+                        patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={})), \
+                        patch.object(gpu_timing, 'run_suite', return_value=dict(status='ok')) as run:
+                    result = remote.remote_run(root)
+                self.assertEqual(result['status'], 'measured')
+                self.assertEqual([g['index'] for g in result['selected']], [2, 4, 5, 6])
+                self.assertEqual(run.call_args.args[0]['devices'], ['GPU-2', 'GPU-4', 'GPU-5', 'GPU-6'])
+                with (locks / 'GPU-1.lock').open('a') as second:
+                    with self.assertRaises(BlockingIOError):
+                        remote.fcntl.flock(second, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
+            for lockpath in locks.glob('*.lock'):
+                with lockpath.open('a') as lock:
+                    remote.fcntl.flock(lock, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
+
+    def test_explicit_allowlist_shortage_does_not_use_other_idle_gpus(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.remote_root(root)
+            config['devices'] = [0, 3, 6, 7]
+            remote.write_json(root / 'remote-config.json', config)
+            observation = self.observation()
+            observation['processes'] = [dict(pid=123, uuid='GPU-0')]
+            with patch.object(remote, 'inventory', return_value=observation), \
+                    patch.object(gpu_timing, 'check_resources') as check, \
+                    patch.object(gpu_timing, 'run_suite') as run:
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'failed')
+            self.assertIn('required; found 3', result['reason'])
+            self.assertEqual([g['index'] for g in result['selected']], [3, 6, 7])
+            check.assert_not_called()
+            run.assert_not_called()
 
     def test_ssh_unavailable_is_a_recorded_skip(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -142,8 +184,8 @@ class RemoteTests(unittest.TestCase):
         self.assertFalse(check['ok'])
         self.assertEqual(check['checks'][-1]['detail']['vllm']['expected'], '0.21.0')
 
-    def test_remote_partial_and_full_execution_plans(self):
-        for count in (1, 4):
+    def test_remote_requires_four_before_any_model_preflight(self):
+        for count in (0, 1, 2, 3, 4, 8):
             with self.subTest(count=count), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.remote_root(root)
@@ -153,13 +195,22 @@ class RemoteTests(unittest.TestCase):
                     calls.append((config['phases'], config['batches'], config['devices']))
                     return dict(status='ok')
                 with patch.object(remote, 'probe', return_value=admission), \
-                        patch.object(gpu_timing, 'check_resources', side_effect=lambda c: dict(ok=True, checks=[], software={})), \
+                        patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={})) as check, \
                         patch.object(gpu_timing, 'run_suite', side_effect=run):
                     result = remote.remote_run(root)
-                self.assertEqual(result['status'], 'measured')
-                self.assertEqual(sum(len(b) for _, b, _ in calls), 6 if count == 1 else 8)
-                if count == 4:
+                if count < 4:
+                    self.assertEqual(result['status'], 'failed')
+                    self.assertIn(f'required; found {count}', result['reason'])
+                    self.assertEqual(calls, [])
+                    check.assert_not_called()
+                else:
+                    self.assertEqual(result['status'], 'measured')
+                    self.assertEqual(sum(len(b) for _, b, _ in calls), 8)
+                    self.assertEqual(len(result['selected']), 4)
                     self.assertEqual(calls[-1], (['training'], [16, 64], ['GPU-0', 'GPU-1', 'GPU-2', 'GPU-3']))
+                for lockpath in (root / 'shared/locks').glob('*.lock'):
+                    with lockpath.open('a') as lock:
+                        remote.fcntl.flock(lock, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
 
     def test_selected_training_requires_four_gpus_and_never_runs_completed_cases(self):
         wanted = ['training-B16', 'training-B64']
@@ -181,7 +232,7 @@ class RemoteTests(unittest.TestCase):
                 if count < 4:
                     self.assertEqual(calls, [])
                     check.assert_not_called()
-                    self.assertEqual(result['status'], 'skipped')
+                    self.assertEqual(result['status'], 'failed')
                 else:
                     self.assertEqual(calls, [(['training'], [16, 64], ['GPU-0', 'GPU-1', 'GPU-2', 'GPU-3'])])
                     self.assertEqual(result['status'], 'measured')
@@ -412,6 +463,49 @@ class RemoteTests(unittest.TestCase):
             self.assertEqual([p['status'] for p in panels], ['ok', 'ok'])
             occupation = json.loads((root / 'gpu/attempt-001/comparison/theory/occupation.json').read_text())
             self.assertEqual(len(occupation['rows']), 6)
+
+    def test_complete_fanout_theory_ignores_cpu_input_cap(self):
+        from types import SimpleNamespace
+        from repro.review_gpu import FANOUT, GPU
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collect = self.complete_gpu_run(root)
+            analysis = root / 'analysis'
+            self.fanout_summary(analysis / 'summary.json')
+            subject = SimpleNamespace(output=root, attempt='attempt-001', limits=['--limit', '3'], record=dict(
+                gpu_output='gpu/attempt-001', gpu=dict(status='complete', successful_cases=8),
+                release={}, outputs={}, experiments=[*FANOUT, GPU],
+                coverage=[dict(experiment=n, status='ok') for n in FANOUT]))
+            with patch.object(remote, 'collect_timings', side_effect=collect):
+                metadata = remote.finish_remote(subject, analysis, True)
+            panels = json.loads(metadata.read_text())['panels']
+            self.assertEqual([p['status'] for p in panels], ['ok', 'ok'])
+            occupation = json.loads((root / 'gpu/attempt-001/comparison/theory/occupation.json').read_text())
+            self.assertEqual(len(occupation['rows']), 6)
+            self.assertEqual(occupation['coverage'], 'complete')
+
+    def test_missing_cube64_is_reported_as_partial_theory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = root / 'ae/results'
+            cpu = self.cpu_run(results / 'selected', 'old-partial', '2026-10-03T00:00:00+00:00', 200)
+            path = cpu / 'analysis/attempt-001/summary.json'
+            data = json.loads(path.read_text())
+            series = data['experiments']['figure-08']['series']
+            data['experiments']['figure-08']['series'] = [p for p in series
+                if (p['backend'], p['x']) != ('cube', 64)]
+            remote.write_json(path, data)
+            output = results / 'selected/gpu-only'
+            collect = self.complete_gpu_run(output)
+            subject = self.gpu_only_subject(output)
+            with patch.object(remote, 'ROOT', root), patch.object(remote, 'collect_timings', side_effect=collect):
+                metadata = remote.finish_remote(subject, output / 'analysis', False)
+            panels = json.loads(metadata.read_text())['panels']
+            self.assertEqual([p['status'] for p in panels], ['ok', 'partial'])
+            occupation = json.loads((output / 'gpu/attempt-001/comparison/theory/occupation.json').read_text())
+            self.assertEqual(occupation['coverage'], 'partial')
+            self.assertEqual(len(occupation['rows']), 5)
+            self.assertEqual([(p['backend'], p['n']) for p in occupation['unavailable']], [('cube', 64)])
 
     def test_gpu_only_run_takes_fanout_from_newest_finished_cpu_run(self):
         from ae.scripts.build_review_comparison import figure08_supplement, supplemental_markdown

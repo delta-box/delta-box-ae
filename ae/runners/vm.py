@@ -29,6 +29,8 @@ from pathlib import Path
 
 EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = EXAMPLE_ROOT.parent
+sys.path.insert(0, str(REPO_ROOT))
+from ae.repro.coordination import coordination_root
 DEFAULT_BASE = EXAMPLE_ROOT / "assets" / "base.xfs"
 DEFAULT_ASSET_KERNEL = EXAMPLE_ROOT / "assets" / "vmlinux"
 DEFAULT_REPO_KERNEL = REPO_ROOT / "linux-6.8" / "vmlinux"
@@ -200,7 +202,7 @@ def _retain_rootfs_cleanup(args, evidence) -> None:
         json.dump(evidence, stream, indent=2)
         stream.write("\n")
     if "AE_HOSTED_CALLER_UID" in os.environ:
-        guard = REPO_ROOT / "ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json"
+        guard = coordination_root(REPO_ROOT) / "CPU_SERVICE_RECOVERY_REQUIRED.json"
         try:
             fd = os.open(guard, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         except FileExistsError:

@@ -276,7 +276,7 @@ def build_jobs(experiments,config,config_path,output,limit=None,max_events=None)
             add(experiment,experiment,cmd)
         else:
             backend=experiment.removeprefix('figure-08-')
-            forks = config.get('cube', {}).get('fanout_forks', [1,16]) if backend == 'cube' else [1,4,16,64]
+            forks = config.get('cube', {}).get('fanout_forks', [1,4,16,64]) if backend == 'cube' else [1,4,16,64]
             if (not isinstance(forks, list) or not forks or
                     any(type(n) is not int or n not in (1,4,16,64) for n in forks) or len(set(forks)) != len(forks)):
                 raise ValueError('Cube fanout_forks must select unique counts from 1,4,16,64')

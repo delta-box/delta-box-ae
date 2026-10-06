@@ -34,7 +34,7 @@ def main():
         from ae.scripts.e2b_service_context import assert_backend_ready
         assert_backend_ready()
     release=from_environment();config=load_config(args.config);settings=config[args.backend];out=args.out.resolve();out.mkdir(parents=True,exist_ok=False)
-    if args.forks is None:args.forks='1,16' if args.backend == 'cube' else '1,4,16,64'
+    if args.forks is None:args.forks='1,4,16,64'
     forks=list(map(int,args.forks.split(',')))
     if not forks or min(forks)<=0:raise ValueError('fork counts must be positive')
     driver=AE_ROOT/'vendor/finalbench/official_sandbox_fork/bench_official_fork.py'

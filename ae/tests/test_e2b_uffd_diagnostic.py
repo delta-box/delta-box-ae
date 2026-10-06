@@ -86,6 +86,32 @@ class Files(unittest.TestCase):
         s.publish(active,SimpleNamespace(ram=ram))
         return s
 
+    def test_session_defaults_to_repository_guard(self):
+        with patch.dict(os.environ, {}, clear=True):
+            session = self.guarded()
+        self.assertEqual(session.guard, self.root/'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json')
+        session.check_guard()
+
+    def test_shared_guard_is_verified_without_relocating_diagnostic_output(self):
+        shared = self.root/'shared-coordination'
+        shared.mkdir()
+        local = self.root/'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
+        local.write_bytes(b'local guard must not be read or replaced')
+        local.chmod(0o600)
+        with patch.dict(os.environ, {'AE_HOSTED_COORDINATION_ROOT': str(shared)}, clear=True):
+            session = self.guarded()
+        self.assertEqual(session.guard, shared/'E2B_SERVICE_RECOVERY_REQUIRED.json')
+        self.assertEqual(session.guard_record['path'], str(session.guard))
+        self.assertTrue(session.directory.is_relative_to(self.output))
+        session.check_guard()
+        replacement = shared/'replacement'
+        replacement.write_bytes(session.guard.read_bytes())
+        replacement.chmod(0o600)
+        replacement.replace(session.guard)
+        with self.assertRaisesRegex(ValueError, 'identity changed'):
+            session.check_guard()
+        self.assertEqual(local.read_bytes(), b'local guard must not be read or replaced')
+
     def test_shared_request_reads_same_protected_bytes_without_future_state(self):
         r, rec = d.validate_request(self.reference,root=self.root,output=self.output,
             source_sha256='a'*64,node=3,cpus='72-75')

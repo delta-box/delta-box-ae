@@ -10,6 +10,7 @@ import datetime
 import hashlib
 import errno
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,7 @@ import threading
 import time
 import traceback
 import urllib.request
+from ae.repro.coordination import coordination_root
 
 ROOT = Path(__file__).resolve().parents[2]
 CGROUP = Path('/sys/fs/cgroup')
@@ -32,10 +34,11 @@ PROPERTIES = ('AllowedCPUs', 'AllowedMemoryNodes', 'MemorySwapMax', 'CPUAffinity
 RESOURCE_PROPERTIES = PROPERTIES[:3]
 CG_FILES = ('cpuset.cpus', 'cpuset.cpus.effective', 'cpuset.mems', 'cpuset.mems.effective',
             'memory.swap.max', 'memory.swap.current', 'cgroup.subtree_control', 'cgroup.events')
-GUARD = ROOT / 'ae/work/E2B_SERVICE_RECOVERY_REQUIRED.json'
+GUARD = coordination_root(ROOT) / 'E2B_SERVICE_RECOVERY_REQUIRED.json'
 DROP_NAME = 'zzzz-deltabox-numa03-e2b.conf'
 API_LOG = Path('/mnt/disk2/dyp/ae-hosted-20260922/e2b/logs/api.log')
 LANE_CPUS = {0: '0-3', 1: '28-31', 2: '48-51', 3: '72-75'}
+_OBSERVER_METRICS = threading.local()
 
 
 def run(*args):
@@ -90,7 +93,7 @@ def ancestor_pids():
 
 
 def require_results_lease():
-    path = ROOT / 'ae/work/.results.lock'
+    path = coordination_root(ROOT) / '.results.lock'
     info = path.stat()
     wanted = (os.major(info.st_dev), os.minor(info.st_dev), info.st_ino)
     parents = ancestor_pids()
@@ -192,6 +195,25 @@ def proc_start(base):
     return int((base / 'stat').read_text().rsplit(')', 1)[1].split()[19])
 
 
+def read_observed_numa_maps(path):
+    """Measure existing reads only, without extra target-memory observations."""
+    metrics = getattr(_OBSERVER_METRICS, 'current', None)
+    if metrics is None:
+        return path.read_text()
+    wall, cpu = time.monotonic_ns(), time.thread_time_ns()
+    text, succeeded = '', False
+    try:
+        text = path.read_text()
+        succeeded = True
+        return text
+    finally:
+        metrics['numa_maps_reads'] += 1
+        metrics['numa_maps_read_failures'] += int(not succeeded)
+        metrics['numa_maps_read_wall_ns'] += time.monotonic_ns() - wall
+        metrics['numa_maps_read_thread_cpu_ns'] += time.thread_time_ns() - cpu
+        metrics['numa_maps_characters'] += len(text)
+
+
 def observed_process(pid, validate):
     base = PROC / str(pid)
     row = {'pid': pid}
@@ -214,7 +236,7 @@ def observed_process(pid, validate):
             raise RuntimeError('E2B VM PID was reused before numa_maps')
     path = base / 'numa_maps'
     try:
-        text = path.read_text()
+        text = read_observed_numa_maps(path)
     except OSError as error:
         if error.errno != errno.ESRCH:
             raise
@@ -588,9 +610,23 @@ def observer_placement(node, cpus, admission):
     return ThreadPlacement(admit(ROOT, node, cpus, admission))
 
 
+def validate_observer_interval(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not .025 <= value <= 1:
+        raise ValueError('e2b.observer_interval_s must be finite and between 0.025 and 1 seconds')
+    return float(value)
+
+
 class VMProof:
-    def __init__(self, node, cpus, *, observer=None):
+    def __init__(self, node, cpus, *, observer=None, interval_s=.025):
         self.node, self.cpus = node, cpus
+        self.interval_s = validate_observer_interval(interval_s)
+        self.metrics = dict(samples_started=0, samples_completed=0, samples_failed=0,
+            sample_wall_ns=0, sample_thread_cpu_ns=0, sample_max_wall_ns=0,
+            numa_maps_reads=0, numa_maps_read_failures=0, numa_maps_read_wall_ns=0,
+            numa_maps_read_thread_cpu_ns=0, numa_maps_characters=0,
+            observer_wall_ns=0, observer_thread_cpu_ns=0)
+        self.sample_buckets_ms = (1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000)
+        self.sample_histogram = [0] * (len(self.sample_buckets_ms) + 1)
         self.stop = threading.Event()
         self.ready = threading.Event()
         self.observer = observer
@@ -858,6 +894,9 @@ class VMProof:
 
     def watch(self):
         phase = 'setup'
+        wall, cpu = time.monotonic_ns(), time.thread_time_ns()
+        previous_metrics = getattr(_OBSERVER_METRICS, 'current', None)
+        _OBSERVER_METRICS.current = self.metrics
         try:
             if self.observer is None:
                 raise RuntimeError('E2B observer placement admission is missing')
@@ -867,10 +906,24 @@ class VMProof:
                 phase = 'observer-before-sample'
                 self.observer.check()
                 phase = 'vm-sample'
-                self.sample()
+                sample_wall, sample_cpu = time.monotonic_ns(), time.thread_time_ns()
+                self.metrics['samples_started'] += 1
+                completed = False
+                try:
+                    self.sample()
+                    completed = True
+                finally:
+                    elapsed = time.monotonic_ns() - sample_wall
+                    self.metrics['sample_wall_ns'] += elapsed
+                    self.metrics['sample_thread_cpu_ns'] += time.thread_time_ns() - sample_cpu
+                    self.metrics['sample_max_wall_ns'] = max(self.metrics['sample_max_wall_ns'], elapsed)
+                    self.metrics['samples_completed' if completed else 'samples_failed'] += 1
+                    bucket = next((i for i, edge in enumerate(self.sample_buckets_ms)
+                                   if elapsed <= edge * 1000000), len(self.sample_buckets_ms))
+                    self.sample_histogram[bucket] += 1
                 phase = 'observer-after-sample'
                 self.observer.check()
-                self.stop.wait(.025)
+                self.stop.wait(self.interval_s)
         except BaseException as error:
             self.errors.append(type(error).__name__ + ': ' + str(error))
             if self.observer is not None:
@@ -880,6 +933,9 @@ class VMProof:
                     'frames': [{'file': f.filename, 'line': f.lineno, 'function': f.name}
                                for f in traceback.extract_tb(error.__traceback__)]}
         finally:
+            self.metrics['observer_wall_ns'] += time.monotonic_ns() - wall
+            self.metrics['observer_thread_cpu_ns'] += time.thread_time_ns() - cpu
+            _OBSERVER_METRICS.current = previous_metrics
             self.ready.set()
 
     def stop_worker(self):
@@ -899,6 +955,10 @@ class VMProof:
         return {'samples': list(self.rows.values()), 'errors': self.errors,
                 'discarded_cgroups': self.discarded_cgroups, 'discarded_processes': self.discarded_processes,
                 'observer': self.observer.receipt if self.observer is not None else None,
+                'observer_sampling': {'interval_s': self.interval_s, 'metrics': dict(self.metrics),
+                    'sample_duration_histogram': {'unit': 'ms', 'upper_bounds': list(self.sample_buckets_ms) + [None],
+                                                  'counts': list(self.sample_histogram)},
+                    'scope': 'Interval is a delay after each complete scan; every scan retains all thread-policy checks. Read timers cover existing numa_maps reads only; observer CPU includes parsing and admission checks.'},
                 'scope': 'Observed SDK VM cgroups and all observed process threads; constraints also apply between samples'}
 
     def finish(self, path):
@@ -999,6 +1059,7 @@ def wait_restored(config, before, *, readiness, timeout=90):
 
 @contextmanager
 def service_placement(config, out, *, fanout_path, working_storage=False, source_sha256=None):
+    interval_s = validate_observer_interval(config.get('e2b', {}).get('observer_interval_s', .025))
     measurement = config.get('measurement', {})
     node, cpus = measurement.get('numa_node'), measurement.get('cpus')
     admission = require_admission(config, node, cpus)
@@ -1035,7 +1096,7 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
             saved_controls[path] = (path.read_bytes(), path.stat().st_mode & 0o777) if path.exists() else None
     changed, active, measurement_started, original_error = False, None, False, None
     owned_units = {name: row['process'] for name, row in before['units'].items()}
-    proof = VMProof(node, cpus, observer=observer)
+    proof = VMProof(node, cpus, observer=observer, interval_s=interval_s)
     save(GUARD, {'reason': 'E2B placement transaction in progress', 'evidence': str(out)})
     if diagnostic is not None:
         try:
@@ -1098,6 +1159,7 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
         proof.start()
         measurement_started = True
         yield {'manifest': str(out / 'actual.json'), 'node': node, 'cpus': cpus,
+               'observer_interval_s': interval_s,
                'scope': 'Registered E2B daemon cgroups, metadata containers, and /e2b VM root; not host-wide placement',
                **({'working_storage_manifest':str(storage.out/'verified.json')} if storage is not None else {})}
         proof.finish(out / 'vm-proof.json')

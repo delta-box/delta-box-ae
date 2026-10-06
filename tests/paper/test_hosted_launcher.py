@@ -52,6 +52,7 @@ class HostedTests(unittest.TestCase):
                            environment_file=self.environment, output_root=self.output,
                            allowed_user=REVIEWER.pw_name, lock_file=self.root / 'ae.lock')
         self.policy_path = self.root / 'launcher.json'
+        self.registry_path = self.root / 'launchers.json'
         self.policy_path.write_text(json.dumps({key: str(value) for key, value in self.policy.items()}))
         self.untrusted = set()
         self.owners = {}
@@ -62,6 +63,241 @@ class HostedTests(unittest.TestCase):
         self.priority = SimpleNamespace(
             acquire_reviewer=Mock(side_effect=lambda: priority_module.acquire_reviewer(self.priority_lock)),
             reviewer_waiting=Mock(side_effect=lambda: priority_module.reviewer_waiting(self.priority_lock)))
+
+    def alternate_registration(self):
+        runtime = self.root / 'independent-runtime'
+        (runtime / 'ae/scripts').mkdir(parents=True)
+        (runtime / 'ae/scripts/run_review.py').write_text('# independent runtime\n')
+        python = self.root / 'independent-venv/bin/python'
+        python.parent.mkdir(parents=True)
+        python.write_text('# independent python\n')
+        (python.parent.parent / 'pyvenv.cfg').write_text('include-system-site-packages = false\n')
+        output = self.root / 'independent-results'
+        output.mkdir()
+        config = self.root / 'independent-review.json'
+        config.write_text('{}')
+        policy = dict(self.policy, runtime_root=runtime, python=python, config=config, output_root=output)
+        path = self.root / 'independent-launcher.json'
+        path.write_text(json.dumps({key: str(value) for key, value in policy.items()}))
+        self.registry_path.write_text(json.dumps({str(self.runtime): str(self.policy_path), str(runtime): str(path)}))
+        return runtime, policy, path
+
+    def test_registered_checkouts_select_their_own_python_config_and_results(self):
+        other, alternate, _ = self.alternate_registration()
+        for runtime, policy in ((self.runtime, self.policy), (other, alternate)):
+            with self.subTest(runtime=runtime), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(runtime), '--output', 'selected/registered']),
+                                 0, stderr.getvalue())
+                binary, command, _ = execute.call_args.args
+                self.assertEqual(binary, str(policy['python']))
+                self.assertEqual(command[:5], [str(policy['python']), '-I', str(runtime / 'ae/scripts/run_review.py'),
+                                              '--config', str(policy['config'])])
+                self.assertEqual(command[-2:], ['--output', str(policy['output_root'] / 'selected/registered')])
+
+    def test_cpu_subservice_selects_same_registration_from_generated_checkout(self):
+        runtime, policy, _ = self.alternate_registration()
+        flags = ['--checkout', str(runtime), '--experiment', 'figure-08-e2b', '--output', 'selected/registered']
+        unit = 'deltabox-ae-cpu-' + 'a' * 32 + '.service'
+        with self.launcher() as (execute, _, stderr), patch.object(hosted, 'run_cpu_service', return_value=0) as service:
+            self.assertEqual(hosted.main(flags), 0, stderr.getvalue())
+            execute.assert_not_called()
+            admitted_policy, caller, command, _ = service.call_args.args
+            generated = hosted.cpu_service_command(admitted_policy, caller, command, unit)
+            service_flags = generated[generated.index('--checkout'):]
+            self.assertEqual(service_flags[1], str(runtime))
+            self.assertEqual(admitted_policy['python'], policy['python'])
+        with self.launcher() as (execute, _, stderr), patch.object(hosted, 'cpu_service_identity', return_value={'unit': unit}):
+            self.assertEqual(hosted.main(service_flags, service_context=(REVIEWER.pw_uid, unit)), 0, stderr.getvalue())
+            _, command, _ = execute.call_args.args
+            self.assertIn(str(policy['python']), command)
+            self.assertEqual(command[command.index('--config') + 1], str(policy['config']))
+
+    def test_missing_or_empty_registry_keeps_default_admission_and_unknown_checkout_rejection(self):
+        unknown = self.root / 'unknown'
+        unknown.mkdir()
+        for registered in (False, True):
+            if registered:
+                self.registry_path.write_text('{}')
+            with self.subTest(registry=registered), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0, stderr.getvalue())
+                execute.reset_mock()
+                self.assertEqual(hosted.main(['--checkout', str(unknown), '--list']), 2)
+                execute.assert_not_called()
+                self.assertIn('differs from the fixed hosted runtime', stderr.getvalue())
+
+    def test_registry_does_not_select_a_symlink_alias_or_prefix(self):
+        runtime, _, _ = self.alternate_registration()
+        alias = self.root / 'runtime-alias'
+        alias.symlink_to(runtime, target_is_directory=True)
+        nested = runtime / 'nested'
+        nested.mkdir()
+        for checkout in (alias, nested):
+            with self.subTest(checkout=checkout), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(checkout), '--list']), 2)
+                execute.assert_not_called()
+                self.assertIn('differs from the fixed hosted runtime', stderr.getvalue())
+
+    def test_registered_policy_cannot_describe_another_checkout(self):
+        runtime, _, _ = self.alternate_registration()
+        self.registry_path.write_text(json.dumps({str(runtime): str(self.policy_path)}))
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(runtime), '--list']), 2)
+            execute.assert_not_called()
+            self.assertIn('differs from its exact checkout', stderr.getvalue())
+
+    def test_registry_and_selected_policy_require_root_ownership_and_no_links(self):
+        runtime, _, policy_path = self.alternate_registration()
+        for path in (self.registry_path, policy_path):
+            original = path.read_bytes()
+            self.untrusted.add(path)
+            with self.subTest(path=path, failure='owner'), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(runtime), '--list']), 2)
+                execute.assert_not_called()
+                self.assertIn('owned by root', stderr.getvalue())
+            self.untrusted.clear()
+            path.chmod(0o666)
+            with self.subTest(path=path, failure='mode'), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(runtime), '--list']), 2)
+                execute.assert_not_called()
+                self.assertIn('writable', stderr.getvalue())
+            path.chmod(0o644)
+            saved = path.with_suffix('.saved')
+            path.rename(saved)
+            for target in (saved, self.root / 'missing-target'):
+                path.symlink_to(target)
+                with self.subTest(path=path, failure='link', target=target), self.launcher() as (execute, _, stderr):
+                    self.assertEqual(hosted.main(['--checkout', str(runtime), '--list']), 2)
+                    execute.assert_not_called()
+                    self.assertIn('Symbolic links', stderr.getvalue())
+                path.unlink()
+            saved.rename(path)
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_registry_rejects_malformed_or_noncanonical_registration_paths(self):
+        invalid = ([str(self.runtime)],
+                   {str(self.runtime): {'policy': str(self.policy_path)}},
+                   {'runtime': str(self.policy_path)},
+                   {str(self.runtime): 'launcher.json'},
+                   {str(self.runtime): str(self.root) + '/../launcher.json'},
+                   {str(self.runtime): str(self.root) + '/./launcher.json'},
+                   {str(self.runtime): str(self.root) + '//launcher.json'},
+                   {str(self.runtime): str(self.policy_path) + '\x00'})
+        for value in invalid:
+            self.registry_path.write_text(json.dumps(value))
+            with self.subTest(value=value), self.launcher() as (execute, _, stderr):
+                self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 2)
+                execute.assert_not_called()
+        self.registry_path.write_text('{')
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 2)
+            execute.assert_not_called()
+
+    def test_caller_cannot_supply_policy_or_registry_by_environment_or_flag(self):
+        runtime, _, path = self.alternate_registration()
+        poison = {'AE_HOSTED_POLICY': str(path), 'AE_HOSTED_POLICY_PATH': str(path),
+                  'AE_HOSTED_POLICY_REGISTRY': str(self.root / 'attacker.json'),
+                  'POLICY_PATH': str(path), 'POLICY_REGISTRY_PATH': str(self.root / 'attacker.json')}
+        with self.launcher(poison) as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--list']), 0, stderr.getvalue())
+            binary, _, environment = execute.call_args.args
+            self.assertEqual(binary, str(self.python))
+            self.assertFalse(set(poison) & set(environment))
+        for flag in ('--policy', '--policy-path', '--policy-registry', '--launcher-policy'):
+            with self.subTest(flag=flag), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    hosted.parse_arguments(['--checkout', str(runtime), flag, str(path)])
+
+    def test_registered_policy_keeps_its_own_allowed_user_check(self):
+        runtime, policy, path = self.alternate_registration()
+        policy['allowed_user'] = OTHER_USER.pw_name
+        path.write_text(json.dumps({key: str(value) for key, value in policy.items()}))
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(runtime), '--list']), 2)
+            execute.assert_not_called()
+            self.assertIn('not authorized', stderr.getvalue())
+
+    def test_shared_coordination_is_selected_by_policy_not_caller(self):
+        shared = self.root / 'canonical-work'
+        shared.mkdir()
+        self.policy['coordination_root'] = shared
+        self.policy_path.write_text(json.dumps({k: str(v) for k, v in self.policy.items()}))
+        with self.launcher({'AE_HOSTED_COORDINATION_ROOT': '/attacker'}) as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 0, stderr.getvalue())
+        self.assertEqual(execute.call_args.args[2]['AE_HOSTED_COORDINATION_ROOT'], str(shared))
+        self.assertEqual(hosted.policy_coordination_root(self.policy), shared)
+
+    def test_no_policy_does_not_inherit_caller_coordination_override(self):
+        with self.launcher({'AE_HOSTED_COORDINATION_ROOT': '/attacker'}) as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 0, stderr.getvalue())
+        self.assertNotIn('AE_HOSTED_COORDINATION_ROOT', execute.call_args.args[2])
+        self.assertEqual(hosted.policy_coordination_root(self.policy), self.runtime / 'ae/work')
+
+    def test_coordination_path_refuses_untrusted_or_linked_directory(self):
+        shared = self.root / 'canonical-work'
+        shared.mkdir()
+        self.policy['coordination_root'] = shared
+        self.policy_path.write_text(json.dumps({k: str(v) for k, v in self.policy.items()}))
+        self.untrusted.add(shared)
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 2)
+            execute.assert_not_called()
+            self.assertIn('owned by root', stderr.getvalue())
+        self.untrusted.clear()
+        shared.rmdir()
+        shared.symlink_to(self.runtime, target_is_directory=True)
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 2)
+            execute.assert_not_called()
+            self.assertIn('Symbolic links', stderr.getvalue())
+
+    def test_coordination_policy_rejects_relative_path_and_caller_flag(self):
+        self.policy['coordination_root'] = 'relative/work'
+        self.policy_path.write_text(json.dumps({k: str(v) for k, v in self.policy.items()}))
+        with self.launcher() as (execute, _, stderr):
+            self.assertEqual(hosted.main(['--checkout', str(self.runtime), '--test']), 2)
+            execute.assert_not_called()
+            self.assertIn('absolute path', stderr.getvalue())
+        with self.assertRaises(SystemExit):
+            hosted.parse_arguments(['--checkout', str(self.runtime), '--coordination-root', '/attacker'])
+
+    def test_shared_recovery_guard_is_created_once_and_blocks_background_start(self):
+        shared = self.root / 'canonical-work'
+        shared.mkdir()
+        self.policy['coordination_root'] = shared
+        with self.owned_fixture():
+            hosted.retain_backend_recovery(self.policy, ['fixed-command'], RuntimeError('cleanup failed'))
+            guard = shared / 'CPU_SERVICE_RECOVERY_REQUIRED.json'
+            first, inode = guard.read_bytes(), guard.stat().st_ino
+            hosted.retain_backend_recovery(self.policy, ['later-command'], RuntimeError('second failure'))
+            self.assertEqual(guard.read_bytes(), first)
+            self.assertEqual(guard.stat().st_ino, inode)
+            with self.assertRaisesRegex(RuntimeError, 'recovery is required'):
+                hosted.begin_background_transaction(self.policy, 'owned-unit')
+        self.assertFalse((self.runtime / 'ae/work/CPU_SERVICE_RECOVERY_REQUIRED.json').exists())
+
+    def test_serial_e2b_is_supervised_without_changing_requested_measurement_cpus(self):
+        flags = ['--checkout', str(self.runtime), '--experiment', 'figure-08-e2b',
+                 '--numa-node', '1', '--cpus', '28-31', '--output', 'selected/e2b']
+        with self.launcher() as (execute, _, stderr), patch.object(hosted, 'run_cpu_service', return_value=0) as service:
+            self.assertEqual(hosted.main(flags), 0, stderr.getvalue())
+            execute.assert_not_called()
+            command = service.call_args.args[2]
+            self.assertEqual(command[command.index('--cpus')+1], '28-31')
+            self.assertEqual(command[command.index('--numa-node')+1], '1')
+        unit = 'deltabox-ae-cpu-' + 'a' * 32 + '.service'
+        with self.launcher() as (execute, _, stderr), patch.object(hosted, 'cpu_service_identity', return_value={'unit': unit}):
+            self.assertEqual(hosted.main(flags, service_context=(REVIEWER.pw_uid, unit)), 0, stderr.getvalue())
+            binary, command, environment = execute.call_args.args
+            self.assertEqual(binary, '/usr/bin/numactl')
+            self.assertEqual(command[:3], ['/usr/bin/numactl', '--all', '--physcpubind=24-71'])
+            self.assertEqual(command[command.index('--cpus')+1], '28-31')
+
+    def test_owned_cpu_selection_covers_e2b_groups_but_not_gpu_or_quick(self):
+        for flags in [[], ['--experiment', 'figure-08-e2b'], ['--group', 'cpu'],
+                      ['--group', 'figure-08'], ['--group', 'figure-08-cpu']]:
+            self.assertTrue(hosted.managed_cpu_execution(hosted.parse_arguments(['--checkout', str(self.runtime), *flags])))
+        for flags in [['--test'], ['--list'], ['--group', 'gpu'], ['--experiment', 'correctness']]:
+            self.assertFalse(hosted.managed_cpu_execution(hosted.parse_arguments(['--checkout', str(self.runtime), *flags])))
 
     def test_default_results_use_stable_root_and_separate_checks(self):
         with self.owned_fixture():
@@ -347,8 +583,16 @@ class HostedTests(unittest.TestCase):
     @contextlib.contextmanager
     def launcher(self, extra_env=None):
         env = {'SUDO_UID': str(REVIEWER.pw_uid), **(extra_env or {})}
+        def admitted_service(policy, caller, command, environment, **kwargs):
+            # Generic policy tests observe the admitted final command; service
+            # lifecycle and routing tests replace this stub explicitly.
+            hosted.audit_launch(policy, caller, command, trust=kwargs.get('trust'))
+            hosted.os.execve(str(policy['python']), command, environment)
+            return 0
         with self.owned_fixture(),\
+             patch.object(hosted, 'run_cpu_service', side_effect=admitted_service),\
              patch.object(hosted, 'POLICY_PATH', self.policy_path),\
+             patch.object(hosted, 'POLICY_REGISTRY_PATH', self.registry_path),\
              patch.object(hosted.os, 'geteuid', return_value=0),\
              patch.object(hosted.os, 'getuid', return_value=0),\
              patch.object(hosted.pwd, 'getpwnam', side_effect=lambda name: next(user for user in self.users if user.pw_name == name)),\
