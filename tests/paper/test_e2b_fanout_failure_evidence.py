@@ -1,4 +1,5 @@
 """Run the official driver against a fake SDK without changing its batch policy."""
+import ast
 import contextlib
 import importlib.util
 import io
@@ -47,7 +48,10 @@ class FakeSDK:
                     raise TimeoutError("HTTP request timed out before command result")
                 if self.failure == "content":
                     return types.SimpleNamespace(exit_code=1, stdout="", stderr="AssertionError: token mismatch")
-            return types.SimpleNamespace(exit_code=0, stdout="OK", stderr="")
+            token = ast.literal_eval(next(line.split("=", 1)[1].strip()
+                                          for line in cmd.splitlines() if line.strip().startswith("expected_token =")))
+            return types.SimpleNamespace(exit_code=0,
+                stdout=f"OK token={token} bytes=67108864 checksum=2041721 requests=2 pid=14\n", stderr="")
 
         def snapshot(**options):
             snapshot_id = f"snapshot-{self.sources}"

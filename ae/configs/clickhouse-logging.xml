@@ -1,0 +1,14 @@
+<clickhouse>
+    <max_thread_pool_size>256</max_thread_pool_size>
+    <logger>
+        <level>information</level>
+    </logger>
+    <text_log>
+        <level>information</level>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+    </text_log>
+    <metric_log>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+    </metric_log>
+    <trace_log remove="1"/>
+</clickhouse>

@@ -6,6 +6,7 @@ import base64
 import concurrent.futures as cf
 import json
 import os
+import re
 import signal
 import statistics
 import subprocess
@@ -172,7 +173,7 @@ def diagnostic_verify_shell(shell: str, token: str) -> str:
     code, suffix = code.rsplit('\nPY\n', 1)
     code = code.replace("s = socket.create_connection(", "_trace('connect_start', 'verify')\ns = socket.create_connection(", 1)
     code = code.replace("s.sendall(", "_endpoints = _trace_endpoints(s)\n_trace('connect_end', 'verify', _endpoints)\n_trace('send_start', 'verify', _endpoints)\ns.sendall(", 1)
-    code = code.replace('out = s.recv(4096).decode()', "_trace('send_end', 'verify', _endpoints)\n_trace('recv_start', 'verify', _endpoints)\nout = s.recv(4096).decode()\n_trace('recv_end', 'verify', _endpoints, bytes=len(out))", 1)
+    code = code.replace('out = read_response(s)', "_trace('send_end', 'verify', _endpoints)\n_trace('recv_start', 'verify', _endpoints)\nout = read_response(s)\n_trace('recv_end', 'verify', _endpoints, bytes=len(out))", 1)
     setup = "import os\n_trace_path = '/tmp/official_fork_client_trace.jsonl'\n_trace_token = " + repr(token) + '\n' + _TEMPORAL_TRACE_HELPER
     wrapped = '\ntry:\n' + '\n'.join('    ' + line for line in code.splitlines())
     wrapped += "\n    _trace('success', 'verify', locals().get('_endpoints'))\nexcept BaseException as error:\n    _trace('exception', 'verify', locals().get('_endpoints'), error=type(error).__name__)\n    raise\nfinally:\n    _trace('exit', 'verify', locals().get('_endpoints'))\n"
@@ -317,26 +318,79 @@ PY
 """
 
 
-def verify_mem_server_shell(*, token: str) -> str:
+# The server fills the first byte of each 4096-byte page with page_index % 251.
+# This is a page-touch checksum, not a checksum of every byte in the allocation.
+MEMORY_RESPONSE_PATTERN = r"OK token=(\S+) bytes=([0-9]+) checksum=([0-9]+) requests=([0-9]+) pid=([0-9]+)"
+
+
+def expected_memory_state(mem_mib: int) -> dict[str, int]:
+    if type(mem_mib) is not int or mem_mib <= 0:
+        raise ValueError("mem_mib must be a positive integer")
+    byte_count = mem_mib * 1024 * 1024
+    cycles, remainder = divmod(byte_count // 4096, 251)
+    checksum = (cycles * (250 * 251 // 2) + remainder * (remainder - 1) // 2) & 0xFFFFFFFF
+    return {"bytes": byte_count, "checksum": checksum}
+
+
+def verify_mem_server_shell(*, token: str, mem_mib: int) -> str:
+    expected = expected_memory_state(mem_mib)
     shell = f"""
 set -euo pipefail
 python3 - <<'PY'
-import os, socket
+import json, re, socket
+expected = {expected!r}
+expected_token = {token!r}
 marker = open('/tmp/official_fork_state.txt').read()
-assert 'official-fork-state' in marker, marker
-assert 'token={token}' in marker, marker
+marker_match = re.fullmatch(r'official-fork-state token=(\\S+) bytes=([0-9]+) pid=([0-9]+)\\n', marker)
+if marker_match is None:
+    raise ValueError('malformed inherited-memory marker: ' + repr(marker))
+if marker_match[1] != expected_token or int(marker_match[2]) != expected['bytes']:
+    raise ValueError('inherited-memory marker mismatch: ' + repr(marker))
+def read_response(connection):
+    response = b''
+    # TCP may split a single response over several reads. The exec timeout
+    # remains the sole I/O deadline; reject EOF or overlong data before newline.
+    while b'\\n' not in response:
+        if len(response) >= 4096:
+            raise ValueError('overlong inherited-memory response')
+        part = connection.recv(4096 - len(response))
+        if not part:
+            raise ValueError('truncated inherited-memory response: ' + repr(response))
+        response += part
+    return response.decode('ascii')
 # The caller's --exec-timeout bounds this guest command, including socket I/O.
 # Response latency is measured, not a separate correctness deadline.
 s = socket.create_connection(('127.0.0.1', {MEM_SERVER_PORT}), timeout=None)
 s.sendall(b'touch\\n')
-out = s.recv(4096).decode()
+out = read_response(s)
 s.close()
-assert 'OK token={token}' in out, out
-assert 'checksum=' in out and 'bytes=' in out, out
+match = re.fullmatch({MEMORY_RESPONSE_PATTERN!r} + r'\\n', out)
+if match is None:
+    raise ValueError('malformed inherited-memory response: ' + repr(out))
+observed = {{'bytes': int(match[2]), 'checksum': int(match[3])}}
+if match[1] != expected_token or observed != expected or int(match[4]) < 1 or int(match[5]) < 1:
+    raise ValueError('inherited-memory mismatch: ' + json.dumps(
+        {{'expected_token': expected_token, 'observed_token': match[1],
+          'expected': expected, 'observed': observed, 'response': out}}))
 print(out.strip())
 PY
 """
     return diagnostic_verify_shell(shell, token) if temporal_trace_enabled() else shell
+
+
+def verify_child_memory(run_shell, sb: Any, *, token: str, mem_mib: int, timeout: float) -> dict[str, Any]:
+    """Retain numeric evidence for each child, after the in-guest comparison."""
+    output = run_shell(sb, verify_mem_server_shell(token=token, mem_mib=mem_mib), timeout=timeout)
+    match = re.fullmatch(MEMORY_RESPONSE_PATTERN + r"\n?", output)
+    if match is None:
+        raise ValueError("missing or malformed child verification output: " + repr(output))
+    observed = {"bytes": int(match[2]), "checksum": int(match[3])}
+    expected = expected_memory_state(mem_mib)
+    evidence = {"expected": expected, "observed": observed, "token": match[1],
+                "requests": int(match[4]), "pid": int(match[5])}
+    if match[1] != token or observed != expected or evidence["requests"] < 1 or evidence["pid"] < 1:
+        raise ValueError("inherited-memory mismatch: " + json.dumps(evidence))
+    return evidence
 
 
 def cube_write_state(sb: Any, *, mem_mib: int, token: str, timeout: float) -> str:
@@ -664,10 +718,9 @@ def bench_cube(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any
 
             def verify_one(idx_sb: tuple[int, Any]) -> dict[str, Any]:
                 idx, sb = idx_sb
-                _, step = run_timed(
-                    lambda: cube_run_shell(
-                        sb,
-                        verify_mem_server_shell(token=run_id),
+                evidence, step = run_timed(
+                    lambda: verify_child_memory(
+                        cube_run_shell, sb, token=run_id, mem_mib=args.mem_mib,
                         timeout=args.exec_timeout,
                     )
                 )
@@ -675,6 +728,7 @@ def bench_cube(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any
                     "index": idx,
                     "sandbox_id": getattr(sb, "sandbox_id", None),
                     "verify": asdict(step),
+                    "memory_validation": evidence,
                 }
 
             with cf.ThreadPoolExecutor(max_workers=min(n, args.max_workers)) as pool:
@@ -830,8 +884,10 @@ def bench_e2b(args: argparse.Namespace, forks: list[int]) -> list[dict[str, Any]
 
                 def verify_one(idx_sb):
                     idx, sb = idx_sb
-                    _, step = run_timed(lambda: e2b_run_shell(sb, verify_mem_server_shell(token=run_id), timeout=args.exec_timeout))
-                    return {"index": idx, "sandbox_id": getattr(sb, "sandbox_id", None), "verify": asdict(step)}
+                    evidence, step = run_timed(lambda: verify_child_memory(
+                        e2b_run_shell, sb, token=run_id, mem_mib=args.mem_mib, timeout=args.exec_timeout))
+                    return {"index": idx, "sandbox_id": getattr(sb, "sandbox_id", None),
+                            "verify": asdict(step), "memory_validation": evidence}
 
                 with cf.ThreadPoolExecutor(max_workers=min(len(indices), args.max_workers)) as pool:
                     verified = list(pool.map(verify_one, batch_children))

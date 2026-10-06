@@ -104,7 +104,7 @@ class E2BCleanupTests(unittest.TestCase):
                                      e2b_api_key='', e2b_template='fixture', timeout=10, exec_timeout=2,
                                      mem_mib=1, max_workers=16, e2b_batch_size=batch_size)
         with patch.dict(sys.modules, {'e2b': types.SimpleNamespace(Sandbox=Sandbox)}), \
-             patch.object(bench, 'e2b_write_state'), patch.object(bench, 'e2b_run_shell'), \
+             patch.object(bench, 'e2b_write_state'), patch.object(bench, 'verify_child_memory', return_value={}), \
              patch.object(bench, 'now_ms', side_effect=lambda: clock[0]), \
              contextlib.redirect_stdout(io.StringIO()):
             rows = bench.bench_e2b(args, [forks])
