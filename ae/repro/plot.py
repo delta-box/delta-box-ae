@@ -63,6 +63,18 @@ def table2_columns(metrics):
     return columns
 
 
+
+def archived_table2_source_label(result):
+    """A visible DeltaBox-only identity label; fresh plots do not call this."""
+    identity = result.get("selection", {}).get("deltabox", {}).get("paper_source_identity")
+    if not identity or identity.get("paper_source_match") is None:
+        return "DeltaBox: released historical batch; original-paper source identity unverified"
+    counts = f"{identity['matched_runs']}/{identity['expected_runs']}"
+    if identity["paper_source_match"]:
+        return f"DeltaBox: original-paper raw records verified ({counts})"
+    return f"DeltaBox: released historical batch; original-paper source matches {counts}"
+
+
 def _archived_table2(plt, result):
     metrics = result["metrics"]
     systems = table2_columns(metrics)
@@ -77,7 +89,8 @@ def _archived_table2(plt, result):
             rs = lookup.get((backend, cohort, group, "restore_ms"), {})
             cells.append(fmt(ck.get("value"))+" / "+fmt(rs.get("value")))
         rows.append(cells)
-    return table(plt, rows, columns, "Checkpoint and restore latency")
+    title = "Checkpoint and restore latency\n" + archived_table2_source_label(result)
+    return table(plt, rows, columns, title)
 
 
 def _archived_table3(plt, result):
@@ -454,6 +467,8 @@ def render(input_path, output):
                                       **({'layout': 'paper', 'populations': variant['plot_populations'],
                                           'data_mapping': mapping, 'audit_note': audit_note(variant)} if paper_layout else {}),
                                       **({"columns": table2_columns(variant["metrics"])} if key == "table-02" and not paper_layout else {}),
+                                      **({"deltabox_paper_source_identity": variant.get("selection", {}).get("deltabox", {}).get("paper_source_identity")}
+                                         if key == "table-02" and summary["source"] == "archived" else {}),
                                       sha256=hashlib.sha256(destination.read_bytes()).hexdigest()))
             plt.close(fig)
     if not artifacts:

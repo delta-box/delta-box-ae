@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "dataset_id": "table2-original-deltabox-20260603-0030",
+  "description": "Frozen identity of the original historical Table 2 DeltaBox source batch. No target latency values are stored in this lock.",
+  "recorded_runtime_git_baseline": "e200a6ce7deb107ba35a770206b6392f6ef9dac3",
+  "data_repository": "finalbench",
+  "data_archive_commit": "9fd57c6c22e90066ad82834f048feb55bbc4ab34",
+  "original_batch": "62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652",
+  "expected_counts": {
+    "runs": 12,
+    "checkpoint_events": 317,
+    "restore_events": 334
+  },
+  "timing_fields": {
+    "checkpoint": "ckpt_wall_ms",
+    "restore": "restore_critical_ms",
+    "historical_alias_to_verify": "restore_wall_ms"
+  },
+  "limitations": [
+    "Historical internal restore interval, not full external API latency.",
+    "Recorded Git HEAD is not a complete deployed-source lock.",
+    "Historical run_summary success does not establish every worker action succeeded; Django-14672 event 14 contains a test command with rc=4."
+  ],
+  "runs": [
+    {
+      "instance": "astropy__astropy-13453",
+      "run_id": "replay-deltabox-no-adapt-e85587",
+      "family": "Scientific",
+      "raw_sha256": "89b3d8437cf423138f96f5bfdbb53d0023e2796079698f2bad3a0f8f102f0561",
+      "raw_bytes": 670087,
+      "checkpoint_events": 30,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:34:30+0800",
+      "schedule_sha256": "310e6b4029ef9878a84f212b2349d11ec1ef005aa1e65684aeae7a5f0fe8a46b",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/astropy__astropy-13453.replay-deltabox-no-adapt-e85587.results.jsonl",
+      "source_git_blob": "d4386df17253cc0f84521e55a7e8ffc20d640331"
+    },
+    {
+      "instance": "astropy__astropy-14182",
+      "run_id": "replay-deltabox-no-adapt-a6ca31",
+      "family": "Scientific",
+      "raw_sha256": "6889b605569eb514018eb7bfab3e4e36ba1685b2b1a404dea14885264c69f649",
+      "raw_bytes": 285275,
+      "checkpoint_events": 25,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:34:09+0800",
+      "schedule_sha256": "bf44d5c6450a78725022b5db931e945c6ac0c94b0233ebe9cfb99183243b9636",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/astropy__astropy-14182.replay-deltabox-no-adapt-a6ca31.results.jsonl",
+      "source_git_blob": "503415c48a01aad870daa2ff7c8cdc64c677c70b"
+    },
+    {
+      "instance": "astropy__astropy-7746",
+      "run_id": "replay-deltabox-no-adapt-056dba",
+      "family": "Scientific",
+      "raw_sha256": "d1fbbdba44b35b3ab71984ed5aff41611037acace8e50987fc4d95330b73cf53",
+      "raw_bytes": 1852615,
+      "checkpoint_events": 25,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:33:54+0800",
+      "schedule_sha256": "a4504e218454c09f7805bed6fac8220b1409920d20899b6b094c2700e789ecf0",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/astropy__astropy-7746.replay-deltabox-no-adapt-056dba.results.jsonl",
+      "source_git_blob": "9d0364328144f7a438c5bbefd6f91a826b41ec29"
+    },
+    {
+      "instance": "django__django-14672",
+      "run_id": "replay-deltabox-no-adapt-c90fc6",
+      "family": "Django",
+      "raw_sha256": "eb41320116e9fda85d86b7a6fcae0b1faaceeab903c05e5df029804001c837a2",
+      "raw_bytes": 364403,
+      "checkpoint_events": 24,
+      "restore_events": 26,
+      "started_at": "2026-06-03T00:30:56+0800",
+      "schedule_sha256": "592b89fb147975a0f6e467084da7fd587a0e118b6ca71892f09283acc06d1e19",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/django__django-14672.replay-deltabox-no-adapt-c90fc6.results.jsonl",
+      "source_git_blob": "49987c420f90f55dd8ff92771fdee2166599c6c6"
+    },
+    {
+      "instance": "django__django-14997",
+      "run_id": "replay-deltabox-no-adapt-ee76c3",
+      "family": "Django",
+      "raw_sha256": "fcf49cc2fd35dca33e8c028280df84d54f6a08059fdc89579885f6a952b9aae4",
+      "raw_bytes": 218518,
+      "checkpoint_events": 29,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:30:56+0800",
+      "schedule_sha256": "54b22556a8d827be11b23d389540a951bfeb5a255e5e5ad9d972df98a1265a71",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/django__django-14997.replay-deltabox-no-adapt-ee76c3.results.jsonl",
+      "source_git_blob": "46b1684747f2db6178768ef6f41eccd2f83609d8"
+    },
+    {
+      "instance": "matplotlib__matplotlib-23964",
+      "run_id": "replay-deltabox-no-adapt-e19899",
+      "family": "Scientific",
+      "raw_sha256": "d32d35208163fba69d1e4bed567c269d98c4652a4670d933da5ce1fcca7750b2",
+      "raw_bytes": 1055140,
+      "checkpoint_events": 24,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:32:45+0800",
+      "schedule_sha256": "60917dfdedf8ec4de5a62cb853fdd5adfa2da35125708d1a5928d9385a6d9c77",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/matplotlib__matplotlib-23964.replay-deltabox-no-adapt-e19899.results.jsonl",
+      "source_git_blob": "609f28cc309b5e9a2650bf33beba7219cc129f94"
+    },
+    {
+      "instance": "matplotlib__matplotlib-26020",
+      "run_id": "replay-deltabox-no-adapt-0a51d2",
+      "family": "Scientific",
+      "raw_sha256": "3d37c18f50d0abd104b7555d0682574d6826dc4a33be98bb15835f50686f7a98",
+      "raw_bytes": 459527,
+      "checkpoint_events": 26,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:33:18+0800",
+      "schedule_sha256": "b1e1e5a74ae4bb4730d87708e221f6db61d14cebddada4e967c7ec07b88bd8e9",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/matplotlib__matplotlib-26020.replay-deltabox-no-adapt-0a51d2.results.jsonl",
+      "source_git_blob": "3a5fdb3ea38758bbbf0953ae0502804706d0eb1c"
+    },
+    {
+      "instance": "psf__requests-863",
+      "run_id": "replay-deltabox-no-adapt-d99409",
+      "family": "Tools/Small",
+      "raw_sha256": "95ebec211159373d205637a47c0213d8270c3e76d101b7f5ff33a67dca7919c6",
+      "raw_bytes": 761437,
+      "checkpoint_events": 29,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:35:15+0800",
+      "schedule_sha256": "7919f626fb58cde24167e5a1d821eb7126f6576685d40549b5f0bb7245586ffb",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/psf__requests-863.replay-deltabox-no-adapt-d99409.results.jsonl",
+      "source_git_blob": "06df7b52ba72b45698330a76e28a25f614cede0e"
+    },
+    {
+      "instance": "pylint-dev__pylint-7080",
+      "run_id": "replay-deltabox-no-adapt-78f443",
+      "family": "Tools/Small",
+      "raw_sha256": "d24845cf808e19cc1d6c8f71538f05bfb253e3397e3de3e883e6cfb313cd34bc",
+      "raw_bytes": 264099,
+      "checkpoint_events": 27,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:42:22+0800",
+      "schedule_sha256": "ce28bef090df6fe6ca207e1a50e8e5389566248510102550de66714ba74d6744",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/pylint-dev__pylint-7080.replay-deltabox-no-adapt-78f443.results.jsonl",
+      "source_git_blob": "81bf397ea21384ae2888b639bef5233321dd262d"
+    },
+    {
+      "instance": "pylint-dev__pylint-7228",
+      "run_id": "replay-deltabox-no-adapt-835b46",
+      "family": "Tools/Small",
+      "raw_sha256": "ef77431c6003094c160f983f6bef9736b9f5fc5ff55ad8bb3deafee46a177bea",
+      "raw_bytes": 175668,
+      "checkpoint_events": 24,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:34:45+0800",
+      "schedule_sha256": "21d8bb1860e88535c78229805800daed334b5da37286968d8ad41781efa422e7",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/pylint-dev__pylint-7228.replay-deltabox-no-adapt-835b46.results.jsonl",
+      "source_git_blob": "1037be02872d20b6cc3c35911afdcf4f2ddddf3a"
+    },
+    {
+      "instance": "sympy__sympy-17630",
+      "run_id": "replay-deltabox-no-adapt-3eb6b7",
+      "family": "SymPy",
+      "raw_sha256": "54b78609166a9b90a616043cd794dae39f7a83f68a0a6cb5c32273e93a8f961f",
+      "raw_bytes": 504555,
+      "checkpoint_events": 26,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:31:41+0800",
+      "schedule_sha256": "48c728886abd8d70c470ff6d99ef2a84d41d15cebe25117a25d4c5c690616a56",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/sympy__sympy-17630.replay-deltabox-no-adapt-3eb6b7.results.jsonl",
+      "source_git_blob": "2fc024f136e93903d3ded0cbe119b3b678e4db2e"
+    },
+    {
+      "instance": "sympy__sympy-22840",
+      "run_id": "replay-deltabox-no-adapt-706dd0",
+      "family": "SymPy",
+      "raw_sha256": "bcee90fb0644be3f761d3d9e10ce14ed7da340748036ef43ab3d4bea640d9a0d",
+      "raw_bytes": 428064,
+      "checkpoint_events": 28,
+      "restore_events": 28,
+      "started_at": "2026-06-03T00:32:39+0800",
+      "schedule_sha256": "0936cef0fa607cebd007ab62b1a6b4055226a1148434c64f1764bed45ff3c3ac",
+      "source_git_spec": "9fd57c6c22e90066ad82834f048feb55bbc4ab34:62/legacy/deltabox_peagle_mcts30_2x_numa12_realrtt_before_rsfast_20260603_190652/results/deltabox-no-adapt/sympy__sympy-22840.replay-deltabox-no-adapt-706dd0.results.jsonl",
+      "source_git_blob": "f6b456b073b24f3abdff02de8a176efe130be313"
+    }
+  ]
+}

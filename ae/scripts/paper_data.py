@@ -2,6 +2,7 @@
 """Export, import and verify the separate, content-addressed paper data bundle."""
 import argparse
 import hashlib
+import gzip
 import io
 import json
 import os
@@ -170,6 +171,77 @@ def import_bundle(root, source, rows, objects, manifest_hash):
     verify(root, rows, objects)
 
 
+def table2_paper_source(root, install=False):
+    """Import/verify the separately locked Table 2 original batch, without replacing base objects."""
+    directory = root / 'paper/table-02'
+    index = json.loads((directory / 'paper-source-bundle.json').read_text())
+    lock = json.loads((directory / 'paper-source-lock.json').read_text())
+    runs = {(r['instance'], r['run_id']): r for r in lock['runs']}
+    rows = index['files']
+    if (index.get('format') != 1 or lock.get('schema_version') != 1
+            or index['dataset_id'] != lock['dataset_id']
+            or len(runs) != len(lock['runs']) or len(rows) != len(runs)
+            or len(runs) != lock['expected_counts']['runs']):
+        raise RuntimeError('Invalid Table 2 source index/lock')
+    seen = set()
+    for row in rows:
+        key = (row['instance'], row['run_id'])
+        expected = runs.get(key)
+        name = row['instance'] + '.' + row['run_id'] + '.results.jsonl'
+        if ('/' in name or '\\' in name or key in seen or expected is None
+                or row['sha256'] != expected['raw_sha256'] or row['bytes'] != expected['raw_bytes']
+                or row['target'] != 'paper/table-02/data/records/deltabox-paper/results/' + name
+                or row['member'] != 'table2-paper-source/records/' + name + '.gz'):
+            raise RuntimeError('Table 2 source index differs from fixed run/content lock')
+        seen.add(key)
+    relative = PurePosixPath(index['repository_path'])
+    if relative.is_absolute() or '..' in relative.parts:
+        raise RuntimeError('Unsafe Table 2 bundle path')
+    source = root / relative
+    if source.stat().st_size != index['compressed_bytes'] or digest_file(source) != index['sha256']:
+        raise RuntimeError('Table 2 bundle SHA-256/size differs from committed index')
+    objects = {row['sha256']: row['bytes'] for row in rows}
+    if install:
+        objdir = root / 'traces/objects'
+        objdir.mkdir(parents=True, exist_ok=True)
+        if not objdir.resolve().is_relative_to(root.resolve()):
+            raise RuntimeError('Object directory escapes repository')
+        # No archive paths are extracted. Only the locked gzip members are read.
+        with tarfile.open(source, 'r:gz') as tar:
+            members = tar.getmembers()
+            if len({m.name for m in members}) != len(members):
+                raise RuntimeError('Duplicate Table 2 archive member')
+            for row in rows:
+                member = tar.getmember(row['member'])
+                if not member.isfile():
+                    raise RuntimeError('Non-regular Table 2 record')
+                compressed = tar.extractfile(member).read()
+                if (len(compressed) != row['gzip_bytes']
+                        or hashlib.sha256(compressed).hexdigest() != row['gzip_sha256']):
+                    raise RuntimeError('Table 2 gzip record differs from published source hash')
+                raw = gzip.decompress(compressed)
+                if len(raw) != row['bytes'] or hashlib.sha256(raw).hexdigest() != row['sha256']:
+                    raise RuntimeError('Table 2 raw content differs from fixed source lock')
+                dest = objdir / row['sha256']
+                if dest.exists():
+                    if dest.stat().st_size != len(raw) or digest_file(dest) != row['sha256']:
+                        raise RuntimeError('Existing Table 2 object differs from fixed source lock')
+                    continue
+                partial = objdir / ('.' + row['sha256'] + '.partial')
+                try:
+                    with partial.open('xb') as output:
+                        output.write(raw)
+                    partial.chmod(0o444)
+                    partial.rename(dest)
+                finally:
+                    if partial.exists():
+                        partial.unlink()
+        materialize(root, rows)
+    verify(root, rows, objects)
+    return dict(dataset_id=lock['dataset_id'], verified_objects=len(objects),
+                file_references=len(rows), object_bytes=sum(objects.values()))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
@@ -190,8 +262,10 @@ def main():
             import_bundle(root, args.bundle, rows, objects, manifest_hash)
         else:
             verify(root, rows, objects)
+        table2 = (table2_paper_source(root, install=args.command == "import")
+                  if any(row["target"].startswith("paper/table-02/") for row in rows) else None)
         print(json.dumps(dict(verified_objects=len(objects), file_references=len(rows),
-                              object_bytes=sum(objects.values()))))
+                              object_bytes=sum(objects.values()), table2_paper_source=table2)))
 
 
 if __name__ == '__main__':

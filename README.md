@@ -110,6 +110,8 @@ This option selects the pool that inputs come from, not how many are used; the d
 
 Each run records the inputs it used in every plan and in `suite.json`. Table 2 averages events over each backend's own inputs; the input sets behind each reported number are listed in the authors' ledger on the AE machine at `/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md`.
 
+**Table 2 archive correction.** We apologize for packaging a later DeltaBox batch in place of the original paper records. Run `python3 ae/scripts/paper_data.py import` to import the bundled original twelve records; default archived Table 2 analysis now verifies and uses them. The later batch remains available, and other experiments keep their existing inputs. See the [Table 2 source and verification instructions](ae/paper/table-02/README.md).
+
 ### Where results are written
 
 When a run finishes, open `result.md` (identical to `SUMMARY.md`) for the status of each experiment and of the GPU stage. Then open **`comparison/attempt-NNN/README.md`** (English) or **`README-zh.md`** (Chinese), which compare your measurements with the paper; both are generated together and link to each other. The exact path is recorded under `outputs.comparison` in `review.json`. A failed step keeps its logs and makes the command exit with a nonzero status.

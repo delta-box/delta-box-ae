@@ -109,6 +109,8 @@ bash ae/run_all.sh --limit 3 --baseline-inputs all
 
 每次运行都会在各个 plan 和 `suite.json` 中记录实际使用的输入。Table 2 按各 backend 自己的输入对事件求平均；每个报告数值所依据的输入集合，列在 AE 机器上的作者总账 `/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md` 中。
 
+**Table 2 归档包更正。** 先前打包时误将后来一批 DeltaBox 记录作为论文原始数据，对此我们表示歉意。运行 `python3 ae/scripts/paper_data.py import` 即可导入包内的原始 12 份记录；Table 2 的默认归档分析现在会校验并使用它们。后来批次仍保留，其他实验继续使用原有输入。参见 [Table 2 来源与校验说明](ae/paper/table-02/README.md)。
+
 ### 结果保存位置
 
 运行结束后，先打开 `result.md`（与 `SUMMARY.md` 内容相同）查看每项实验和 GPU 阶段的状态，再打开 **`comparison/attempt-NNN/README-zh.md`**（中文）或 **`README.md`**（英文），对照论文查看你的测量结果；两页同时生成，可以互相切换。具体路径记录在 `review.json` 的 `outputs.comparison` 中。失败的步骤会保留日志，并使命令以非零退出码结束。

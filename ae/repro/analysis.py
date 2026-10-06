@@ -69,6 +69,17 @@ class Evidence:
                     if target.parts[0] != "paper" or ".." in target.parts:
                         raise ValueError(f"Invalid archive manifest target: {target}")
                     self.expected[str(Path(*target.parts[1:]))] = row["sha256"]
+            table2_index = self.root / "table-02/paper-source-bundle.json"
+            if table2_index.exists():
+                for row in self.json(table2_index)["files"]:
+                    target = Path(row["target"])
+                    if (target.is_absolute() or ".." in target.parts
+                            or target.parts[:5] != ("paper", "table-02", "data", "records", "deltabox-paper")):
+                        raise ValueError(f"Invalid Table 2 original source target: {target}")
+                    relative = str(Path(*target.parts[1:]))
+                    if relative in self.expected:
+                        raise ValueError(f"Duplicate Table 2 original source target: {target}")
+                    self.expected[relative] = row["sha256"]
 
     def path(self, path):
         path = Path(path)
@@ -131,7 +142,9 @@ def select_delta(ev, table="table-02", mode="fast", allow_missing=False):
     cohort = {r["instance"]: r for r in ev.csv(f"{table}/cohort-deltabox.csv")}
     candidates = defaultdict(list)
     rejected = []
-    paths = ev.glob(f"{table}/data/records/deltabox-{mode}/results/**/*.results.jsonl")
+    original_table2 = ev.source == "archived" and table == "table-02" and mode == "fast"
+    archive_mode = "paper" if original_table2 else mode
+    paths = ev.glob(f"{table}/data/records/deltabox-{archive_mode}/results/**/*.results.jsonl")
     for path in paths:
         instance = path.name.split(".replay")[0]
         rows = ev.jsonl(path)
@@ -159,6 +172,9 @@ def select_delta(ev, table="table-02", mode="fast", allow_missing=False):
         else:
             selected.extend(matches)
     if missing and not allow_missing:
+        if original_table2:
+            raise ValueError("Missing original Table 2 paper records; run python3 ae/scripts/paper_data.py import. "
+                             "The later archived batch is not a fallback for the original source.")
         raise ValueError(f"Missing complete {mode} runs: {missing}")
     return selected, dict(input_count=len(cohort), attempted_files=len(paths),
                           complete_runs=len(selected), missing_complete=missing,
@@ -240,12 +256,103 @@ def parse_pilot(data):
     return "criu", trace_record(instance, ck, rs)
 
 
+
+TABLE2_PAPER_SOURCE_LOCK = AE_ROOT / "paper/table-02/paper-source-lock.json"
+TABLE2_PAPER_SOURCE_COMMAND = "python3 ae/scripts/verify_table2_paper_source.py"
+
+
+def archived_table2_source_identity(ev, selected):
+    """Describe archived DeltaBox source identity without rejecting fresh runs.
+
+    Completion and cohort membership do not establish the original paper batch.
+    Only the repository's fixed raw-content/run lock establishes that identity.
+    This helper describes identity; default Table 2 requires the original batch.
+    """
+    if ev.source != "archived":
+        return None
+    records = []
+    for run in selected:
+        relative = run["path"]
+        if relative not in ev.sources:
+            ev.read(relative)
+        source = ev.sources[relative]
+        name = Path(relative).name
+        prefix = run["instance"] + "."
+        run_id = (name[len(prefix):-len(".results.jsonl")]
+                  if name.startswith(prefix) and name.endswith(".results.jsonl") else None)
+        counts = Counter(row.get("kind") for row in run["rows"])
+        records.append(dict(instance=run["instance"], run_id=run_id, path=relative,
+                            raw_sha256=source["sha256"], raw_bytes=source["bytes"],
+                            checkpoint_events=counts["ckpt"], restore_events=counts["restore"]))
+    identity = dict(scope="deltabox_only", analysis_source="archived",
+                    batch_kind="released_historical_batch", paper_source_match=None,
+                    status="unverified", matched_runs=0, selected_runs=len(records),
+                    expected_runs=None, records=records,
+                    source_lock_path="ae/paper/table-02/paper-source-lock.json",
+                    source_lock_sha256=None, original_source_command=TABLE2_PAPER_SOURCE_COMMAND)
+    try:
+        raw_lock = TABLE2_PAPER_SOURCE_LOCK.read_bytes()
+        lock = json.loads(raw_lock)
+        locked = {row["instance"]: row for row in lock["runs"]}
+        if (lock.get("schema_version") != 1 or len(locked) != len(lock["runs"])
+                or len(locked) != lock["expected_counts"]["runs"]):
+            raise ValueError("Invalid paper source lock schema/count")
+        identity.update(source_lock_sha256=hashlib.sha256(raw_lock).hexdigest(),
+                        paper_dataset_id=lock["dataset_id"], expected_runs=len(locked),
+                        limitations=lock.get("limitations", []))
+        for record in records:
+            expected = locked.get(record["instance"], {})
+            record["expected_run_id"] = expected.get("run_id")
+            record["expected_raw_sha256"] = expected.get("raw_sha256")
+            record["paper_source_match"] = bool(expected) and all(
+                record[field] == expected[field]
+                for field in ("run_id", "raw_sha256", "raw_bytes", "checkpoint_events", "restore_events"))
+        matched = sum(record["paper_source_match"] for record in records)
+        complete_match = (matched == len(locked) == len(records)
+                          and {row["instance"] for row in records} == set(locked))
+        identity.update(matched_runs=matched, paper_source_match=complete_match,
+                        status="original_paper_source_verified" if complete_match else "different_archived_batch")
+        if complete_match:
+            identity["batch_kind"] = "original_paper_historical_batch"
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        identity["reason"] = "Original-paper source identity could not be verified: " + str(exc)
+    if identity["paper_source_match"] is True:
+        notice = (f"DeltaBox archived source: original-paper raw records verified "
+                  f"({identity['matched_runs']}/{identity['expected_runs']}).")
+    elif identity["paper_source_match"] is False:
+        notice = (f"DeltaBox archived source: released historical batch differs from the original paper batch; "
+                  f"{identity['matched_runs']}/{identity['expected_runs']} run/content identities match. "
+                  "Matching instances and event counts do not identify the original paper batch.")
+    else:
+        notice = "DeltaBox archived source: released historical batch; original-paper source identity is unverified."
+    identity["notice"] = notice + " Original-paper recomputation: " + TABLE2_PAPER_SOURCE_COMMAND
+    return identity
+
+
 def table2(ev):
     metrics, selections = [], {}
     selected, selections["deltabox"] = select_delta(ev)
+    source_identity = archived_table2_source_identity(ev, selected)
+    selections["deltabox"]["paper_source_identity"] = source_identity
+    if source_identity is not None and source_identity["paper_source_match"] is not True:
+        raise ValueError("Table 2 default archived source does not match the original paper run/content lock: "
+                         + source_identity["notice"])
+    if source_identity is not None:
+        for run in selected:
+            if any(row["restore_wall_ms"] != row["restore_critical_ms"]
+                   for row in run["rows"] if row["kind"] == "restore"):
+                raise ValueError("Original Table 2 restore wall/critical timer mismatch")
     records = [trace_record(r["instance"], [x["ckpt_wall_ms"] for x in r["rows"] if x["kind"] == "ckpt"],
                             [x["restore_wall_ms"] for x in r["rows"] if x["kind"] == "restore"]) for r in selected]
-    metrics += latency_metrics(records, "deltabox", RAW)
+    delta_metrics = latency_metrics(records, "deltabox", RAW)
+    if source_identity is not None:
+        for row in delta_metrics:
+            row.update(archive_batch_kind=source_identity["batch_kind"],
+                       paper_source_match=source_identity["paper_source_match"],
+                       paper_source_matched_runs=source_identity["matched_runs"],
+                       paper_source_expected_runs=source_identity["expected_runs"],
+                       paper_source_lock_sha256=source_identity["source_lock_sha256"])
+    metrics += delta_metrics
     for backend, pattern, cohort_name in (
         ("cube", "table-02/data/records/cube-canonical/raw_results_deltabox_canonical/*/pilot_result.json", "cube"),
         ("e2b", "table-02/data/inputs/e2b/*/pilot_result.json", "e2b")):
@@ -294,11 +401,11 @@ def table2(ev):
                                  checkpoint_denominator="one pristine copy per trace")
     return dict(metrics=metrics, selection=selections, limitations=[
         "Backends use separate cohorts and event counts; group means are event weighted per operation.",
-        "DeltaBox complete archive means 8.3246/1.3990 ms differ from published 10.83/1.86 ms.",
+        source_identity["notice"] if source_identity else "DeltaBox source identity applies only to archive analysis.",
         "FC and CRIU raw events are absent; their means are recomputed from per-trace summaries.",
         "Replay zero-LLM correction is aggregate-only; per-restore served completion prefixes are absent.",
         "Replay checkpoint is once per trace; FC checkpoint includes its initial full snapshot.",
-        "Fast run_config.json was overwritten by a later quick-check run; historical full-run settings remain unresolved."])
+        *(source_identity.get("limitations", []) if source_identity else [])])
 
 
 FAST_COMPONENTS = ("checkpoint_overlay_ms", "checkpoint_fork_ms", "checkpoint_sync_no_dump_ms", "ckpt_wall_ms",
@@ -1547,6 +1654,10 @@ def main(argv=None):
     except (ValueError, KeyError, OSError, TypeError) as exc:
         parser.exit(2, f"Analysis failed: {exc}\n")
     print(f"{result['analysis_mode']}: {len(result['experiments'])} experiments; {args.output / 'summary.json'}")
+    if args.source == "archived":
+        identity = result.get("experiments", {}).get("table-02", {}).get("selection", {}).get("deltabox", {}).get("paper_source_identity")
+        if identity:
+            print(identity["notice"])
     return 0
 
 
