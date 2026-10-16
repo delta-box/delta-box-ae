@@ -4,7 +4,7 @@
 
 **Badges sought: Available, Functional, Reproduced.**
 
-DeltaBox checkpoints, restores, and branches the filesystem and process state of an agent sandbox, so that tree-search agents can explore alternatives cheaply. This artifact contains the DeltaBox runtime, recorded agent workloads, the experiment drivers, and the plotting scripts used to evaluate state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses, so no LLM API key is needed.
+DeltaBox checkpoints, restores, and branches the filesystem and process state of an agent sandbox, so that tree-search agents can explore alternatives cheaply. This artifact contains the DeltaBox runtime, recorded agent workloads, the experiment drivers, and the plotting scripts used to evaluate state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses, so no LLM API key is needed. A permanent archive of the artifact is available on Zenodo: [10.5281/zenodo.23202153](https://doi.org/10.5281/zenodo.23202153).
 
 We recommend evaluating the artifact in three steps:
 

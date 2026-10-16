@@ -4,7 +4,7 @@
 
 **申请徽章：Available、Functional、Reproduced。**
 
-DeltaBox 对智能体沙箱的文件系统和进程状态做 checkpoint、restore 和分支，使树搜索智能体能以较低成本探索不同的候选路径。本 artifact 包含 DeltaBox 运行时、录制的智能体工作负载、实验驱动和绘图脚本，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，因此不需要 LLM API key。
+DeltaBox 对智能体沙箱的文件系统和进程状态做 checkpoint、restore 和分支，使树搜索智能体能以较低成本探索不同的候选路径。本 artifact 包含 DeltaBox 运行时、录制的智能体工作负载、实验驱动和绘图脚本，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，因此不需要 LLM API key。 本 artifact 的永久归档已发布于 Zenodo：[10.5281/zenodo.23202153](https://doi.org/10.5281/zenodo.23202153)。
 
 建议按以下三步评估：
 
