@@ -240,8 +240,8 @@ class Session:
         self.active = selected_process(active['units'][UNIT], self.request['executable_sha256'])
         if self.active['selected_environment'] != {'present': True, 'value': str(self.config)}:
             raise ValueError('Active diagnostic environment mismatch')
-        socket_root = canonical(storage.ram/'tmp')
-        if socket_root.parent.parent != self.root/'ae/work' or not re.fullmatch('et-[a-f0-9]{10}', socket_root.parent.name):
+        socket_root = canonical(storage.ram/'t')
+        if socket_root.parent.parent != self.root/'ae/work' or not re.fullmatch('[a-f0-9]{10}', socket_root.parent.name):
             raise ValueError('Diagnostic socket root mismatch')
         base = PROC/str(self.active['pid'])
         for path in (self.directory, socket_root):

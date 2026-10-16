@@ -4,7 +4,7 @@
 
 **Badges sought: Available, Functional, Reproduced.**
 
-DeltaBox checkpoints, restores, and branches the filesystem and process state of an agent sandbox, so that tree-search agents can explore alternatives cheaply. This artifact contains the DeltaBox runtime, recorded agent workloads, the experiment drivers, and the plotting scripts used to evaluate state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses, so no LLM API key is needed. A permanent archive of the artifact is available on Zenodo: [10.5281/zenodo.23202153](https://doi.org/10.5281/zenodo.23202153).
+DeltaBox checkpoints, restores, and branches the filesystem and process state of an agent sandbox, so that tree-search agents can explore alternatives cheaply. This artifact contains the DeltaBox runtime, recorded agent workloads, the experiment drivers, and the plotting scripts used to evaluate state-management overhead, memory use, and write amplification. CPU experiments replay recorded LLM responses, so no LLM API key is needed. A permanent archive of the artifact is available on Zenodo: [10.5281/zenodo.23202152](https://doi.org/10.5281/zenodo.23202152). The downloadable archive includes the prebuilt guest kernel at `linux/vmlinux`; see [archive setup](ARCHIVE.md).
 
 We recommend evaluating the artifact in three steps:
 
@@ -12,7 +12,7 @@ We recommend evaluating the artifact in three steps:
 2. Run [all CPU experiments](#run-all) with `ae/run_all_no_gpu.sh` (about 2 hours).
 3. Optionally, rerun individual experiments from the [experiment index](#experiments).
 
-To keep the run time manageable, each experiment uses at most three inputs by default, fewer than in the paper; [`--limit N`](#run-all) raises this. Replay, CRIU, and Firecracker Diff (FC-Diff) draw their inputs from a fixed pool of 44 recorded trajectories. Figure 8(b) needs GPUs on a separate machine; if none are free, it is reported as skipped.
+To keep the run time manageable, each experiment uses at most three inputs by default, fewer than in the paper; [`--limit N`](#run-all) raises this. Replay, CRIU, and Firecracker Diff (FC-Diff) draw their inputs from a fixed pool of 44 recorded trajectories. Figure 8(b) needs four idle GPUs on a separate machine. It polls every 60 seconds, with up to three hours of GPU waiting per run; if the budget expires, the GPU run fails and retains its diagnostics.
 
 [Quick start](#quick-start) · [Experiment index](#experiments) · [Inspect results](#results) · [Troubleshooting](#troubleshooting) · [Self-hosting](#self-hosting) · [Hosted-machine details](#hosted-details)
 
@@ -96,7 +96,7 @@ To choose the placement:
 bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-It uses the same three-input limit and input pools as above, then analyzes the results and builds the comparison pages. After the CPU experiments, it checks the GPUs reserved for this artifact on the GPU host `allinai2plus`. If no GPU is free, Figure 8(b) is recorded as skipped; with one to three free GPUs, six of its eight cases run; with four, all eight run. GPU availability does not affect the CPU results. Figure 8(c) is computed once all CPU and GPU inputs are complete; you can also [compute it manually](#figure-08-gpu).
+It uses the same three-input limit and input pools as above, then analyzes the results and builds the comparison pages. After the CPU experiments, it checks the GPUs reserved for this artifact on the GPU host `allinai2plus`. The hosted runner requires four idle, unreserved GPUs before loading a model, including for a selected-case run. If that requirement is not met, it polls every 60 seconds before starting a measurement. Initial admission and later GPU occupancy waits share a three-hour waiting budget; exhausting it fails the GPU run with diagnostics. A full run executes all eight generation/training cases. GPU availability does not affect the CPU results. Figure 8(c) is computed once all CPU and GPU inputs are complete; you can also [compute it manually](#figure-08-gpu).
 
 ### Input sets
 
@@ -174,7 +174,7 @@ bash ae/run_all.sh --group table-02 --output "$AE_RUN/table-02"
 
 To run a single backend, use an option such as `--experiment table-02-e2b` with a new output directory.
 
-**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within each workload group and then in the `All` row (labeled `Event Avg` in the figure). `All` averages over all events, so it is not the plain mean of the four group averages. Values are in milliseconds; lower is better. The paper claims that DeltaBox has lower overhead than the baselines. When comparing systems, keep in mind how each system is configured and what its timings include.
+**Output and interpretation.** Open `table-02-comparison.png`. Compare checkpoint and restore separately, first within each workload group and then in the `All` row (labeled `Event Avg` in the figure). `All` averages over all events, so it is not the plain mean of the four group averages. Values are in milliseconds; lower is better. The paper claims that DeltaBox has lower overhead than the baselines. When comparing systems, keep in mind how each system is configured and what its timings include. Fresh DeltaBox results use `checkpoint_api_wall_ms` and `restore_api_wall_ms`; the original paper restore records use the narrower `restore_critical_ms` interval. These restore columns have different timer boundaries and must not be interpreted as a matched performance comparison. See the [timer definitions](ae/docs/table3-method.md#timer-boundaries).
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -202,7 +202,7 @@ bash ae/run_all.sh --group table-03 --output "$AE_RUN/table-03"
 
 Both modes run on the same inputs. The [Table 3 guide](ae/docs/table3-method.md) explains runtime options such as lazy pages.
 
-**Output and interpretation.** In `table-03-comparison.png`, look at the Overlay, fork/CRIU, and coordination components to find the dominant cost of each restore path. Fast restore is cheaper because reusing a template avoids most of the process reconstruction. The components add up to Table 3's total, but they cover narrower windows than the end-to-end API time in Table 2, so do not compare the two directly. `—` marks a component that does not apply to that path.
+**Output and interpretation.** In `table-03-comparison.png`, look at the Overlay, fork/CRIU, and coordination components to find the dominant cost of each restore path. Fast restore is cheaper because reusing a template avoids most of the process reconstruction. Some component intervals overlap, so their sum is not the elapsed total. Use the directly recorded component-window total; the fresh Table 2 full API interval is a separate, wider measurement. `—` marks a component that does not apply to that path.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -292,7 +292,7 @@ bash ae/run_all.sh \
 
 Figure 7 is computed from these complete trajectories and needs no separate timing run. If you have already run Table 2 or the full suite, use that output.
 
-**Output and interpretation.** Open `figure-07-comparison.png`. The 1.0× line is the LLM and action time; anything above it is state-management overhead. Compare the Django, SymPy, Scientific, and Tools/Small groups separately, rather than judging the impact from absolute milliseconds. Each bar is a ratio of totals within its group (summed timing components), not an average of per-step ratios.
+**Output and interpretation.** Open `figure-07-comparison.png`. The 1.0× line is the LLM and action time; anything above it is state-management overhead. Compare the Django, SymPy, Scientific, and Tools/Small groups separately, rather than judging the impact from absolute milliseconds. Each bar is a ratio of totals within its group (summed timing components), not an average of per-step ratios. This is a serialized component model, not a stopwatch measurement of an entire trajectory. It does not measure asynchronous checkpoint overlap. The analyzer preserves the component formula and labels these values `derived_model`.
 
 <table>
 <tr><th>Paper figure/table</th><th>Example script output</th></tr>
@@ -352,7 +352,7 @@ When the command finishes, it prints a GPU-only summary with the status, GPU cou
 
 Temporary GPU work and compilation caches use `/dev/shm/deltabox-ae-1066` on `allinai2plus`; existing model files are reused in place. Logs and results are collected back to `ae/results/selected/gpu-only-*` in this repository on `spr4numa`. The remote temporary directory is memory-backed and is cleared by a GPU-host reboot.
 
-The GPU-only entry checks physical GPUs 0–7 on `allinai2plus` and automatically reserves four idle GPUs. If fewer than four are idle and unreserved, it exits with an error before loading a model or starting any measurement. Occupancy is checked repeatedly and rechecked after reservation. Generation and training at batch 1/4 use one selected GPU; training at batch 16/64 uses all four. A new result directory is created automatically; use `--output PATH` to choose it. Use `--gpu-devices ID,...` to restrict selection to specific GPUs.
+The GPU-only entry checks physical GPUs 0–7 on `allinai2plus` and automatically reserves four idle GPUs. If fewer than four are idle and unreserved, it polls every 60 seconds before loading a model or starting any measurement. Initial admission and later phase/worker occupancy checks share a maximum of three hours of GPU waiting, excluding measurement time. Exhausting the budget exits with an error. Partial reservations are released between initial attempts; after admission, the selected GPU UUIDs and locks are retained. Occupancy is checked repeatedly and rechecked after reservation. Generation and training at batch 1/4 use one selected GPU; training at batch 16/64 uses all four. A new result directory is created automatically; use `--output PATH` to choose it. Use `--gpu-devices ID,...` to restrict selection to specific GPUs.
 
 After panel (b), the same command produces panel (c). As in the paper, panel (c) applies the paper's Equation 1 to these GPU times and the fan-out times of a CPU run. The command takes the fan-out times from your newest finished `ae/run_all_no_gpu.sh` run under `ae/results` and names that run in the summary. The plot is written to `gpu/attempt-001/comparison/theory/plots/figure-08c.png` in the GPU result directory. All three backends measure N = 16 and 64 for panel (c). Older CPU runs that lack a point retain an explicit not-measured marker; rerun `--group figure-08-cpu` to obtain the complete fan-out matrix. If no CPU run has finished yet, panel (c) is reported as unavailable; run `ae/run_all_no_gpu.sh` first.
 
@@ -362,7 +362,7 @@ To rerun every panel of Figure 8:
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-The authors maintain the remote model and Python environments. The script checks only the GPUs reserved for this artifact (the `devices` list in the remote configuration) and records busy or unavailable GPUs as skipped. If fewer GPUs are free, the run produces a result that is marked as partial; the parameters of each case stay the same. See the [GPU setup guide](ae/docs/self-hosting.md#gpu-setup).
+The authors maintain the remote model and Python environments. The script checks only the candidate GPUs in the remote configuration (`devices`). Waiting reasons and remaining time are recorded in `ssh.log` and the admission diagnostics. A GPU wait timeout retains completed results but does not count as a complete GPU run. Model, software, storage, or configuration failures stop immediately; completed cases are not rerun by the polling loop. The remote settings `gpu_wait_timeout_s` and `gpu_poll_interval_s` control the waiting budget and polling interval. See the [GPU setup guide](ae/docs/self-hosting.md#gpu-setup).
 
 **Output and interpretation.** Panel (b) produces per-repeat generation and training times and `gpu/attempt-NNN/plots/figure-08b.png`; compare the same stage at the same batch size. Once both the CPU fan-out and the GPU measurements have succeeded, panel (c) produces `gpu/attempt-NNN/comparison/theory/occupation.json` and its plots. Panel (c) follows the paper's Equation 1, the same method as the paper's Figure 8(c): check whether shorter sandbox time raises the expected GPU occupation and lowers staleness. Both panels appear in the run's English and Chinese comparison pages.
 
@@ -480,7 +480,7 @@ bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
 | A command reports that another AE run is active | Wait for the other run to finish, then retry |
 | Your SSH session disconnected during a run | The run stops; continue it with `--resume <result-directory>` |
 | No new terminal output for a long time | Check the log linked from `SUMMARY.md`, or `logs/attempt-NNN/<step>/stdout.log` |
-| GPUs are unavailable or all busy | Ask the authors to allocate GPUs for the AE machine, then resume the same output directory |
+| Fewer than four GPUs are available | The runner polls every 60 seconds for up to three hours of cumulative waiting. If it times out, inspect the admission diagnostics, arrange availability, then resume the same output directory |
 | A dependency, permission, or template check fails | Save `SUMMARY.md` and the relevant logs, and contact the authors through the AE submission system |
 | You want a smaller run | Add `--limit 1` to an individual command and use a separate output directory |
 | You want the list of experiment names | Run `bash ae/run_all.sh --list` |

@@ -61,3 +61,10 @@ RAM 容量检查分两步：先确保能安全复制镜像，再按 tmpfs 实际
 两类文件缓存均扣除 Dirty、Writeback 和 Mapped；Shmem/anon 不计入可回收量。此前仅计 inactive 会把本轮镜像读取后提升到 active LRU 的干净缓存误当作不可用内存，造成启动前假性不足；对应未启动任务保留原记录，不计作性能样本。
 
 交付配置按当前仓库相对路径定位 CRIU：`ae/work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu`。spr4numa 主仓库与本 worktree 均已安装同一个验证过的 ELF（SHA256 `61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940`），合并后入口不依赖临时 worktree。需要重新构建时使用 `replay/criu/build_exact_parent.py`；新 ELF 必须重新记录构建身份，不能冒用这次二进制 SHA。完整测量 9bbc1ba 的旧绝对路径保存在原始配置里，没有重写；路径交付调整不改变二进制内容。
+
+<a id="timer-boundaries"></a>
+## Table 2 与 Table 3 的计时边界
+
+新跑 Table 2 使用 `checkpoint_api_wall_ms` / `restore_api_wall_ms`，即 replay 调用 controller 操作前后记录的完整调用窗口。原论文 Table 2 的 334 次 restore 则使用 `restore_critical_ms`；原始记录把同一数值也存入 `restore_wall_ms`，字段名中的 wall 并不使它成为完整 API 时间。内部 critical 区间排除了部分调用前后的清理和 bookkeeping，不能据此声称原始 restore 数字符合 §6.1 的完整 request-to-return 定义。新旧字段并列保留，不能将新 API 数字改标为 critical 来追平论文。
+
+Table 3 的 ioctl 与 fork/CRIU 区间可能并发或嵌套。`restore_table3_total_ms` 是另外直接记录的组件窗口；`restore_fast_fork_agent_ms` 等 worker 内部区间可能包含在外层等待中。读图时保留直接窗口和重叠关系，不将全部字段相加，也不把未归属残差当作已有直接计时的 coordination。论文历史批次与字段对应的证据和未解决项统一记录在 AE 主机的 `/mnt/disk2/dyp/deltabox-runtime/ae/report/README.md`。

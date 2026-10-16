@@ -100,14 +100,29 @@ class WorkingStorageTests(unittest.TestCase):
                 root=root,units=(),vm_root=root/'cg')
         mkdir.assert_not_called()
         self.assertEqual(value.ram.parent,root/'ae/work')
-        self.assertRegex(value.ram.name,r'^et-[0-9a-f]{10}$')
-        worst=value.ram/'tmp'/s.UFFD_SOCKET_NAME
-        self.assertEqual(len(str(worst).encode('utf-8')),105)
+        self.assertRegex(value.ram.name,r'^[0-9a-f]{10}$')
+        worst=value.ram/'t'/s.UFFD_SOCKET_NAME
+        self.assertEqual(len(str(worst).encode('utf-8')),100)
         self.assertLessEqual(len(str(worst).encode('utf-8')),107)
         self.assertEqual(value.out,out)
 
+    def test_dedicated_checkout_socket_boundary_fits_exactly(self):
+        root=Path('/home/atc-ae/a12-evaluation/repo')
+        with patch.object(s.os,'geteuid',return_value=0),patch.object(Path,'mkdir') as mkdir:
+            value=s.WorkingStorage({'e2b':{'template':s.TEMPLATE}},root/'ae/results/test',2,'48-51','a'*64,
+                root=root,units=(),vm_root=root/'cg')
+        mkdir.assert_not_called()
+        self.assertEqual(value.ram.parent,root/'ae/work')
+        self.assertRegex(value.ram.name,r'^[0-9a-f]{10}$')
+        self.assertEqual(len(str(value.ram/'t'/s.UFFD_SOCKET_NAME).encode('utf-8')),107)
+        with patch.object(s.os,'geteuid',return_value=0),patch.object(Path,'mkdir') as mkdir:
+            with self.assertRaisesRegex(RuntimeError,'107-byte limit'):
+                s.WorkingStorage({'e2b':{'template':s.TEMPLATE}},Path(str(root)+'x')/'ae/results/test',2,'48-51','a'*64,
+                    root=Path(str(root)+'x'),units=(),vm_root=root/'cg')
+        mkdir.assert_not_called()
+
     def test_oversize_ascii_and_utf8_roots_fail_before_any_creation(self):
-        for root in (Path('/'+'r'*40),Path('/'+'é'*14)):
+        for root in (Path('/'+'r'*40),Path('/'+'é'*18)):
             with patch.object(s.os,'geteuid',return_value=0),patch.object(Path,'mkdir') as mkdir:
                 with self.assertRaisesRegex(RuntimeError,'107-byte limit'):
                     s.WorkingStorage({'e2b':{'template':s.TEMPLATE}},root/'job',0,'0-3','a'*64,

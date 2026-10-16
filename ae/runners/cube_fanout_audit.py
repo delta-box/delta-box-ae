@@ -1,5 +1,6 @@
 """Bounded Cube probe: preserve official clone timers and retain numeric checks."""
 import argparse
+import ast
 import importlib.util
 import json
 import os
@@ -12,6 +13,26 @@ import time
 
 P = Path(__file__).resolve().parents[2]
 DRIVER = P / 'ae/vendor/finalbench/official_sandbox_fork/bench_official_fork.py'
+
+
+def expected_memory_token(command, *, child):
+    """Read the expected identity from the generated command, never its reply."""
+    if child:
+        literals = re.findall(r'^expected_token = (.+)$', command, re.MULTILINE)
+        if len(literals) != 1:
+            raise ValueError('Missing or ambiguous child memory token assignment')
+        try:
+            token = ast.literal_eval(literals[0])
+        except (ValueError, SyntaxError) as error:
+            raise ValueError('Invalid child memory token literal') from error
+    else:
+        tokens = re.findall(r"assert 'OK token=([^']+)'", command)
+        if len(tokens) != 1:
+            raise ValueError('Missing or ambiguous source memory token assertion')
+        token = tokens[0]
+    if not isinstance(token, str) or not token or any(char.isspace() for char in token):
+        raise ValueError('Invalid expected memory token')
+    return token
 
 
 def validate_memory_response(text, *, token, expected_bytes, min_requests):
@@ -141,7 +162,7 @@ def run_benchmark(args, ap, client_context):
         source = "s.sendall(b'warmup" in command
         child = "s.sendall(b'touch" in command
         if source or child:
-            expected_token = re.search(r"assert 'OK token=([^']+)'", command).group(1)
+            expected_token = expected_memory_token(command, child=child)
             record = {'sandbox_id': sb.sandbox_id, 'stage': 'source' if source else 'child', 'response': text.strip()}
             try:
                 fields = validate_memory_response(text, token=expected_token,

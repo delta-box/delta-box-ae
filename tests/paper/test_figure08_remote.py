@@ -15,6 +15,14 @@ from ae.runners import gpu_timing
 
 class RemoteTests(unittest.TestCase):
     def setUp(self):
+        self.clock = 0.0
+        def advance(seconds):
+            self.clock += seconds
+        for mocked in (patch.object(remote.time, 'monotonic', side_effect=lambda: self.clock),
+                       patch.object(remote.time, 'sleep', side_effect=advance),
+                       patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={}))):
+            mocked.start()
+            self.addCleanup(mocked.stop)
         storage = patch.object(remote, 'local_storage_admission',
                                return_value=dict(available_bytes=100*1024**3, available_inodes=100000))
         storage.start()
@@ -23,6 +31,8 @@ class RemoteTests(unittest.TestCase):
     def settings(self):
         config = remote.load_settings(remote.DEFAULT_CONFIG)
         config['sample_interval_s'] = 0
+        config['gpu_wait_timeout_s'] = 2
+        config['gpu_poll_interval_s'] = 1
         return config
 
     def test_hosted_gpu_ssh_uses_policy_account_without_key_copy(self):
@@ -77,31 +87,32 @@ class RemoteTests(unittest.TestCase):
         remote.write_json(root / 'source.json', {'files': {}})
         return config
 
-    def test_all_busy_fails_without_loading_or_checking_model(self):
+    def test_all_busy_times_out_without_loading_model(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.remote_root(root)
             with patch.object(remote, 'probe', return_value=dict(idle=[], observations=[])), \
-                    patch.object(gpu_timing, 'check_resources') as check, \
+                    patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={})) as check, \
                     patch.object(gpu_timing, 'run_suite') as run:
                 result = remote.remote_run(root)
             self.assertEqual(result['status'], 'failed')
-            self.assertIn('required; found 0', result['reason'])
-            check.assert_not_called()
+            self.assertIn('budget exhausted', result['reason'])
+            self.assertIn('required; found 0', result['gpu_wait']['attempts'][-1]['reason'])
+            self.assertTrue(check.called)
             run.assert_not_called()
             self.assertTrue((root / 'results/remote.json').is_file())
 
-    def test_resource_race_skips_and_releases_lock(self):
+    def test_resource_race_retries_and_releases_lock(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = self.remote_root(root)
             initial = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
-            with patch.object(remote, 'probe', side_effect=[initial, dict(idle=[], observations=[])]), \
-                    patch.object(gpu_timing, 'run_suite') as run:
+            with patch.object(remote, 'probe', side_effect=[initial, dict(idle=[], observations=[]), initial, initial]), \
+                    patch.object(gpu_timing, 'run_suite', return_value=dict(status='ok')) as run:
                 result = remote.remote_run(root)
-            self.assertEqual(result['status'], 'skipped')
-            self.assertIn('changed', result['reason'])
-            run.assert_not_called()
+            self.assertEqual(result['status'], 'measured')
+            self.assertIn('changed', result['gpu_wait']['attempts'][0]['reason'])
+            self.assertEqual(run.call_count, 3)
             with (Path(config['remote_root']) / 'locks/GPU-0.lock').open('a') as lock:
                 remote.fcntl.flock(lock, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
 
@@ -151,14 +162,318 @@ class RemoteTests(unittest.TestCase):
             observation = self.observation()
             observation['processes'] = [dict(pid=123, uuid='GPU-0')]
             with patch.object(remote, 'inventory', return_value=observation), \
-                    patch.object(gpu_timing, 'check_resources') as check, \
+                    patch.object(gpu_timing, 'check_resources', return_value=dict(ok=True, checks=[], software={})) as check, \
                     patch.object(gpu_timing, 'run_suite') as run:
                 result = remote.remote_run(root)
             self.assertEqual(result['status'], 'failed')
-            self.assertIn('required; found 3', result['reason'])
-            self.assertEqual([g['index'] for g in result['selected']], [3, 6, 7])
-            check.assert_not_called()
+            self.assertIn('budget exhausted', result['reason'])
+            self.assertIn('required; found 3', result['gpu_wait']['attempts'][-1]['reason'])
+            self.assertEqual(result['selected'], [])
+            self.assertTrue(check.called)
             run.assert_not_called()
+
+    def test_wait_settings_defaults_and_reject_invalid_deadline(self):
+        original = json.loads(remote.DEFAULT_CONFIG.read_text())
+        original.pop('gpu_wait_timeout_s', None)
+        original.pop('gpu_poll_interval_s', None)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.json'
+            remote.write_json(path, original)
+            settings = remote.load_settings(path)
+            self.assertEqual(settings['gpu_wait_timeout_s'], 10800)
+            self.assertEqual(settings['gpu_poll_interval_s'], 60)
+            for key, value in [('gpu_wait_timeout_s', 10801), ('gpu_wait_timeout_s', 0),
+                               ('gpu_poll_interval_s', 0), ('gpu_poll_interval_s', float('inf')),
+                               ('gpu_wait_timeout_s', True)]:
+                with self.subTest(key=key, value=value):
+                    path.write_text(json.dumps(dict(original, **{key: value})))
+                    with self.assertRaises(ValueError):
+                        remote.load_settings(path)
+
+    def test_busy_model_failure_is_immediate_and_no_reservation(self):
+        failed = dict(ok=False, checks=[dict(name='local model', ok=False, detail='missing'),
+                      dict(name='idle GPUs', ok=False, detail='busy')], software={})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.remote_root(root)
+            with patch.object(gpu_timing, 'check_resources', return_value=failed), \
+                    patch.object(remote, 'probe') as probe, patch.object(gpu_timing, 'run_suite') as run:
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'failed')
+            self.assertIn('Non-retryable', result['reason'])
+            self.assertEqual(self.clock, 0)
+            probe.assert_not_called()
+            run.assert_not_called()
+
+    def test_probe_only_never_waits_or_checks_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.remote_root(root)
+            with patch.object(remote, 'probe', return_value=dict(idle=[], observations=[])) as probe, \
+                    patch.object(gpu_timing, 'check_resources') as check:
+                result = remote.remote_run(root, probe_only=True)
+            self.assertEqual(probe.call_count, 1)
+            check.assert_not_called()
+            self.assertNotIn('gpu_wait', result)
+            self.assertEqual(self.clock, 0)
+
+    def test_impossible_allowlist_fails_without_polling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.remote_root(root)
+            config['devices'] = [0, 1, 2]
+            remote.write_json(root / 'remote-config.json', config)
+            with patch.object(remote, 'probe') as probe, patch.object(gpu_timing, 'run_suite') as run:
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'failed')
+            self.assertIn('allowlist', result['reason'])
+            probe.assert_not_called()
+            run.assert_not_called()
+
+    def test_partial_reservations_released_while_waiting_for_foreign_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.remote_root(root)
+            locks = Path(config['lock_root'])
+            locks.mkdir(parents=True)
+            held = (locks / 'GPU-0.lock').open('a')
+            self.addCleanup(held.close)
+            remote.fcntl.flock(held, remote.fcntl.LOCK_EX)
+            ready = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+            def release(seconds):
+                # The first attempt got GPUs 1-3; none may stay held across sleep.
+                for i in range(1, 4):
+                    with (locks / f'GPU-{i}.lock').open('a') as other:
+                        remote.fcntl.flock(other, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
+                held.close()
+                self.clock += seconds
+            with patch.object(remote, 'probe', return_value=ready), \
+                    patch.object(remote.time, 'sleep', side_effect=release), \
+                    patch.object(gpu_timing, 'run_suite', return_value=dict(status='ok')):
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'measured')
+            self.assertEqual([x['index'] for x in result['selected']], [0, 1, 2, 3])
+            self.assertEqual(result['gpu_wait']['attempts'][0]['reserved_count'], 3)
+            self.assertEqual(result['gpu_wait']['remaining_s'], 1)
+
+    def test_late_idle_preflight_waits_then_continues_without_repeating_suite(self):
+        ready = dict(ok=True, checks=[], software={})
+        busy = dict(ok=False, checks=[dict(name='idle GPUs', ok=False, detail='foreign PID')], software={})
+        admission = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.remote_root(root)
+            with patch.object(remote, 'probe', return_value=admission), \
+                    patch.object(gpu_timing, 'check_resources', side_effect=[ready] * 7 + [busy, ready, ready]), \
+                    patch.object(gpu_timing, 'run_suite', return_value=dict(status='ok')) as run:
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'measured')
+            self.assertEqual(run.call_count, 3)
+            self.assertEqual([c.args[0]['batches'] for c in run.call_args_list], [[1, 4, 16, 64], [1, 4], [16, 64]])
+            self.assertEqual(result['gpu_wait']['remaining_s'], 1)
+            self.assertEqual(result['phase_checks'][4]['check'], busy)
+
+    def test_worker_wait_keeps_selected_uuids_and_excludes_execution_time(self):
+        admission = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+        others = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4, 8)], observations=[])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = self.remote_root(root)
+            def run(settings, output, **kwargs):
+                kwargs['executor'](['fake-worker'], output / 'process')
+                self.clock += 1000  # Model work must not spend the GPU-wait budget.
+                return dict(status='ok')
+            with patch.object(remote, 'probe', side_effect=[admission, admission, others, admission, admission, admission]), \
+                    patch('repro.process.execute', return_value={}) as execute, \
+                    patch.object(gpu_timing, 'run_suite', side_effect=run) as suite:
+                result = remote.remote_run(root)
+            self.assertEqual(result['status'], 'measured')
+            self.assertEqual(execute.call_count, 3)
+            self.assertEqual(suite.call_count, 3)
+            self.assertEqual(result['gpu_wait']['remaining_s'], 1)
+            self.assertEqual([d['uuid'] for d in result['selected']], [f'GPU-{i}' for i in range(4)])
+            self.assertEqual(sorted(p.name for p in Path(config['lock_root']).glob('*.lock')),
+                             [f'GPU-{i}.lock' for i in range(4)])
+
+    def test_initial_and_worker_contention_share_one_deadline_budget(self):
+        ready = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+        busy = dict(idle=[], observations=[])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.remote_root(root)
+            def run(settings, output, **kwargs):
+                kwargs['executor'](['fake-worker'], output / 'process')
+                return dict(status='ok')
+            with patch.object(remote, 'probe', side_effect=[busy, ready, ready, busy]), \
+                    patch('repro.process.execute') as execute, \
+                    patch.object(gpu_timing, 'run_suite', side_effect=run) as suite:
+                result = remote.remote_run(root)
+            execute.assert_not_called()
+            self.assertEqual(suite.call_count, 1)
+            self.assertEqual(self.clock, 2)
+            self.assertEqual(result['gpu_wait']['remaining_s'], 0)
+            self.assertEqual(result['suites'][0]['status'], 'failed')
+            self.assertIn('budget exhausted', result['suites'][0]['error'])
+            saved = json.loads((root / 'results/gpu-wait.json').read_text())
+            self.assertEqual(saved['remaining_s'], 0)
+
+    def test_final_worker_admission_io_cannot_exceed_wait_budget(self):
+        ready = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+        for slow_operation in ('storage', 'log'):
+            with self.subTest(slow_operation=slow_operation), tempfile.TemporaryDirectory() as directory:
+                self.clock = 0
+                root = Path(directory)
+                self.remote_root(root)
+                original_write = remote.write_json
+                def slow_write(path, value):
+                    if '-admission-' in path.name:
+                        self.clock += 3
+                    return original_write(path, value)
+                def slow_storage(_):
+                    self.clock += 3
+                    return dict(available_bytes=100*1024**3, available_inodes=100000)
+                def run(settings, output, **kwargs):
+                    operation = (patch.object(remote, 'local_storage_admission', side_effect=slow_storage)
+                                 if slow_operation == 'storage' else
+                                 patch.object(remote, 'write_json', side_effect=slow_write))
+                    with operation:
+                        kwargs['executor'](['fake-worker'], output / 'process')
+                    return dict(status='ok')
+                with patch.object(remote, 'probe', return_value=ready), \
+                        patch('repro.process.execute') as execute, \
+                        patch.object(gpu_timing, 'run_suite', side_effect=run):
+                    result = remote.remote_run(root)
+                execute.assert_not_called()
+                self.assertEqual(result['gpu_wait']['remaining_s'], 0)
+                self.assertEqual(result['suites'][0]['status'], 'failed')
+                self.assertIn('budget exhausted before worker launch', result['suites'][0]['error'])
+
+    def test_inventory_and_sampling_respect_remaining_monotonic_time(self):
+        config = self.settings()
+        config['sample_interval_s'] = 60
+        with patch.object(remote, 'inventory', return_value=self.observation()) as inventory:
+            with self.assertRaisesRegex(TimeoutError, 'budget exhausted'):
+                remote.probe(config, deadline=1)
+        self.assertEqual(self.clock, 1)
+        self.clock = 0
+        response = subprocess.CompletedProcess([], 0, stdout='')
+        with patch.object(remote.subprocess, 'run', return_value=response) as run:
+            remote.inventory(deadline=.25)
+        self.assertTrue(all(c.kwargs['timeout'] == .25 for c in run.call_args_list))
+
+    def test_direct_cli_reports_nonzero_for_remote_wait_timeout(self):
+        with patch('sys.argv', ['figure08_remote.py', '--remote-run', '/fake']), \
+                patch.object(remote, 'remote_run', return_value=dict(status='failed', suites=[],
+                             reason='GPU wait budget exhausted')):
+            self.assertEqual(remote.main(), 1)
+
+    def test_local_cli_reports_nonzero_for_wait_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'output'
+            output.mkdir()
+            with patch('sys.argv', ['figure08_remote.py', '--output', str(output)]), \
+                    patch.object(remote, 'run_auto', return_value=dict(status='failed', mode='auto',
+                                 reason='GPU wait budget exhausted', successful_cases=0)), \
+                    patch.object(remote, 'report_lines', return_value=[]):
+                self.assertEqual(remote.main(), 1)
+
+    def test_local_cli_subset_success_retains_partial_global_coverage(self):
+        for execution_failed in (False, True):
+            with self.subTest(execution_failed=execution_failed), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / 'output'
+                output.mkdir()
+                result = dict(status='partial', selected_status='complete', execution_failed=execution_failed,
+                              requested_cases=['training-B16', 'training-B64'], successful_cases=2)
+                with patch('sys.argv', ['figure08_remote.py', '--output', str(output),
+                                       '--gpu-cases', 'training-B16,training-B64']), \
+                        patch.object(remote, 'run_auto', return_value=result), \
+                        patch.object(remote, 'report_lines', return_value=[]):
+                    self.assertEqual(remote.main(), int(execution_failed))
+                self.assertEqual(result['status'], 'partial')
+
+    def test_admission_log_io_cannot_cross_deadline_and_launch(self):
+        ready = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+        for initial in (True, False):
+            with self.subTest(initial=initial), tempfile.TemporaryDirectory() as directory:
+                self.clock = 0
+                root = Path(directory)
+                config = self.remote_root(root)
+                output = root / 'results'
+                output.mkdir()
+                locks = Path(config['lock_root'])
+                locks.mkdir(parents=True)
+                report = dict(selected=ready['idle'], gpu_wait=dict(remaining_s=2, attempts=[]))
+                def slow_log(*args):
+                    self.clock += 3
+                with patch.object(remote, 'probe', return_value=ready), \
+                        patch.object(remote, 'record_gpu_wait', side_effect=slow_log):
+                    with self.assertRaisesRegex(TimeoutError, 'budget exhausted'):
+                        if initial:
+                            remote.wait_for_reservation(config, report, output, locks)
+                        else:
+                            remote.wait_for_selected(config, report, output, ['GPU-0'], 'worker', 2)
+                for path in locks.glob('*.lock'):
+                    with path.open('a') as lock:
+                        remote.fcntl.flock(lock, remote.fcntl.LOCK_EX | remote.fcntl.LOCK_NB)
+
+    def test_run_auto_adds_wait_allowance_to_execution_timeouts(self):
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        for probe_only in (False, True):
+            with self.subTest(probe_only=probe_only), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                config = self.settings()
+                config_path = root / 'config.json'
+                remote.write_json(config_path, config)
+                archive = root / 'source.tar'
+                archive.write_bytes(b'fixture')
+                calls = []
+                def ssh(settings, argv, **kwargs):
+                    calls.append((argv, kwargs))
+                    if argv[0] == 'timeout':
+                        raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+                    return SimpleNamespace(stdout='{}')
+                with patch.object(remote, 'ssh', side_effect=ssh), \
+                        patch.object(remote, 'storage_admission', return_value={}), \
+                        patch.object(remote, 'snapshot', return_value=archive), \
+                        patch.object(remote, 'workspace_session', return_value=nullcontext({})), \
+                        patch.object(remote.subprocess, 'run', side_effect=OSError('stop before rsync')):
+                    remote.run_auto(root / 'output', config_path, probe_only=probe_only)
+                argv, kwargs = next(c for c in calls if c[0][0] == 'timeout')
+                expected = config['timeout_s'] + (0 if probe_only else config['gpu_wait_timeout_s'])
+                self.assertEqual(float(argv[3]), expected)
+                self.assertEqual(kwargs['timeout'], expected + 90)
+
+    def test_late_training_preflight_preserves_rejected_check(self):
+        # Initial admission can succeed while resources change during generation.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.remote_root(root)
+            ready = dict(ok=True, checks=[], software={})
+            failed = dict(ok=False, checks=[dict(name='training Python/packages', ok=False,
+                          detail=dict(processes=[dict(pid=123, gpu_uuid='GPU-0')],
+                                      allow_busy=False))], software={})
+            admission = dict(idle=[dict(index=i, uuid=f'GPU-{i}') for i in range(4)], observations=[])
+            calls = []
+            def run(config, output, **kwargs):
+                calls.append(config['phases'])
+                if not kwargs['preflight']['ok']:
+                    raise ValueError('GPU prerequisites are not ready')
+                return dict(status='ok')
+            with patch.object(remote, 'probe', return_value=admission), \
+                    patch.object(gpu_timing, 'check_resources',
+                                 side_effect=[ready] * 7 + [failed]), \
+                    patch.object(gpu_timing, 'run_suite', side_effect=run):
+                remote.remote_run(root)
+            saved = json.loads((root / 'results/remote.json').read_text())
+            self.assertEqual(calls, [['generation'], ['training']])
+            self.assertEqual(len(saved['suites']), 2)
+            self.assertEqual(saved['suites'][1]['status'], 'failed')
+            self.assertFalse(saved['suites'][1]['preflight']['ok'])
+            rejected = saved['suites'][1]['preflight']['checks'][0]
+            self.assertEqual(rejected['name'], 'training Python/packages')
+            self.assertEqual(rejected['detail']['processes'][0]['pid'], 123)
+            self.assertFalse(rejected['detail']['allow_busy'])
 
     def test_ssh_unavailable_is_a_recorded_skip(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -200,9 +515,10 @@ class RemoteTests(unittest.TestCase):
                     result = remote.remote_run(root)
                 if count < 4:
                     self.assertEqual(result['status'], 'failed')
-                    self.assertIn(f'required; found {count}', result['reason'])
+                    self.assertIn('budget exhausted', result['reason'])
+                    self.assertIn(f'required; found {count}', result['gpu_wait']['attempts'][-1]['reason'])
                     self.assertEqual(calls, [])
-                    check.assert_not_called()
+                    self.assertTrue(check.called)
                 else:
                     self.assertEqual(result['status'], 'measured')
                     self.assertEqual(sum(len(b) for _, b, _ in calls), 8)
@@ -231,7 +547,7 @@ class RemoteTests(unittest.TestCase):
                     result = remote.remote_run(root)
                 if count < 4:
                     self.assertEqual(calls, [])
-                    check.assert_not_called()
+                    self.assertTrue(check.called)
                     self.assertEqual(result['status'], 'failed')
                 else:
                     self.assertEqual(calls, [(['training'], [16, 64], ['GPU-0', 'GPU-1', 'GPU-2', 'GPU-3'])])

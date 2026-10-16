@@ -42,6 +42,58 @@ def measurement(case, config_sha='sha', devices=None):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_published_measurement_is_readable_and_never_replaced(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'result.json'
+            old_umask = os.umask(0o077)
+            try:
+                protocol.publish_json(path, {'status': 'ok'})
+            finally:
+                os.umask(old_umask)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+            original = path.read_bytes()
+            with self.assertRaises(FileExistsError):
+                protocol.publish_json(path, {'replacement': True})
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_resource_probes_share_remaining_deadline_and_keep_default_limits(self):
+        for bounded in (False, True):
+            with self.subTest(bounded=bounded), tempfile.TemporaryDirectory() as directory:
+                model = Path(directory)
+                (model / 'config.json').write_text('{}')
+                (model / 'weights.safetensors').touch()
+                config = self.config(model_path=str(model), devices=['0'], phases=['generation'], batches=[1])
+                clock = [100.0]
+                timeouts = []
+                def probe(argv, **kwargs):
+                    timeouts.append(kwargs['timeout'])
+                    if '--probe-packages' in argv:
+                        clock[0] += .4
+                        return SimpleNamespace(returncode=0, stdout='{"ok": true}')
+                    if 'memory.total' in argv[1]:
+                        clock[0] += .35
+                        return SimpleNamespace(stdout='0,GPU-0,H20,96000,580\n')
+                    return SimpleNamespace(stdout='')
+                with patch.object(runner.time, 'monotonic', side_effect=lambda: clock[0]), \
+                        patch.object(runner.shutil, 'which', return_value='/bin/nvidia-smi'), \
+                        patch.object(runner.subprocess, 'run', side_effect=probe):
+                    checked = runner.check_resources(config, deadline=101 if bounded else None)
+                self.assertTrue(checked['ok'])
+                expected = [1, .6, .25] if bounded else [30, 15, 15]
+                for actual, limit in zip(timeouts, expected):
+                    self.assertAlmostEqual(actual, limit)
+                self.assertEqual(len(timeouts), 3)
+
+    def test_expired_resource_deadline_starts_no_probe_process(self):
+        config = self.config(devices=['0'], phases=['generation'], batches=[1])
+        with patch.object(runner.time, 'monotonic', return_value=100), \
+                patch.object(runner.shutil, 'which', return_value='/bin/nvidia-smi'), \
+                patch.object(runner.subprocess, 'run') as run:
+            checked = runner.check_resources(config, deadline=100)
+        run.assert_not_called()
+        self.assertFalse(checked['ok'])
+        self.assertTrue(any('deadline exhausted' in str(row['detail']) for row in checked['checks']))
+
     def test_worker_does_not_shadow_stdlib_profile(self):
         # Reproduce the path Python adds when gpu_worker.py is run directly.
         script = (

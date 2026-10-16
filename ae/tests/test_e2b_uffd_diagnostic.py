@@ -80,7 +80,7 @@ class Files(unittest.TestCase):
 
     def published(self):
         s = self.guarded()
-        ram = self.root/'ae/work/et-0123456789';(ram/'tmp').mkdir(parents=True)
+        ram = self.root/'ae/work/0123456789';(ram/'t').mkdir(parents=True)
         active = {'units':{d.UNIT:self.daemon(42,402,str(s.config))}}
         (self.out/'actual.json').write_bytes(d._json(active));(self.out/'actual.json').chmod(0o600)
         s.publish(active,SimpleNamespace(ram=ram))
@@ -157,6 +157,7 @@ class Files(unittest.TestCase):
         s=self.published();row=json.loads(s.config.read_bytes())
         self.assertEqual(set(row),{'schema','nonce','output','socket_root','directory','pid','start_ticks',
             'executable_sha256','runtime_sha256','control_sha256','guard_sha256'})
+        self.assertEqual(row['socket_root'],str(self.root/'ae/work/0123456789/t'))
         self.assertEqual(row['pid'],42);self.assertEqual(row['start_ticks'],402)
         self.assertEqual(s.config.stat().st_mode & 0o777,0o600)
         self.assertEqual(row['guard_sha256'],d.digest(s.guard.read_bytes()))
@@ -170,8 +171,19 @@ class Files(unittest.TestCase):
         s=self.guarded()
         active={'units':{d.UNIT:self.daemon(42,402,'wrong')}}
         with self.assertRaisesRegex(ValueError,'environment mismatch'):
-            s.publish(active,SimpleNamespace(ram=self.root/'ae/work/et-0123456789'))
+            s.publish(active,SimpleNamespace(ram=self.root/'ae/work/0123456789'))
         self.assertFalse(s.config.exists())
+
+    def test_publish_refuses_old_or_foreign_socket_root(self):
+        session=self.guarded()
+        active={'units':{d.UNIT:self.daemon(42,402,str(session.config))}}
+        for ram in (self.root/'ae/work/et-0123456789',
+                    self.root/'ae/work/012345678x',self.root/'other/0123456789'):
+            with self.subTest(ram=ram):
+                (ram/'t').mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError,'socket root mismatch'):
+                    session.publish(active,SimpleNamespace(ram=ram))
+                self.assertFalse(session.config.exists())
 
     def test_same_guard_bytes_replaced_inode_are_rejected(self):
         s=self.guarded();other=s.guard.with_suffix('.other');other.write_bytes(s.guard.read_bytes());other.chmod(0o600)

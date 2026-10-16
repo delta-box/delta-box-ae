@@ -18,7 +18,9 @@ Run Figure 8(b) on the configured allinai2plus host, then produce Figure 8(c).
 Defaults: scan physical GPUs 0–7 and reserve four idle GPUs;
 all eight generation/training cases; a new timestamped result directory.
 Four idle GPUs are required before any model or measurement starts.
-Busy or reserved GPUs are excluded. Fewer than four causes an error.
+Busy or reserved GPUs are excluded. Poll every 60 seconds until four are ready.
+GPU admission waits share a three-hour budget; exhaustion exits with an error.
+Later phases wait for the same reserved GPUs if they become busy.
 At completion, print the eight-case summary and exact SUMMARY.md path.
 
 Options:

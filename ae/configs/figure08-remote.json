@@ -24,5 +24,7 @@
   "connect_timeout_s": 10,
   "timeout_s": 18000,
   "version_constraints": "ae/requirements-figure08-allinai2plus.txt",
-  "lock_root": "/mnt/nvme2/dyp/deltabox-ae-remote/locks"
+  "lock_root": "/mnt/nvme2/dyp/deltabox-ae-remote/locks",
+  "gpu_wait_timeout_s": 10800,
+  "gpu_poll_interval_s": 60
 }

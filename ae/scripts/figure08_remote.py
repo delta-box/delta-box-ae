@@ -66,6 +66,14 @@ def load_settings(path):
     for key in ('samples', 'connect_timeout_s', 'timeout_s'):
         if type(config[key]) is not int or config[key] <= 0:
             raise ValueError(f'{key} must be a positive integer')
+    config.setdefault('gpu_wait_timeout_s', 10800)
+    config.setdefault('gpu_poll_interval_s', 60)
+    for key in ('gpu_wait_timeout_s', 'gpu_poll_interval_s'):
+        value = config[key]
+        if type(value) not in (int, float) or not 0 < value < float('inf'):
+            raise ValueError(f'{key} must be finite and positive')
+    if config['gpu_wait_timeout_s'] > 10800:
+        raise ValueError('gpu_wait_timeout_s must not exceed 10800 seconds (3 hours)')
     if config['samples'] < 2:
         raise ValueError('At least two idle observations are required')
     for key in ('max_memory_mib', 'max_utilization_pct', 'sample_interval_s'):
@@ -154,10 +162,13 @@ def runtime_environment(root):
                 os.environ[name] = value
 
 
-def inventory():
+def inventory(*, deadline=None):
     def query(fields, kind='gpu'):
+        remaining = 15 if deadline is None else min(15, deadline - time.monotonic())
+        if remaining <= 0:
+            raise TimeoutError('GPU wait budget exhausted during inventory')
         result = subprocess.run(['nvidia-smi', f'--query-{kind}={fields}', '--format=csv,noheader,nounits'],
-                                check=True, capture_output=True, text=True, timeout=15)
+                                check=True, capture_output=True, text=True, timeout=remaining)
         return list(csv.reader(io.StringIO(result.stdout)))
     rows = []
     for fields in query('index,uuid,name,memory.used,utilization.gpu'):
@@ -184,12 +195,17 @@ def idle_devices(observations, config):
     return [dict(index=index, uuid=identity) for index, identity in sorted(stable)]
 
 
-def probe(config):
+def probe(config, *, deadline=None):
     observations = []
     for i in range(config['samples']):
+        remaining = float('inf') if deadline is None else deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('GPU wait budget exhausted during stable-idle observations')
         if i:
-            time.sleep(config['sample_interval_s'])
-        observations.append(inventory())
+            time.sleep(min(config['sample_interval_s'], remaining))
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError('GPU wait budget exhausted during stable-idle observations')
+        observations.append(inventory(deadline=deadline))
     return dict(observations=observations, idle=idle_devices(observations, config))
 
 
@@ -239,6 +255,131 @@ def check_versions(check, config, phase):
     check['ok'] = check['ok'] and not mismatches
 
 
+@contextlib.contextmanager
+def gpu_wait_window(report):
+    """Charge only admission work, not benchmark execution, to one shared budget."""
+    budget = report['gpu_wait']
+    started = time.monotonic()
+    deadline = started + budget['remaining_s']
+    try:
+        if started >= deadline:
+            raise TimeoutError('GPU wait budget exhausted; no worker started')
+        yield deadline
+    finally:
+        budget['remaining_s'] = max(0, budget['remaining_s'] - (time.monotonic() - started))
+
+
+def record_gpu_wait(report, output, label, observation, reserved, reason, deadline):
+    remaining = max(0, deadline - time.monotonic())
+    row = dict(stage=label, at=datetime.now(timezone.utc).isoformat(),
+               idle_count=len(observation['idle']), reserved_count=reserved,
+               remaining_s=remaining, reason=reason, observation=observation)
+    report['gpu_wait']['attempts'].append(row)
+    write_json(output / 'gpu-wait.json', report['gpu_wait'])
+    write_json(output / 'remote.json', report)
+    print(f"GPU admission ({label}): {reason}; idle={row['idle_count']}, "
+          f"reserved={reserved}/4, remaining={remaining:.1f}s", flush=True)
+
+
+def gpu_wait_pause(config, deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError('GPU wait budget exhausted; four idle, unreserved GPUs were not available')
+    time.sleep(min(config['gpu_poll_interval_s'], remaining))
+
+
+def wait_for_reservation(config, report, output, lock_dir):
+    """Release partial locks before every poll; never seize another job's GPU."""
+    with gpu_wait_window(report) as deadline:
+        while True:
+            if time.monotonic() >= deadline:
+                raise TimeoutError('GPU wait budget exhausted before reserving four idle GPUs')
+            observed = probe(config, deadline=deadline)
+            report['probe'] = observed
+            if not (output / 'admission.json').exists():
+                write_json(output / 'admission.json', observed)
+            acquired, selected = [], []
+            keep = False
+            try:
+                for device in observed['idle']:
+                    lock = (lock_dir / (device['uuid'] + '.lock')).open('a')
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        lock.close()
+                        continue
+                    except BaseException:
+                        lock.close()
+                        raise
+                    acquired.append(lock)
+                    selected.append(device)
+                    if len(acquired) == 4:
+                        break
+                reason = f'At least 4 idle, unreserved GPUs are required; found {len(acquired)}'
+                if len(acquired) == 4:
+                    report['recheck'] = probe(config, deadline=deadline)
+                    available = {(g['index'], g['uuid']) for g in report['recheck']['idle']}
+                    if all((g['index'], g['uuid']) in available for g in selected):
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError('GPU wait budget exhausted during reservation recheck')
+                        report['selected'] = selected
+                        record_gpu_wait(report, output, 'reservation', observed, 4, 'ready', deadline)
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError('GPU wait budget exhausted while recording reservation')
+                        keep = True
+                        return acquired
+                    reason = 'GPU occupancy changed after reservation; releasing locks and retrying'
+                record_gpu_wait(report, output, 'reservation', observed, len(acquired), reason, deadline)
+            finally:
+                if not keep:
+                    for lock in acquired:
+                        lock.close()
+            gpu_wait_pause(config, deadline)
+
+
+def wait_for_selected(config, report, output, devices, label, deadline):
+    """Keep the reserved UUIDs when a later phase/worker has to wait."""
+    while True:
+        if time.monotonic() >= deadline:
+            raise TimeoutError('GPU wait budget exhausted before ' + label)
+        observed = probe(config, deadline=deadline)
+        if time.monotonic() >= deadline:
+            raise TimeoutError('GPU wait budget exhausted before ' + label)
+        ready = set(devices) <= {g['uuid'] for g in observed['idle']}
+        record_gpu_wait(report, output, label, observed, len(report['selected']),
+                        'ready' if ready else 'Reserved GPU became busy; waiting without stopping other processes',
+                        deadline)
+        if ready:
+            if time.monotonic() >= deadline:
+                raise TimeoutError('GPU wait budget exhausted while recording ' + label)
+            return observed
+        gpu_wait_pause(config, deadline)
+
+
+def phase_preflight(settings, config, report, output, label):
+    """Only an idle-GPU failure is retryable; all other checks fail closed."""
+    from ae.runners import gpu_timing
+    with gpu_wait_window(report) as deadline:
+        while True:
+            check = gpu_timing.check_resources(settings, deadline=deadline)
+            check_versions(check, config, settings['phases'][0])
+            report.setdefault('phase_checks', []).append(dict(stage=label, check=check))
+            write_json(output / 'remote.json', report)
+            if time.monotonic() >= deadline:
+                raise TimeoutError('GPU wait budget exhausted during ' + label)
+            failed = [row for row in check['checks'] if not row['ok']]
+            if check['ok'] or not failed or any(row['name'] != 'idle GPUs' for row in failed):
+                return check
+            print(f"GPU admission ({label}): idle-GPU preflight failed; reserved="
+                  f"{len(report['selected'])}/4, remaining={max(0, deadline-time.monotonic()):.1f}s", flush=True)
+            gpu_wait_pause(config, deadline)
+            wait_for_selected(config, report, output, settings['devices'], label, deadline)
+            # A process can appear between the idle probe and check_resources.
+            # The monotonic deadline bounds these repeated races as well.
+            if time.monotonic() >= deadline:
+                raise TimeoutError('GPU wait budget exhausted during ' + label)
+
+
 def remote_run(root, *, probe_only=False):
     """Runs only on the GPU host. Locks coordinate our runs, never other users."""
     from ae.runners import gpu_timing
@@ -258,36 +399,39 @@ def remote_run(root, *, probe_only=False):
     try:
         report['storage'] = local_storage_admission(root)
         report['runtime_environment'] = runtime.enter_context(runtime_environment(root))
-        report['probe'] = probe(config)
-        write_json(output / 'admission.json', report['probe'])
         if probe_only:
+            report['probe'] = probe(config)
+            write_json(output / 'admission.json', report['probe'])
             report['reason'] = 'Probe only; no GPU measurements requested'
             return report
+        if len(config['devices']) < 4:
+            report.update(status='failed', reason='GPU allowlist must contain at least 4 physical GPUs; no worker started')
+            return report
+        # These probes do not load weights or initialize CUDA. Check software/model
+        # failures even when every GPU is occupied, instead of waiting three hours.
+        report['prerequisites'] = []
+        for phase, batches, devices in suites_for([str(i) for i in config['devices'][:4]], report['requested_cases']):
+            settings = protocol.load_config(model_path=config['model_path'], devices=devices, phases=[phase],
+                batches=batches, generation_python=config['generation_python'], training_python=config['training_python'])
+            with phase_environment(config, phase):
+                check = gpu_timing.check_resources(settings)
+                check_versions(check, config, phase)
+            blockers = [row for row in check['checks'] if not row['ok']
+                        and row['name'] != 'idle GPUs' and not row['name'].startswith('GPU ')]
+            # Ignore only occupancy/device availability at this early check. The
+            # actual chosen UUIDs get the complete preflight after reservation.
+            check['admission_blockers'] = blockers
+            report['prerequisites'].append(check)
+            if blockers or (not check['ok'] and not check['checks']):
+                report.update(status='failed', reason='Non-retryable model, software or inventory prerequisite failure; see prerequisites')
+                return report
+        report['gpu_wait'] = dict(timeout_s=config['gpu_wait_timeout_s'],
+            poll_interval_s=config['gpu_poll_interval_s'], remaining_s=config['gpu_wait_timeout_s'], attempts=[])
+        report['status'] = 'waiting'
         lock_dir = Path(config.get('lock_root', str(Path(config['remote_root']) / 'locks')))
         lock_dir.mkdir(parents=True, exist_ok=True)
         report['lock_root'] = str(lock_dir.resolve())
-        for device in report['probe']['idle']:
-            lock = (lock_dir / (device['uuid'] + '.lock')).open('a')
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                lock.close()
-                continue
-            acquired.append(lock)
-            report['selected'].append(device)
-            if len(acquired) == 4:
-                break
-        if len(acquired) < 4:
-            report.update(status='failed', reason=(
-                f'At least 4 idle, unreserved GPUs are required; found {len(acquired)} '
-                'among configured physical indices ' + ','.join(map(str, config['devices'])) +
-                '. No model or measurement started.'))
-            return report
-        report['recheck'] = probe(config)
-        available = {(g['index'], g['uuid']) for g in report['recheck']['idle']}
-        if any((g['index'], g['uuid']) not in available for g in report['selected']):
-            report['reason'] = 'GPU occupancy changed after admission; measurement skipped'
-            return report
+        acquired = wait_for_reservation(config, report, output, lock_dir)
         selected = [g['uuid'] for g in report['selected']]
         planned = suites_for(selected, report['requested_cases'])
         report['unavailable_requested_cases'] = sorted(set(report['requested_cases']) -
@@ -302,11 +446,11 @@ def remote_run(root, *, probe_only=False):
             settings = protocol.load_config(model_path=config['model_path'], devices=devices, phases=[phase],
                 batches=batches, generation_python=config['generation_python'], training_python=config['training_python'])
             with phase_environment(config, phase):
-                check = gpu_timing.check_resources(settings)
-                check_versions(check, config, phase)
+                check = phase_preflight(settings, config, report, output, 'initial-' + phase)
             report.setdefault('preflight', []).append(check)
             configs.append((phase, settings))
         if not all(check['ok'] for check in report['preflight']):
+            report['status'] = 'failed'
             report['reason'] = 'Remote model, software or GPU prerequisites unavailable; see preflight checks'
             return report
         report['status'] = 'running'
@@ -318,16 +462,22 @@ def remote_run(root, *, probe_only=False):
             write_json(output / 'remote.json', report)
             def guarded_execute(*args, **kwargs):
                 # The suite also verifies CUDA/NVML identities before loading each worker.
-                current = probe(config)
-                current['storage'] = local_storage_admission(root)
-                write_json(output / f'{name}-admission-{uuid.uuid4().hex}.json', current)
-                idle = {g['uuid'] for g in current['idle']}
-                if not set(settings['devices']) <= idle:
-                    raise RuntimeError('GPU became busy before worker launch; no other process was stopped')
+                with gpu_wait_window(report) as deadline:
+                    current = wait_for_selected(config, report, output, settings['devices'], name + '-worker', deadline)
+                    current['storage'] = local_storage_admission(root)
+                    write_json(output / f'{name}-admission-{uuid.uuid4().hex}.json', current)
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('GPU wait budget exhausted before worker launch')
                 return execute(*args, **kwargs)
             try:
                 with phase_environment(config, phase):
-                    suite = gpu_timing.run_suite(settings, output / name, executor=guarded_execute)
+                    # Keep the launch-time check: resources can change after the
+                    # initial all-phase preflight. Persist its failure details.
+                    launch_check = phase_preflight(settings, config, report, output, name + '-launch')
+                    row['preflight'] = launch_check
+                    write_json(output / 'remote.json', report)
+                    suite = gpu_timing.run_suite(settings, output / name,
+                                                executor=guarded_execute, preflight=launch_check)
                 report.setdefault('source_observations', []).append(verify_uploaded_source(report['source']))
                 suite['source_origin'] = report['source']
                 # Keep the subset runtime/release identity as produced; do not rewrite it.
@@ -345,12 +495,14 @@ def remote_run(root, *, probe_only=False):
         report['reason'] = ('Requested cases unavailable: ' + ', '.join(report['unavailable_requested_cases'])
                             if report['unavailable_requested_cases'] else '')
     except Exception as error:
-        report.update(status='failed' if report['status'] == 'running' else 'skipped',
+        report.update(status='skipped' if probe_only else 'failed',
                       reason=f'{type(error).__name__}: {error}')
     finally:
         for lock in acquired:
             lock.close()
         runtime.close()
+        if 'gpu_wait' in report:
+            write_json(output / 'gpu-wait.json', report['gpu_wait'])
         report['finished_at'] = datetime.now(timezone.utc).isoformat()
         write_json(output / 'remote.json', report)
     return report
@@ -568,7 +720,10 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
                         ['git', '-C', remote_source, '-c', 'user.name=DeltaBox AE', '-c', 'user.email=ae@localhost',
                          '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Exact uploaded Figure 8 source snapshot']):
             ssh(config, command, capture_output=True)
-        argv = ['timeout', '--signal=TERM', '--kill-after=45', str(config['timeout_s']),
+        total_timeout = config['timeout_s'] + (0 if probe_only else config['gpu_wait_timeout_s'])
+        print(f"GPU evaluation: waiting up to {0 if probe_only else config['gpu_wait_timeout_s']:g}s "
+              f"for four available GPUs; progress log: {output / 'ssh.log'}", flush=True)
+        argv = ['timeout', '--signal=TERM', '--kill-after=45', str(total_timeout),
                 config['python'], '-B', remote_source + '/ae/scripts/figure08_remote.py', '--remote-run', remote_root]
         if probe_only:
             argv.append('--probe-only')
@@ -576,7 +731,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
         execution_error = None
         try:
             with (output / 'ssh.log').open('w') as log:
-                ssh(config, argv, stdout=log, stderr=subprocess.STDOUT, timeout=config['timeout_s'] + 90)
+                ssh(config, argv, stdout=log, stderr=subprocess.STDOUT, timeout=total_timeout + 90)
         except (subprocess.SubprocessError, OSError) as error:
             execution_error = f'{type(error).__name__}: {error}'
         # Preserve partial evidence even if SSH or the remote process failed.
@@ -599,6 +754,7 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
             record['missing_selected_cases'] = combined['missing_selected_cases']
             record['missing_cases'] = combined['missing_cases']
             failed = any(row['status'] != 'ok' for row in remote['suites'])
+            record['execution_failed'] = failed
             record['status'] = ('complete' if not combined['missing_cases'] else
                                 'partial' if combined['cases'] else 'failed')
             if failed:
@@ -610,7 +766,9 @@ def run_auto(output, config_path=DEFAULT_CONFIG, *, probe_only=False, requested_
                 except Exception as error:
                     record['plot_error'] = f'{type(error).__name__}: {error}'
         if execution_error:
-            record.update(status='partial' if record['successful_cases'] else 'failed', reason=execution_error)
+            record['execution_failed'] = True
+            record.update(status='partial' if record['successful_cases'] else 'failed',
+                          reason=(record['reason'] + '; ' if record['reason'] else '') + execution_error)
     except Exception as error:
         record.update(status='failed' if started else 'skipped', reason=f'{type(error).__name__}: {error}')
         if isinstance(error, subprocess.CalledProcessError):
@@ -842,15 +1000,19 @@ def main():
     parser.add_argument('--gpu-cases', help='Explicit comma-separated case subset; global eight-case coverage remains separate')
     args = parser.parse_args()
     if args.remote_run:
-        remote_run(args.remote_run, probe_only=args.probe_only)
-        return 0
+        result = remote_run(args.remote_run, probe_only=args.probe_only)
+        return int(result['status'] == 'failed' or any(row['status'] != 'ok' for row in result['suites']))
     if not args.output:
         parser.error('--output is required')
     result = run_auto(args.output, args.config, probe_only=args.probe_only,
                       requested_case_ids=args.gpu_cases.split(',') if args.gpu_cases is not None else None)
     (args.output / 'result.md').write_text('\n'.join(report_lines(result, '.')))
     print(json.dumps(result, indent=2))
-    return 0
+    selected_complete = (result['status'] in ('complete', 'partial')
+                         and (result['status'] == 'complete' or result.get('selected_status') == 'complete')
+                         and not result.get('execution_failed', False))
+    return 0 if selected_complete or (
+        args.probe_only and result.get('reason', '').startswith('Probe only;')) else 1
 
 
 if __name__ == '__main__':

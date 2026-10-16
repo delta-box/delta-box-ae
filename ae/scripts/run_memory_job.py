@@ -28,9 +28,14 @@ from ae.scripts.owned_job_lifecycle import OwnedChildren
 
 
 def mount_info(path):
-    return json.loads(subprocess.check_output(
-        ['findmnt', '--json', '--target', str(path), '--output', 'TARGET,FSTYPE,OPTIONS'],
-        text=True))['filesystems'][0]
+    visible = visible_mount_id(path)
+    rows = json.loads(subprocess.check_output(
+        ['findmnt', '--json', '--target', str(path), '--output', 'ID,TARGET,FSTYPE,OPTIONS'],
+        text=True))['filesystems']
+    selected = [row for row in rows if row.get('id') == visible]
+    if len(selected) != 1:
+        raise RuntimeError('Cannot identify visible filesystem metadata: ' + str(path))
+    return {key: selected[0][key] for key in ('target', 'fstype', 'options')}
 
 
 def all_mount_records():
@@ -42,13 +47,25 @@ def all_mount_records():
     return records
 
 
+def visible_mount_id(path):
+    """Ask the kernel which mount backs the opened path, including overmounts."""
+    descriptor = os.open(path, os.O_PATH | os.O_CLOEXEC)
+    try:
+        info = Path(f'/proc/self/fdinfo/{descriptor}').read_text()
+        identities = re.findall(r'^mnt_id:\s*(\d+)\s*$', info, re.MULTILINE)
+        if len(identities) != 1:
+            raise RuntimeError('Cannot identify opened mount layer: ' + str(path))
+        return int(identities[0])
+    finally:
+        os.close(descriptor)
+
+
 def mount_record(path):
     """Resolve the visible layer, including when /tmp already is a mount."""
     records = [row for row in all_mount_records() if row['target'] == str(path)]
     if not records:
         return None
-    visible = int(subprocess.check_output(
-        ['findmnt', '--noheadings', '--output', 'ID', '--target', str(path)], text=True).strip())
+    visible = visible_mount_id(path)
     rows = [row for row in records if row['mount_id'] == visible]
     if len(rows) != 1:
         raise RuntimeError('Cannot identify visible mount layer: ' + str(path))

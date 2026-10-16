@@ -1125,7 +1125,7 @@ def service_placement(config, out, *, fanout_path, working_storage=False, source
             path.parent.mkdir(parents=True, exist_ok=True)
             text = '[Service]\nCPUAffinity=\nCPUAffinity=' + cpus + '\nNUMAPolicy=bind\nNUMAMask=\nNUMAMask=' + str(node) + '\n'
             if storage is not None and name == 'ae-e2b-orchestrator.service':
-                text += 'Environment="TMPDIR=' + str(storage.ram/'tmp') + '"\n'
+                text += 'Environment="TMPDIR=' + str(storage.ram/'t') + '"\n'
             if diagnostic is not None and name == 'ae-e2b-orchestrator.service':
                 text += diagnostic.dropin()
             path.write_text(text)

@@ -4,7 +4,7 @@
 
 **申请徽章：Available、Functional、Reproduced。**
 
-DeltaBox 对智能体沙箱的文件系统和进程状态做 checkpoint、restore 和分支，使树搜索智能体能以较低成本探索不同的候选路径。本 artifact 包含 DeltaBox 运行时、录制的智能体工作负载、实验驱动和绘图脚本，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，因此不需要 LLM API key。 本 artifact 的永久归档已发布于 Zenodo：[10.5281/zenodo.23202153](https://doi.org/10.5281/zenodo.23202153)。
+DeltaBox 对智能体沙箱的文件系统和进程状态做 checkpoint、restore 和分支，使树搜索智能体能以较低成本探索不同的候选路径。本 artifact 包含 DeltaBox 运行时、录制的智能体工作负载、实验驱动和绘图脚本，用于评估状态管理开销、内存占用和写放大。CPU 实验重放录制的 LLM 响应，因此不需要 LLM API key。 本 artifact 的永久归档已发布于 Zenodo：[10.5281/zenodo.23202152](https://doi.org/10.5281/zenodo.23202152)。归档提供编译好的 guest 内核 `linux/vmlinux`，使用方法见[归档说明](ARCHIVE-zh.md)。
 
 建议按以下三步评估：
 
@@ -12,7 +12,7 @@ DeltaBox 对智能体沙箱的文件系统和进程状态做 checkpoint、restor
 2. 用 `ae/run_all_no_gpu.sh` 运行[全部 CPU 实验](#run-all)（约 2 小时）。
 3. 按需从[实验索引](#experiments)中单独重跑某项实验。
 
-为控制运行时间，每项实验默认最多使用 3 条输入，少于论文中的数量；可用 [`--limit N`](#run-all) 增加。Replay、CRIU 和 Firecracker Diff（FC-Diff）从固定的 44 条录制轨迹中选取输入。Figure 8(b) 需要另一台机器上的 GPU；没有空闲 GPU 时，报告中记为跳过。
+为控制运行时间，每项实验默认最多使用 3 条输入，少于论文中的数量；可用 [`--limit N`](#run-all) 增加。Replay、CRIU 和 Firecracker Diff（FC-Diff）从固定的 44 条录制轨迹中选取输入。Figure 8(b) 需要另一台机器上的四张空闲 GPU。脚本每 60 秒轮询，单次运行累计等待 GPU 最多三小时；超时后 GPU 运行失败并保留诊断。
 
 [快速开始](#quick-start) · [实验索引](#experiments) · [查看结果](#results) · [运行问题](#troubleshooting) · [自建环境](#self-hosting) · [托管机器说明](#hosted-details)
 
@@ -95,7 +95,7 @@ bash ae/run_all.sh --limit 3
 bash ae/run_all.sh --limit 3 --numa-node "$AE_NUMA_NODE" --cpus "$AE_CPUS"
 ```
 
-它使用与上面相同的 3 条输入上限和输入池，运行结束后分析结果并生成对比页。CPU 实验之后，它会检查 GPU 主机 `allinai2plus` 上为本 artifact 预留的 GPU：没有空闲 GPU 时，Figure 8(b) 记为跳过；有 1–3 张空闲时，运行八个案例中的六个；有 4 张时运行全部八个。GPU 是否可用不影响 CPU 结果。所有 CPU 和 GPU 输入都完成后会自动计算 Figure 8(c)；也可以[手动计算](#figure-08-gpu)。
+它使用与上面相同的 3 条输入上限和输入池，运行结束后分析结果并生成对比页。CPU 实验之后，它会检查 GPU 主机 `allinai2plus` 上为本 artifact 预留的 GPU：托管 runner 在加载模型前要求四张空闲且未被预留的 GPU，单独选择案例时同样如此。条件不满足时每 60 秒轮询，满足后才开始测量；首次接纳和后续 GPU 占用变化共享三小时累计等待预算，耗尽后 GPU 运行失败并保留诊断。完整运行包含全部八个生成与训练案例。GPU 是否可用不影响 CPU 结果。所有 CPU 和 GPU 输入都完成后会自动计算 Figure 8(c)；也可以[手动计算](#figure-08-gpu)。
 
 ### 输入集合
 
@@ -168,7 +168,7 @@ bash ae/run_all.sh --group table-02 --output "$AE_RUN/table-02"
 
 如需只运行一个 backend，使用 `--experiment table-02-e2b` 等选项，并指定新的输出目录。
 
-**输出与判断。** 打开 `table-02-comparison.png`。分别比较 checkpoint 和 restore：先在每个工作负载组内比较，再看 `All` 行（图中标为 `Event Avg`）。`All` 是对全部事件求平均，因此不等于四个组均值的简单平均。单位为毫秒，越低越好。论文的结论是 DeltaBox 的开销低于各 baseline。比较不同系统时，请注意各系统的配置以及计时所包含的范围。
+**输出与判断。** 打开 `table-02-comparison.png`。分别比较 checkpoint 和 restore：先在每个工作负载组内比较，再看 `All` 行（图中标为 `Event Avg`）。`All` 是对全部事件求平均，因此不等于四个组均值的简单平均。单位为毫秒，越低越好。论文的结论是 DeltaBox 的开销低于各 baseline。比较不同系统时，请注意各系统的配置以及计时所包含的范围。新跑的 DeltaBox 结果采用 `checkpoint_api_wall_ms` 和 `restore_api_wall_ms`；论文原始 restore 记录采用更窄的 `restore_critical_ms` 区间。两列 restore 的计时边界不同，不能视为同口径性能对比，具体见[计时定义](ae/docs/table3-method.md#timer-boundaries)。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>
@@ -195,7 +195,7 @@ bash ae/run_all.sh --group table-03 --output "$AE_RUN/table-03"
 
 两种模式使用相同的输入。lazy pages 等运行时选项见[Table 3 实验说明](ae/docs/table3-method.md)。
 
-**输出与判断。** 在 `table-03-comparison.png` 中查看 Overlay、fork/CRIU 和 coordination 三个组件，找出每条恢复路径的主要开销。fast restore 更快，是因为复用模板省去了大部分进程重建工作。各组件之和构成 Table 3 的总时间，但它们覆盖的时间窗口比 Table 2 的端到端 API 时间窄，因此两张表不能直接比较。`—` 表示该组件不适用于这条路径。
+**输出与判断。** 在 `table-03-comparison.png` 中查看 Overlay、fork/CRIU 和 coordination 三个组件，找出每条恢复路径的主要开销。fast restore 更快，是因为复用模板省去了大部分进程重建工作。部分组件区间存在重叠，直接相加不等于总耗时；总时间应读取直接记录的组件窗口。新跑 Table 2 的完整 API 区间是另一项更宽的测量。`—` 表示该组件不适用于这条路径。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>
@@ -279,7 +279,7 @@ bash ae/run_all.sh \
 
 Figure 7 由这些完整轨迹计算得出，不需要单独的计时运行。如果已经运行过 Table 2 或整套实验，直接使用那次的输出即可。
 
-**输出与判断。** 打开 `figure-07-comparison.png`。1.0× 线代表 LLM 与动作时间，高出的部分是状态管理开销。请分别比较 Django、SymPy、Scientific 和 Tools/Small 四组，而不是只凭绝对毫秒数判断影响。每根柱子是组内总量之比（各计时组件求和），而不是逐步比值的平均。
+**输出与判断。** 打开 `figure-07-comparison.png`。1.0× 线代表 LLM 与动作时间，高出的部分是状态管理开销。请分别比较 Django、SymPy、Scientific 和 Tools/Small 四组，而不是只凭绝对毫秒数判断影响。每根柱子是组内总量之比（各计时组件求和），而不是逐步比值的平均。这是串行组件模型，并非对整条轨迹直接计时，也没有测量异步 checkpoint 的实际重叠。分析器保留组件公式，并将结果标记为 `derived_model`。
 
 <table>
 <tr><th>论文图表</th><th>脚本输出示例</th></tr>
@@ -337,7 +337,7 @@ bash ae/run_all_gpu.sh
 
 GPU 临时工作和编译缓存放在 `allinai2plus` 的 `/dev/shm/deltabox-ae-1066`，模型文件仍在原位置复用。日志和结果会回传到 `spr4numa` 本仓库的 `ae/results/selected/gpu-only-*` 中持久保存。远端临时目录位于内存文件系统，GPU 主机重启后会清空。
 
-GPU 专用入口检查 `allinai2plus` 上编号 0–7 的 GPU，自动选择并锁定 4 张空闲卡。不足 4 张空闲且未被预留的 GPU 时，在加载模型或开始测量前报错退出。脚本会连续检查占用情况，并在加锁后再次核实。生成阶段和 batch 1/4 的训练使用选中卡中的 1 张，batch 16/64 的训练使用全部 4 张。脚本自动创建新的结果目录，也可用 `--output PATH` 指定；`--gpu-devices ID,...` 可将自动选择范围限制为指定 GPU。
+GPU 专用入口检查 `allinai2plus` 上编号 0–7 的 GPU，自动选择并锁定 4 张空闲卡。不足 4 张空闲且未被预留的 GPU 时，每 60 秒轮询，满足后才加载模型或开始测量。首次接纳及后续阶段、worker 启动前的占用检查，累计等待 GPU 最多三小时，测量执行时间不占等待预算；耗尽预算后报错退出。首次接纳未凑齐四张卡时释放部分锁，下次重新选择；接纳后保持所选 GPU UUID 和锁。脚本会连续检查占用情况，并在加锁后再次核实。生成阶段和 batch 1/4 的训练使用选中卡中的 1 张，batch 16/64 的训练使用全部 4 张。脚本自动创建新的结果目录，也可用 `--output PATH` 指定；`--gpu-devices ID,...` 可将自动选择范围限制为指定 GPU。
 
 面板 (b) 完成后，同一条命令接着生成面板 (c)。与论文相同，面板 (c) 把论文的 Equation 1 应用于这些 GPU 时间和一次 CPU 运行的 fan-out 时间。命令从 `ae/results` 下你最近一次完成的 `ae/run_all_no_gpu.sh` 运行中读取 fan-out 时间，并在汇总中写明所用的运行。图保存在 GPU 结果目录的 `gpu/attempt-001/comparison/theory/plots/figure-08c.png`。三个系统都测量 N = 16 和 64，供面板 (c) 使用。旧 CPU 结果中缺失的点仍明确标为未测量；重新运行 `--group figure-08-cpu` 可获得完整的 fan-out 数据。如果还没有完成的 CPU 运行，面板 (c) 会标为不可用；请先运行 `ae/run_all_no_gpu.sh`。
 
@@ -347,7 +347,7 @@ GPU 专用入口检查 `allinai2plus` 上编号 0–7 的 GPU，自动选择并�
 bash ae/run_all.sh --group figure-08 --output "$AE_RUN/figure-08"
 ```
 
-远端的模型和 Python 环境由作者维护。脚本只检查为本 artifact 预留的 GPU（远端配置中的 `devices` 列表），并把繁忙或不可用的 GPU 记为跳过。空闲 GPU 不足时，运行会产生一个标为部分结果的输出；每个案例的参数保持不变。见[GPU 环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
+远端的模型和 Python 环境由作者维护。脚本只检查远端配置 `devices` 列出的候选 GPU；等待原因和剩余时间写入 `ssh.log` 及接纳诊断。等待超时会保留已完成结果，但整轮不算 GPU 完成。模型、软件、存储或配置错误立即停止；轮询不会重跑已完成的案例。远端配置的 `gpu_wait_timeout_s` 和 `gpu_poll_interval_s` 分别控制累计等待预算和轮询间隔。见[GPU 环境指南](ae/docs/self-hosting-zh.md#gpu-setup)。
 
 **输出与判断。** 面板 (b) 输出每次重复的生成与训练时间，以及 `gpu/attempt-NNN/plots/figure-08b.png`；请在相同 batch size 下比较同一阶段。CPU fan-out 和 GPU 测量都成功后，面板 (c) 输出 `gpu/attempt-NNN/comparison/theory/occupation.json` 及相应图表。面板 (c) 采用论文的 Equation 1，与论文 Figure 8(c) 的方法相同：检查沙箱时间缩短后，预期 GPU 占用率是否提高、staleness 是否降低。两个面板都会出现在本次运行的中英文对比页中。
 
@@ -458,7 +458,7 @@ bash ae/run_all.sh --group figure-06 --resume "$AE_RUN/figure-06"
 | 提示另一个 AE 运行正在进行 | 等待该运行结束后重试 |
 | 运行期间 SSH 连接断开 | 运行会停止；用 `--resume <结果目录>` 继续 |
 | 长时间没有新的终端输出 | 查看 `SUMMARY.md` 链接的日志，或 `logs/attempt-NNN/<step>/stdout.log` |
-| GPU 不可用或全部繁忙 | 请作者为 AE 机器分配 GPU，然后对同一输出目录续跑 |
+| 不足四张可用 GPU | 脚本每 60 秒轮询，累计等待最多三小时；超时后检查接纳诊断，安排资源，再对同一输出目录续跑 |
 | 依赖、权限或模板检查失败 | 保存 `SUMMARY.md` 和相关日志，通过 AE 提交系统联系作者 |
 | 想做更小规模的运行 | 给单项命令加上 `--limit 1`，并使用单独的输出目录 |
 | 想查看实验名称列表 | 运行 `bash ae/run_all.sh --list` |

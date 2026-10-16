@@ -90,7 +90,7 @@ bash ae/run_test.sh --config "$AE_CONFIG"
 
 准备非交互 SSH、两端 rsync、本地绘图依赖和远端 GPU 环境。默认复用已部署的 py312，不自动安装软件；版本漂移会被预检记录。完整参数和准备说明见 [Figure 8 指南](../paper/figure-08/README.md)。
 
-`--group cpu` 只选 CPU，`--group gpu` 自动运行远端生成/训练，`--group figure-08` 还包含 CPU fan-out，并在八个 GPU 案例与全部 CPU 输入齐全时推导 (c)。全忙跳过，1–3 张空闲卡运行六案例，四张运行八案例。GPU 失败不影响 CPU 退出码，状态与缺项写入 `result.md`；resume 使用新 GPU attempt，分析已有数据不启动 SSH 测量。
+`--group cpu` 只选 CPU，`--group gpu` 自动运行远端生成/训练，`--group figure-08` 还包含 CPU fan-out，并在八个 GPU 案例与全部 CPU 输入齐全时推导 (c)。启动任一案例前都要求四张空闲且未被预留的 GPU。脚本每 60 秒轮询，首次接纳与后续占用检查累计等待最多三小时（`gpu_wait_timeout_s=10800`、`gpu_poll_interval_s=60`）；超时后 GPU 运行失败并保留诊断与已完成结果。非 GPU 占用的前提错误立即失败。GPU 失败不会丢弃 CPU 结果，状态与缺项写入 `result.md`；resume 使用新 GPU attempt，分析已有数据不启动 SSH 测量。
 
 ## 4. 专用配置与内存盘入口
 

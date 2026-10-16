@@ -258,6 +258,9 @@ def publish_json(path, value):
             temporary = Path(stream.name)
             json.dump(value, stream, indent=2, allow_nan=False)
             stream.write('\n')
+        # Completed public AE measurements must stay readable after collection
+        # by the privileged hosted launcher. NamedTemporaryFile starts at 0600.
+        temporary.chmod(0o644)
         os.link(temporary, path)
     finally:
         if temporary is not None:

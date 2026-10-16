@@ -24,11 +24,20 @@ from release.lock import from_environment
 WORKER = Path(__file__).with_name('gpu_worker.py')
 
 
-def query_gpus():
+def probe_timeout(limit, deadline):
+    if deadline is None:
+        return limit
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError('GPU prerequisite deadline exhausted')
+    return min(limit, remaining)
+
+
+def query_gpus(*, deadline=None):
     if shutil.which('nvidia-smi') is None:
         raise RuntimeError('nvidia-smi is not available')
     response = subprocess.run(['nvidia-smi', '--query-gpu=index,uuid,name,memory.total,driver_version',
-                               '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=15, check=True)
+                               '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=probe_timeout(15, deadline), check=True)
     devices = []
     for row in csv.reader(io.StringIO(response.stdout)):
         if len(row) != 5:
@@ -36,7 +45,7 @@ def query_gpus():
         index, uuid, name, memory, driver = [x.strip() for x in row]
         devices.append(dict(index=index, uuid=uuid, name=name, memory_total_mib=float(memory), driver=driver))
     active = subprocess.run(['nvidia-smi', '--query-compute-apps=pid,gpu_uuid', '--format=csv,noheader,nounits'],
-                            capture_output=True, text=True, timeout=15, check=True)
+                            capture_output=True, text=True, timeout=probe_timeout(15, deadline), check=True)
     processes = []
     for row in csv.reader(io.StringIO(active.stdout)):
         if not row or not any(x.strip() for x in row):
@@ -47,7 +56,7 @@ def query_gpus():
     return devices, processes
 
 
-def check_resources(config):
+def check_resources(config, *, deadline=None):
     checks, software, selected, processes = [], {}, [], []
     def check(name, ok, detail):
         checks.append(dict(name=name, ok=bool(ok), detail=detail))
@@ -63,14 +72,14 @@ def check_resources(config):
         python = config[phase + '_python']
         try:
             result = subprocess.run([python, str(WORKER), '--probe-packages', phase],
-                                    capture_output=True, text=True, timeout=30)
+                                    capture_output=True, text=True, timeout=probe_timeout(30, deadline))
             details = json.loads(result.stdout)
             software[phase] = details
             check(phase + ' Python/packages', result.returncode == 0 and details.get('ok'), details)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             check(phase + ' Python/packages', False, str(error))
     try:
-        inventory, all_processes = query_gpus()
+        inventory, all_processes = query_gpus() if deadline is None else query_gpus(deadline=deadline)
         for requested in config['devices']:
             candidates = [g for g in inventory if requested in (g['index'], g['uuid'])]
             if len(candidates) != 1:

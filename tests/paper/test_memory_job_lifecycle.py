@@ -435,8 +435,37 @@ class MountOwnershipTests(unittest.TestCase):
     def test_visible_mount_id_selected_instead_of_guessing_stack_order(self):
         rows=[{'mount_id':20,'target':str(self.target)},{'mount_id':10,'target':str(self.target)}]
         with patch.object(job,'all_mount_records',return_value=rows), \
-             patch.object(job.subprocess,'check_output',return_value='20\n'):
+             patch.object(job,'visible_mount_id',return_value=20):
             self.assertEqual(job.mount_record(self.target),rows[0])
+
+    def test_mount_metadata_selects_visible_tmpfs_not_shadowed_disk(self):
+        rows = [{'id': 6423, 'target': str(self.target), 'fstype': 'ext4', 'options': 'ro'},
+                {'id': 6425, 'target': str(self.target), 'fstype': 'tmpfs', 'options': 'rw,noswap'}]
+        with patch.object(job, 'visible_mount_id', return_value=6425), \
+             patch.object(job.subprocess, 'check_output', return_value=json.dumps({'filesystems': rows})):
+            self.assertEqual(job.mount_info(self.target),
+                             {'target': str(self.target), 'fstype': 'tmpfs', 'options': 'rw,noswap'})
+
+    def test_mount_metadata_rejects_missing_visible_identity(self):
+        with patch.object(job, 'visible_mount_id', return_value=6425), \
+             patch.object(job.subprocess, 'check_output', return_value='{"filesystems": []}'):
+            with self.assertRaisesRegex(RuntimeError, 'filesystem metadata'):
+                job.mount_info(self.target)
+
+    def test_opened_path_uses_kernel_mount_id_and_closes_descriptor(self):
+        with patch.object(job.os, 'open', return_value=73), \
+             patch.object(job.Path, 'read_text', return_value='pos:\t0\nflags:\t012000000\nmnt_id:\t6425\n'), \
+             patch.object(job.os, 'close') as close:
+            self.assertEqual(job.visible_mount_id(self.target), 6425)
+        close.assert_called_once_with(73)
+
+    def test_missing_kernel_mount_id_fails_closed_and_closes_descriptor(self):
+        with patch.object(job.os, 'open', return_value=73), \
+             patch.object(job.Path, 'read_text', return_value='pos:\t0\n'), \
+             patch.object(job.os, 'close') as close:
+            with self.assertRaisesRegex(RuntimeError, 'opened mount layer'):
+                job.visible_mount_id(self.target)
+        close.assert_called_once_with(73)
 
 
 if __name__ == '__main__': unittest.main()

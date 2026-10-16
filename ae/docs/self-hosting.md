@@ -90,7 +90,7 @@ The one-click workflow uses only auto mode: SSH to `allinai2plus` and probe the 
 
 Prepare noninteractive SSH, rsync on both hosts, local plotting dependencies and the remote GPU environment. The default reuses deployed py312 without installing software; preflight records version drift. See the [Figure 8 guide](../paper/figure-08/README.md) for setup and exact parameters.
 
-`--group cpu` selects CPU only; `--group gpu` automatically runs remote generation/training; `--group figure-08` also measures CPU fan-out and derives (c) when all eight GPU cases and CPU inputs are complete. Busy GPUs cause a skip, 1–3 idle GPUs allow six cases, and four allow eight. GPU failure does not change the CPU exit code; `result.md` preserves status and gaps. Resume creates a new GPU attempt; analysis-only never starts SSH measurements.
+`--group cpu` selects CPU only; `--group gpu` automatically runs remote generation/training; `--group figure-08` also measures CPU fan-out and derives (c) when all eight GPU cases and CPU inputs are complete. Four idle, unreserved GPUs are required before any case starts. The runner polls every 60 seconds; initial admission and later GPU occupancy checks share up to three hours of waiting (`gpu_wait_timeout_s=10800`, `gpu_poll_interval_s=60`). Expiry fails the GPU run and preserves diagnostics and completed results. Non-GPU prerequisite errors fail immediately. GPU failure does not discard CPU results; `result.md` preserves status and gaps. Resume creates a new GPU attempt; analysis-only never starts SSH measurements.
 
 ## 4. Specialized configurations and RAM-backed entry points
 

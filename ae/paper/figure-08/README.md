@@ -24,21 +24,20 @@ bash ae/run_all.sh --group figure-08
 
 | 可用卡数 | 自动行为 |
 |---|---|
-| 0 | 跳过 8(b)，在 `result.md` / `SUMMARY.md` / `review.json` 中说明原因 |
-| 1–3 | 测量生成 B1/4/16/64、训练 B1/4；四卡训练保留缺项 |
+| 0–3 | 每 60 秒轮询；等待预算耗尽后报错，保留原因；等待期间不加载模型或开始测量 |
 | ≥4 | 测量完整八案例；按物理编号选择前四张符合条件且成功加锁的卡 |
 
-只提供 auto，不设 off/required 模式。SSH 不通、环境缺失、GPU 全忙均可跳过；执行后失败与未执行分开记录。GPU 的 `complete` / `partial` / `skipped` / `failed` 状态不改变 CPU 实验退出码；CPU 成功不代表 GPU 完整。`--test`（兼容 `--smoke`）、`--max-events`、不含 GPU 的分组和 `--analyze-existing` 不启动 GPU 测量。`--resume` 使用新的 GPU attempt 目录，不复用旧测量填补本轮缺项。
+只提供 auto，不设 off/required 模式。四卡要求也适用于仅选择部分 GPU 案例的托管调用。SSH、环境或资源检查失败会保留具体原因，未执行与执行后失败分开记录；此前完成的 CPU 证据保留，但不代表 GPU 完整。`--test`（兼容 `--smoke`）、`--max-events`、不含 GPU 的分组和 `--analyze-existing` 不启动 GPU 测量。`--resume` 使用新的 GPU attempt 目录，不复用旧测量填补本轮缺项。
 
-默认连采三次，每次间隔一秒，必须始终没有计算进程、显存占用 ≤512 MiB、利用率 ≤5%，并保持相同 GPU UUID。接纳后和每个 worker 启动前再次检查。共享锁只协调本工具的任务，无法预留其他用户的 GPU；不会停止其他任务。没有后台排队等待资源，也未实现 GPU 拓扑优化。
+默认连采三次，每次间隔一秒，必须始终没有计算进程、显存占用 ≤512 MiB、利用率 ≤5%，并保持相同 GPU UUID。接纳后和每个 worker 启动前再次检查。首次接纳及后续阶段、worker 启动前的 GPU 占用变化，共享三小时累计等待预算；正常测量时间不计入等待预算。首次未凑齐四张卡时释放部分锁后等待；接纳后固定所选 GPU UUID 和锁，繁忙时等待同一批卡，不重跑已完成案例。前台进程每轮记录等待原因、卡数和剩余时间，可查看输出目录中的 `ssh.log` 和接纳诊断。预算耗尽后报错退出并保留已有证据。模型、软件、存储、配置等非 GPU 占用错误立即失败。共享锁只协调本工具的任务，无法预留其他用户的 GPU；不会停止其他任务。
 
-配置集中在 [`ae/configs/figure08-remote.json`](../../configs/figure08-remote.json)：SSH 别名、远端目录、本地模型路径、Python 路径、候选卡和超时。CPU 配置中的 `gpu_remote_config` 可指定替代文件，相对路径按 CPU 配置目录解释。默认复用 allinai2plus 的 py312 环境；顶层包版本由 [`requirements-figure08-allinai2plus.txt`](../../requirements-figure08-allinai2plus.txt) 校验，漂移则跳过并记录，不自动安装或修改共享环境。该文件只约束顶层包版本，不是完整传递依赖锁；四卡执行结果以本轮原始记录为准。
+配置集中在 [`ae/configs/figure08-remote.json`](../../configs/figure08-remote.json)：SSH 别名、远端目录、本地模型路径、Python 路径、候选卡和超时。`gpu_wait_timeout_s` 默认 10800 秒，`gpu_poll_interval_s` 默认 60 秒；远端执行与本地 SSH 超时另加这份等待预算。`timeout_s` 保留原测量执行上限。CPU 配置中的 `gpu_remote_config` 可指定替代文件，相对路径按 CPU 配置目录解释。默认复用 allinai2plus 的 py312 环境；顶层包版本由 [`requirements-figure08-allinai2plus.txt`](../../requirements-figure08-allinai2plus.txt) 校验，漂移则拒绝测量并记录，不自动安装或修改共享环境。该文件只约束顶层包版本，不是完整传递依赖锁；四卡执行结果以本轮原始记录为准。
 
 运行端需要可用的非交互 SSH 身份、`ssh`、`rsync` 和本地绘图依赖；远端需要 `python3`、`git`、`tar`、`timeout`、`rsync`、`nvidia-smi`、已准备的模型和 GPU Python 环境。sudo/托管入口使用原调用用户的 SSH 身份；该用户必须有主机别名与免交互访问权限。
 
 每次上传源码子集及 SHA-256，在远端独立目录建立快照 Git 提交；保留原仓库身份，远端快照不冒充完整 release lock。模型不传输。结果回收到 `gpu/attempt-NNN/`，先校验配置、原始结果、GPU UUID、源码与模型身份，再本地生成图表。失败 suite 的原始文件保留但不进入图表。`result.md` 链接本轮 manifest、日志和图，缺测不使用历史结果补齐。SSH 中断时远端任务有超时上限，原始证据保留在 manifest 指明的远端目录。
 
-只检查远端连通、源码传输、连续 GPU 探测及结果回收，不加载模型：
+只检查远端连通、源码传输、一轮连续 GPU 探测及结果回收，不加载模型，也不等待 GPU：
 
 ```sh
 python3 ae/scripts/figure08_remote.py --probe-only --output ae/work/figure08-admission-check
@@ -141,7 +140,7 @@ python3 ae/runners/gpu_timing.py plot \
 
 输出包括 `summary.json`、固定的 `config.json`、模型文件哈希、每个任务的 `stdout.log` / `process.json` / `result.json`。运行器保存物理 GPU UUID；为兼容 vLLM，子进程使用数字卡号和 PCI 顺序，并在加载模型前核对 CUDA 实际 UUID。完整 case 参数、软件版本、实际设备和重复编号均校验后才采纳计时。模型哈希在运行前后核对，开销不计入每个 case 的 GPU 时延。复制完整结果目录到分析机以保留原始证据。
 
-CPU/NUMA 绑定可由 GPU 机器的调度器或外层 numactl 设置。输出保存主进程 CPU affinity 与允许内存节点；实际内存分配策略可另保存 `numactl --show`。GPU 机器应按本机拓扑选择 CPU 编号。本次 spr4numa 的 CPU 脚本验证统一在 `/mnt/disk2/dyp/deltabox-runtime` 内执行，使用 NUMA3 / CPU 72–75 / 内存 bind:3，结果保存在该仓库的 `ae/results/`。
+CPU/NUMA 绑定可由 GPU 机器的调度器或外层 numactl 设置。输出保存主进程 CPU affinity 与允许内存节点；实际内存分配策略可另保存 `numactl --show`。GPU 机器应按本机拓扑选择 CPU 编号。spr4numa 的公开托管入口为 `atc-ae` 的 `~/delta-box-ae`；独立 reviewer 环境由对应 root-owned policy 选择既有 checkout。结果与临时工作目录归属所选仓库，实际 NUMA/CPU 绑定和 noswap 存储条件随各次 CPU 运行记录。
 
 ## 用新测量计算 (c)
 

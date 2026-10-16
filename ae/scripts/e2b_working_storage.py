@@ -157,12 +157,14 @@ class WorkingStorage:
         self.size=config.get('e2b',{}).get('fanout_memory_size_gib',24)
         require(type(self.size) is int and self.size>0, 'Invalid E2B fanout RAM ceiling')
         self.mounts=[];self.original={};self.closure=None;self.paths=None;self.directories={}
-        self.ram=self.root/'ae/work'/('et-'+uuid.uuid4().hex[:10])
+        # Keep the same 40-bit identity and repository-owned volume, with a
+        # compact spelling that also fits dedicated checkouts in sun_path.
+        self.ram=self.root/'ae/work'/uuid.uuid4().hex[:10]
         self.alias=self.out/'original-templates'
         self.out_identity=None;self.vm_identity=None;self.original_tmpdir=None
         require(self.out.is_absolute() and self.root.is_absolute() and '..' not in self.out.parts
                 and self.out.is_relative_to(self.root), 'Unsafe E2B storage receipt location')
-        require(len(str(self.ram/'tmp'/UFFD_SOCKET_NAME).encode('utf-8'))<=107,
+        require(len(str(self.ram/'t'/UFFD_SOCKET_NAME).encode('utf-8'))<=107,
                 'E2B RAM TMPDIR is too long for the UFFD Unix socket (107-byte limit)')
 
     def open_receipt_directory(self):
@@ -268,18 +270,18 @@ class WorkingStorage:
                                 'Template copy differs or source changed during staging')
                         file['sha256']=sha
             bind_private(staged,target,self.mounts)
-        (self.ram/'tmp').mkdir()
+        (self.ram/'t').mkdir()
         check_capacity(self.ram,'e2b-before-service-start',self.next_snapshot_bytes,
                        self.out/'capacity.jsonl',node=self.node)
         self.save('prepared.json',dict(source_sha256=self.source_sha256,node=self.node,cpus=self.cpus,
-            mounts=self.mounts,dependency_closure=self.closure,tmpdir=str(self.ram/'tmp'),
+            mounts=self.mounts,dependency_closure=self.closure,tmpdir=str(self.ram/'t'),
             capacity_checks=[json.loads(line) for line in (self.out/'capacity.jsonl').read_text().splitlines()]))
 
     def verify_active(self, orchestrator):
         pid=orchestrator['process']['pid'];start=orchestrator['process']['start_ticks']
         paths=paths_from_process(pid)
-        require(process_tmpdir(pid)==self.ram/'tmp', 'E2B daemon TMPDIR differs from its owned RAM directory')
-        paths=dict(paths,TMPDIR=self.ram/'tmp')
+        require(process_tmpdir(pid)==self.ram/'t', 'E2B daemon TMPDIR differs from its owned RAM directory')
+        paths=dict(paths,TMPDIR=self.ram/'t')
         result=[]
         for key,path in paths.items():
             observed=visible_mount(pid,path);mount=observed['mount'];opts=mount['options'].split(',')
