@@ -1,0 +1,31 @@
+{
+  "scope": "artifact functional acceptance",
+  "paper_performance_rerun": false,
+  "status": "passed",
+  "outer_vmm": "QEMU/KVM microvm",
+  "vcpu_count": 4,
+  "memory_gib": 8,
+  "deltabox_location": "processes inside the outer VM",
+  "kernel_sha256": "0ba5e9ee744bcb2bac3391e967cf36cfeb10fd3add067055321cb136cd5004c0",
+  "runs": [
+    {
+      "mode": "check",
+      "exit_code": 0,
+      "log": "check-final.log",
+      "log_sha256": "2c10e813d80386e81314247ff788f2641e9aeb0ea5072874056139d4a889cd0c"
+    },
+    {
+      "mode": "fanout",
+      "exit_code": 0,
+      "log": "fanout-final.log",
+      "log_sha256": "451a3258161b02a87e33e4282486ea4af74af4ecf0f0d59f130f740dd7356ea8",
+      "verified_child_counts": [
+        1,
+        4,
+        16,
+        64
+      ]
+    }
+  ],
+  "time": "2026-11-19T12:37:16+0800"
+}

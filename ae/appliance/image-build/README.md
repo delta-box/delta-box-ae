@@ -1,0 +1,3 @@
+These scripts record the copy-only service startup adjustments applied during image preparation. The released image already contains their effect. The launcher fixes the guest NIC MAC/name and supplies its static QEMU user-network address. Experiment timing code is unchanged. Do not run image-build scripts on the original experiment environment.
+
+The launcher checks memory capacity on each selected physical NUMA node (excluding shmem from reclaimable capacity), reserves 8 GiB headroom per selected node, and raises its own QEMU OOM score. Image preparation allocations must be kept away from occupied experiment nodes.

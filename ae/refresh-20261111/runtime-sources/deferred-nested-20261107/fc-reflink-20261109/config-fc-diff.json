@@ -1,0 +1,87 @@
+{
+  "kernel": "/home/atc-ae/delta-box-ae/linux/vmlinux",
+  "base_xfs": "/mnt/disk2/dyp/deltabox-runtime/ae/work/table2-unified12-20261107/images/base.xfs",
+  "images_dir": "/mnt/disk2/dyp/deltabox-runtime/ae/work/table2-unified12-20261107/images",
+  "deltafs": "/mnt/disk2/dyp/d-overlayfs",
+  "payload": "/mnt/disk2/dyp/spr_payload",
+  "moatless_venv": "/mnt/disk2/dyp/moatless_det_venv",
+  "nltk_data": "/mnt/disk2/dyp/replay-offline-nltk-20260921",
+  "criu_bin": "/mnt/disk2/dyp/criu-host-diagnostic-20260921/criu-source-2cf8f13ca/criu/criu",
+  "replay_message_policy": "audit",
+  "checkpoint_profile": "async-incremental",
+  "vcpus": 4,
+  "mem_mib": 8192,
+  "timeout": 14400,
+  "gpu_remote_config": "/home/atc-ae/delta-box-ae/ae/configs/figure08-remote.json",
+  "cube": {
+    "sdk": "/mnt/disk2/dyp/deltabox-runtime/ae/work/hosted/cube-sdk",
+    "api_url": "http://127.0.0.1:3000",
+    "template": "cube-official-blog-sandbox-code-2c2g-20260609",
+    "proxy_node_ip": "127.0.0.1",
+    "phase_log": "/data/log/Cubelet/Cubelet-req.log",
+    "phase_binary": "/usr/local/services/cubetoolbox/Cubelet/bin/cubelet",
+    "manage_memory_service": true,
+    "memory_size_gib": 16
+  },
+  "e2b": {
+    "infra": "/home/dyp/infra",
+    "remote_path": "/home/dyp/.local/go1.26.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "storage": "/home/atc-ae/delta-box-ae/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/e2b-storage",
+    "from_build": "62e2b12b-0000-4000-8000-000000000062",
+    "api_url": "http://127.0.0.1:3100",
+    "sandbox_url": "http://127.0.0.1:3102",
+    "template": "ae-e2b-base-20260922",
+    "execution": "local",
+    "sidecar_ip": "192.168.12.79",
+    "resume_binary": "/home/atc-ae/delta-box-ae/ae/work/hosted/e2b-table2-bin/resume-build",
+    "sandbox_dir": "/home/dyp/infra/.local-finalbench-62-e2b-lw12/sandbox",
+    "gocache": "/home/atc-ae/delta-box-ae/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/e2b-gocache",
+    "gomodcache": "/home/atc-ae/delta-box-ae/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/e2b-gomodcache",
+    "nbd_pool_size": 8,
+    "parent_manifest": "/home/atc-ae/delta-box-ae/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/e2b-storage/parent-isolation.json",
+    "fanout_python": "/mnt/disk2/dyp/ae-hosted-20260922/e2b/sdk-venv/bin/python",
+    "l1_workspace": "l1-work-nvme"
+  },
+  "prewarm_policy": "off",
+  "baseline_test_runtime": {
+    "backend": "none"
+  },
+  "criu_dump_binary": "/mnt/disk2/dyp/criu-exact-parent-20260922/clean-build-root/source/criu/criu",
+  "measurement": {
+    "pin": true,
+    "numa_node": 1,
+    "cpus": "28-31",
+    "frequency_khz": 2101000
+  },
+  "review": {
+    "experiment_overrides": {
+      "table-02-fc-diff": {
+        "memory_job_size_gib": 64,
+        "baseline_storage": "disk",
+        "measurement": {
+          "pin": true,
+          "numa_node": 1,
+          "cpus": "28-31",
+          "frequency_khz": 2101000
+        },
+        "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/jobs/fc-diff"
+      }
+    },
+    "declared_unavailable": [],
+    "parallel_quick_check": false,
+    "results_backup_root": "/home/atc-ae/delta-box-ae/ae/work/results-backups/public-ae"
+  },
+  "repository_fallback": "same-project-commit",
+  "vm_storage": "tmpfs",
+  "vm_work_dir": "/home/atc-ae/delta-box-ae/ae/work/vm",
+  "environment_file": "/etc/deltabox-ae/environment.json",
+  "baseline_storage": "disk",
+  "figure06_adaptive_arms": [
+    "standard",
+    "adaptive"
+  ],
+  "nvme_work_root": "/mnt/disk2/dyp/deltabox-runtime/ae/work/baseline-nvme-full-20261104/final-paper-half/nvme/jobs/fc-diff",
+  "diagnostic_parallel_baselines": true,
+  "baseline_inputs": "all",
+  "replay_workers": 16
+}

@@ -1,0 +1,5 @@
+ÿPASS coupled rollback: saved file restored, child file absent, worker counter 11 -> 2 -> 6
+(00.011459) Error (criu/sockets.c:216): sockets: Diag module missing (-2)
+(00.093521) Dumping finished successfully
+(00.043899) Restore finished successfully. Tasks resumed.
+DELTABOX_DIRECT_EXIT=0

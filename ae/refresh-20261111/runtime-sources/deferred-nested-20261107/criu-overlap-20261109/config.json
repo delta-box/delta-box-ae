@@ -1,0 +1,12 @@
+{
+  "payload": "/mnt/disk2/dyp/spr_payload",
+  "moatless_venv": "/mnt/disk2/dyp/moatless_det_venv",
+  "nltk_data": "/mnt/disk2/dyp/replay-offline-nltk-20260921",
+  "criu_bin": "/mnt/disk2/dyp/deltabox-runtime/ae/work/runtime-deps/criu/61b978b4c7c03577e9a122e5d23845950304f84abec93ef95ef54a917d494940/criu",
+  "baseline_test_runtime": {
+    "backend": "none"
+  },
+  "replay_message_policy": "audit",
+  "litellm_cost_map": "local",
+  "recorded_search_order": false
+}

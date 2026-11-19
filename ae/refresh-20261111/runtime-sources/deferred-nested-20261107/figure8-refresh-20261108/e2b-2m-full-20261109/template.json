@@ -1,0 +1,6 @@
+{
+  "template": "ae-fig8-2m-20261109",
+  "build_id": "bd560a51-8feb-42ea-bc00-183877f572d1",
+  "rootfs_source": "0545ac13-73b8-47ab-8815-f6b488a3ea56",
+  "hugepages": true
+}

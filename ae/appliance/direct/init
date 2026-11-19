@@ -1,0 +1,63 @@
+#!/bin/bash
+# Runs as PID 1 only in the offline DeltaBox appliance boot profile.
+set -eu
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+test "$$" = 1
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+finish() {
+    rc=$?
+    echo "DELTABOX_DIRECT_EXIT=$rc"
+    sync
+    echo b >/proc/sysrq-trigger
+}
+trap finish EXIT
+ip link set lo up
+mount --make-rprivate /
+mount -t tmpfs -o noswap,mode=1777 tmpfs /tmp
+mount -t tmpfs -o noswap,mode=755 tmpfs /run
+mkdir -p /dev/shm /dev/pts
+mount -t tmpfs -o noswap,mode=1777 tmpfs /dev/shm
+mount -t devpts devpts /dev/pts
+repo=/home/atc-ae/delta-box-ae
+base=/tmp/base
+root=/tmp/worker-root
+mkdir -p "$base" "$root" /tmp/upper /tmp/work
+mount -t xfs -o loop,ro,nouuid /mnt/disk2/dyp/deltabox-runtime/ae/work/table2-unified12-20261107/images/base.xfs "$base"
+mount -t overlay overlay -o lowerdir="$base",upperdir=/tmp/upper,workdir=/tmp/work "$root"
+mkdir -p "$root"/{dev,sys,proc,run,tmp,mnt/base,repo}
+for path in /dev /proc /sys /run; do mount --rbind "$path" "$root$path"; done
+mount --bind "$base" "$root/mnt/base"
+mount --bind "$repo" "$root/repo"
+cp /usr/local/lib/deltabox-direct/check.py "$root/tmp/check.py"
+cat >"$root/usr/local/bin/deltabox-check" <<'COMMAND'
+#!/bin/sh
+exec /usr/bin/python3 -u /tmp/check.py
+COMMAND
+cat >"$root/usr/local/bin/deltabox-fanout" <<'COMMAND'
+#!/bin/sh
+export PYTHONPATH=/repo/ae/vendor/d-overlayfs/guest/rl:/repo/backends/deltabox/gsd
+exec /usr/bin/python3 -u /repo/ae/runners/guest/fanout.py "$@"
+COMMAND
+chmod 755 "$root/usr/local/bin/deltabox-check" "$root/usr/local/bin/deltabox-fanout"
+mode=check
+for arg in $(cat /proc/cmdline); do
+    case "$arg" in direct.mode=*) mode=${arg#direct.mode=} ;; esac
+done
+mkdir -p "$root/oldroot"
+export DIRECT_MODE="$mode"
+unshare -m --propagation private bash -c '
+    set -eu
+    cd /tmp/worker-root
+    pivot_root . oldroot
+    umount -l /oldroot
+    case "$DIRECT_MODE" in
+        check) exec /usr/bin/python3 -u /tmp/check.py ;;
+        fanout)
+            export PYTHONPATH=/repo/ae/vendor/d-overlayfs/guest/rl:/repo/backends/deltabox/gsd
+            exec /usr/bin/python3 -u /repo/ae/runners/guest/fanout.py --forks 1 4 16 64 --out /tmp/fanout.json
+            ;;
+        shell) exec /bin/bash -i ;;
+        *) exit 2 ;;
+    esac
+'

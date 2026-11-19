@@ -1,0 +1,20 @@
+{
+  "record_id": 24358847,
+  "version": "deltabox-atc2026-artifact-v4",
+  "base": {
+    "name": "DeltaBox-ATC2026-v3-l1.qcow2",
+    "record_id": 24136571,
+    "sha256": "5b7455ebaa2d5bec7380642c1aa25147a55847252bbbcecfdb89882aa2801191"
+  },
+  "layer": {
+    "name": "deltabox-direct.qcow2",
+    "size": 1376256,
+    "sha256": "4e73352db919a4c554845020bea6f787c04e9439f4898afd6f9a1d3808a679c4"
+  },
+  "kernel": {
+    "path": "linux/vmlinux",
+    "sha256": "0ba5e9ee744bcb2bac3391e967cf36cfeb10fd3add067055321cb136cd5004c0"
+  },
+  "startup": "python3 ae/appliance/deltabox.py check --images <image-directory> --log check.log",
+  "runtime_location": "DeltaBox runs as processes in the outer VM"
+}

@@ -1,0 +1,106 @@
+{
+  "functional_only": true,
+  "host_cpu_pool": "56-67",
+  "guest_memory_gib": 64,
+  "guest_vcpus": 48,
+  "external_host_share": false,
+  "results": [
+    {
+      "system": "e2b",
+      "records": [
+        {
+          "path": "e2b/psf__requests-863/pilot_result.json",
+          "sha256": "d7db8422128aabaa15604ba8eee0df94273f4538283e9d959a072357d20edf89",
+          "ok": true,
+          "checkpoints_count": 4,
+          "restores_count": 2
+        }
+      ]
+    },
+    {
+      "system": "cube",
+      "records": [
+        {
+          "path": "cube-03/psf__requests-863/pilot_result.json",
+          "sha256": "52c42b6a08c3fcf0cb02653fd8c1785b04dbff429b918da4f00bf0fa51e3c043",
+          "ok": true,
+          "checkpoints_count": 4,
+          "restores_count": 2
+        }
+      ]
+    },
+    {
+      "system": "fc-diff",
+      "records": [
+        {
+          "path": "fc/adapter-run.json",
+          "sha256": "6f8772c7607b1e43c3ea90af85b95dd46ba768f49c1844406ad6fa9b1f999f47",
+          "exit_codes": [
+            0
+          ]
+        },
+        {
+          "path": "fc/psf__requests-863/driver/results/ae_f505c1d617a3_psf__requests-863/pilot_result.json",
+          "sha256": "678163dc79df0198262140192a168a202a78259d3c1a582343863eb68e615433",
+          "ok": true,
+          "ckpts_count": 4,
+          "restore_events_count": 2
+        }
+      ]
+    },
+    {
+      "system": "criu-main",
+      "records": [
+        {
+          "path": "criu-main/adapter-run.json",
+          "sha256": "be50ae607405c49ee625ed1183e74e14edfe0175f2640051e9e5100186b59bbd",
+          "exit_codes": [
+            0
+          ]
+        },
+        {
+          "path": "criu-main/psf__requests-863/driver/results/ae_81a4b85e0266_psf__requests-863/pilot_result.json",
+          "sha256": "5a4f9cc133a81796386bb1a03e455d4d7cc682033505a7f58f1e725282d0a034",
+          "ok": true,
+          "status": "OK",
+          "n_restores": 2,
+          "checkpoints_count": 4,
+          "ckpts_count": 4,
+          "restores_count": 2,
+          "restore_events_count": 2
+        }
+      ]
+    },
+    {
+      "system": "table3",
+      "records": [
+        {
+          "path": "criu-overlap/summary.json",
+          "sha256": "5c39287770a8b650a534c1139ec35afb8b5353fdc3e4e237e4618ce95d76a9aa",
+          "status": "ok",
+          "n_checkpoints": 4,
+          "n_restores": 2,
+          "all_restore_checks": true,
+          "prepared_request_matches": true
+        }
+      ]
+    },
+    {
+      "system": "replay",
+      "records": [
+        {
+          "path": "replay/adapter-run.json",
+          "sha256": "63ac2afcac01cbdbe4c74cbfc387bb8a7c3bc2fcc732c9d5d3169c98e14d38d8",
+          "exit_codes": [
+            0
+          ]
+        },
+        {
+          "path": "replay/psf__requests-863/driver/results/real_per_restore/psf__requests-863/summary.json",
+          "sha256": "6db2b836c137a6c7deeec99c1c33c19d73f38d47d297c13fc08788d42635dc1b",
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

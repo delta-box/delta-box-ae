@@ -1,0 +1,522 @@
+{
+  "systems": {
+    "CRIU+cp (paper)": {
+      "Event Avg": {
+        "ck": {
+          "n": 317,
+          "mean_ms": 567.5873953693213
+        },
+        "rs": {
+          "n": 334,
+          "mean_ms": 609.5338087903218
+        }
+      },
+      "Django": {
+        "ck": {
+          "n": 53,
+          "mean_ms": 586.7330824727311
+        },
+        "rs": {
+          "n": 54,
+          "mean_ms": 975.6556852405117
+        }
+      },
+      "Scientific": {
+        "ck": {
+          "n": 130,
+          "mean_ms": 546.4580056922995
+        },
+        "rs": {
+          "n": 140,
+          "mean_ms": 600.5591227071081
+        }
+      },
+      "SymPy": {
+        "ck": {
+          "n": 54,
+          "mean_ms": 745.9457043148274
+        },
+        "rs": {
+          "n": 56,
+          "mean_ms": 529.3871464642835
+        }
+      },
+      "Tools/Small": {
+        "ck": {
+          "n": 80,
+          "mean_ms": 468.84677735025593
+        },
+        "rs": {
+          "n": 84,
+          "mean_ms": 442.5586637141051
+        }
+      }
+    },
+    "CubeSandbox": {
+      "Event Avg": {
+        "ck": {
+          "n": 317,
+          "mean_ms": 839.8214190189285
+        },
+        "rs": {
+          "n": 334,
+          "mean_ms": 643.8671486556981
+        }
+      },
+      "Django": {
+        "ck": {
+          "n": 53,
+          "mean_ms": 928.2847901698066
+        },
+        "rs": {
+          "n": 54,
+          "mean_ms": 758.8089546296504
+        }
+      },
+      "Scientific": {
+        "ck": {
+          "n": 130,
+          "mean_ms": 831.4141537230853
+        },
+        "rs": {
+          "n": 140,
+          "mean_ms": 645.2845789500121
+        }
+      },
+      "SymPy": {
+        "ck": {
+          "n": 54,
+          "mean_ms": 1007.9955207592851
+        },
+        "rs": {
+          "n": 56,
+          "mean_ms": 638.4434705357478
+        }
+      },
+      "Tools/Small": {
+        "ck": {
+          "n": 80,
+          "mean_ms": 681.3587230624762
+        },
+        "rs": {
+          "n": 84,
+          "mean_ms": 571.2293892618867
+        }
+      }
+    },
+    "E2B": {
+      "Event Avg": {
+        "ck": {
+          "n": 317,
+          "mean_ms": 1072.0086592081996
+        },
+        "rs": {
+          "n": 334,
+          "mean_ms": 424.7462706467929
+        }
+      },
+      "Django": {
+        "ck": {
+          "n": 53,
+          "mean_ms": 1053.214807094367
+        },
+        "rs": {
+          "n": 54,
+          "mean_ms": 449.4637022222647
+        }
+      },
+      "Scientific": {
+        "ck": {
+          "n": 130,
+          "mean_ms": 1090.1573476999636
+        },
+        "rs": {
+          "n": 140,
+          "mean_ms": 427.3163442572305
+        }
+      },
+      "SymPy": {
+        "ck": {
+          "n": 54,
+          "mean_ms": 1307.808152944576
+        },
+        "rs": {
+          "n": 56,
+          "mean_ms": 439.75877032162964
+        }
+      },
+      "Tools/Small": {
+        "ck": {
+          "n": 80,
+          "mean_ms": 895.8033091624429
+        },
+        "rs": {
+          "n": 84,
+          "mean_ms": 394.5647040714643
+        }
+      }
+    },
+    "FC-Diff+dm": {
+      "Event Avg": {
+        "ck": {
+          "n": 317,
+          "mean_ms": 647.9334154006309
+        },
+        "rs": {
+          "n": 334,
+          "mean_ms": 2567.9175546556885
+        }
+      },
+      "Django": {
+        "ck": {
+          "n": 53,
+          "mean_ms": 589.4482566037736
+        },
+        "rs": {
+          "n": 54,
+          "mean_ms": 2222.250330092593
+        }
+      },
+      "Scientific": {
+        "ck": {
+          "n": 130,
+          "mean_ms": 672.7722981461538
+        },
+        "rs": {
+          "n": 140,
+          "mean_ms": 2643.403252
+        }
+      },
+      "SymPy": {
+        "ck": {
+          "n": 54,
+          "mean_ms": 766.9509196666667
+        },
+        "rs": {
+          "n": 56,
+          "mean_ms": 3305.235800142857
+        }
+      },
+      "Tools/Small": {
+        "ck": {
+          "n": 80,
+          "mean_ms": 565.9798332624999
+        },
+        "rs": {
+          "n": 84,
+          "mean_ms": 2172.777206452381
+        }
+      }
+    },
+    "copy+replay": {
+      "Event Avg": {
+        "ck": {
+          "n": 12,
+          "mean_ms": 313.15019416858075
+        },
+        "rs": {
+          "n": 334,
+          "mean_ms": 14220.58452781718
+        }
+      },
+      "Django": {
+        "ck": {
+          "n": 2,
+          "mean_ms": 631.2002750019019
+        },
+        "rs": {
+          "n": 54,
+          "mean_ms": 11336.052885963807
+        }
+      },
+      "Scientific": {
+        "ck": {
+          "n": 5,
+          "mean_ms": 303.2131218002178
+        },
+        "rs": {
+          "n": 140,
+          "mean_ms": 15224.039999735292
+        }
+      },
+      "SymPy": {
+        "ck": {
+          "n": 2,
+          "mean_ms": 186.95990500418702
+        },
+        "rs": {
+          "n": 56,
+          "mean_ms": 19887.764473535102
+        }
+      },
+      "Tools/Small": {
+        "ck": {
+          "n": 3,
+          "mean_ms": 201.8054536699007
+        },
+        "rs": {
+          "n": 84,
+          "mean_ms": 10624.380547237923
+        }
+      }
+    }
+  },
+  "sources": [
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/django__django-14997/pilot_result.json",
+      "sha256": "969ef679bbad91cb67b5c57a717a6803958fa81585d9bbf4567a0034fedbae13"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/django__django-14672/pilot_result.json",
+      "sha256": "1136339e4759cba684ae5b1e4c6db12452d89a8bdce0841e36de32c8e8659c7d"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/sympy__sympy-17630/pilot_result.json",
+      "sha256": "8b1bc118f8561db2ac90ecdc64f241d9cbf8969d436226cf9f767421ac8f385a"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/sympy__sympy-22840/pilot_result.json",
+      "sha256": "f7cc4cda9b72b408fb3db589dcc1bd45f84a67f60417f410ffbdc29bf5221aa4"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/matplotlib__matplotlib-23964/pilot_result.json",
+      "sha256": "babde66d3272b24a1a7e962c251f026339c14ae09a4fa3577e9af007ff0a48df"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/matplotlib__matplotlib-26020/pilot_result.json",
+      "sha256": "23bd1522641cee55ab09e1dc8bf1da409f12e3986f2265f90bc14b2817c57ead"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/astropy__astropy-7746/pilot_result.json",
+      "sha256": "693d4cb6c892d47a69f7228c6b1b9ba5d030e96c377d24badd42e148429d0204"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/astropy__astropy-14182/pilot_result.json",
+      "sha256": "2b202990a40f1adebae1e2f99e0b96d1c2071d0ba1264338344fe364fbde00d6"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/astropy__astropy-13453/pilot_result.json",
+      "sha256": "93cc18552a666e5dfc74f43de89f6b5e582208b99decae6119628e64b909d033"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/pylint-dev__pylint-7228/pilot_result.json",
+      "sha256": "4d1c00ea907373425ed4a2a6d60062bd231490119a790863c41d4ec852b0803b"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/pylint-dev__pylint-7080/pilot_result.json",
+      "sha256": "9dc7dd904cdb2539f29feae8d7314e37b47e1f4119e8a2c3e38354457ad7d41d"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-cube-host/cube-balance/psf__requests-863/pilot_result.json",
+      "sha256": "e6a8528f7bcb312b832a472db19a5275018037896f229216c7dcd0ff6bf1c0df"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/django__django-14997/pilot_result.json",
+      "sha256": "512d7cc0911a6d64ff25285ef63c37703cbfea21dd7edd31fb2f61fd03c3f499"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/django__django-14672/pilot_result.json",
+      "sha256": "01dc514bfc98a2f4d02da40a901b2121188fd5fdabbda9b8d6c6316d41d8939c"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/sympy__sympy-17630/pilot_result.json",
+      "sha256": "18e32a1bae1ea11091f2428184dc17540d12942493f794805dc6f08f7a4d3546"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/sympy__sympy-22840/pilot_result.json",
+      "sha256": "404a320d01727b28f0d72c35234208cb7b6d58becb345cbe8331c7901b76e69d"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/matplotlib__matplotlib-23964/pilot_result.json",
+      "sha256": "9de01111aa01ef1313ec04e8ab28a77966c1113c4e9998503b486dae54b5d009"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/matplotlib__matplotlib-26020/pilot_result.json",
+      "sha256": "6c6c89ed0854b8bde14b867f7dab8f4b452c622bfb497693a3d4bda7c2ae509a"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/astropy__astropy-7746/pilot_result.json",
+      "sha256": "e519fecfdf6776ad501fb271ea6bdddd988ab1ee8133b2d297f7821c4d65945a"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/astropy__astropy-14182/pilot_result.json",
+      "sha256": "814392e699379e8c419611a70583444487082c6ca0171d01dd5342d4c3583db0"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/astropy__astropy-13453/pilot_result.json",
+      "sha256": "03511d9e928d1b87811fcbf0aabaf6ea0965b5ae80e2e1b841f3e40f2f037ee2"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/pylint-dev__pylint-7228/pilot_result.json",
+      "sha256": "409a51b0020728d761c789a3d87588cbe0a5001355f2a8469f20d04dafb9c3eb"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/pylint-dev__pylint-7080/pilot_result.json",
+      "sha256": "40311dc25bae848e5976b77ca4a9cd313d05c204214cf15bcb458c8b93123584"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/e2b-phase7/combined/psf__requests-863/pilot_result.json",
+      "sha256": "7248c074b7b1d8e1d71116574cbb507edcd30a15751b369e26704a640795bbb8"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/summary.json",
+      "sha256": "6aa24100332eea383763f95aee866de6f852a41d40256c66c015a223afc51e25"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/astropy__astropy-13453/driver/results/ae_36126539cb05_astropy__astropy-13453/pilot_result.json",
+      "sha256": "0c7196664bb37645ab2ecd8835e273bc5b048e9d5e1f2bdb524ef4d00a6ae1b3"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/astropy__astropy-14182/driver/results/ae_5353124c049a_astropy__astropy-14182/pilot_result.json",
+      "sha256": "4a164fc755ed732a045b21c389bb4fdac1399ae4fde5032d278904ea155a8242"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/astropy__astropy-7746/driver/results/ae_128f5371697d_astropy__astropy-7746/pilot_result.json",
+      "sha256": "ee4583f26473b988f8e2b317aad844f441baf8bc198b878b94bb2c715dc0ed02"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/django__django-14672/driver/results/ae_b1224cfc136c_django__django-14672/pilot_result.json",
+      "sha256": "cd028390c8e8398e431bd7b3aee8db8bada00244a2feb15c0c8820883afd857c"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/django__django-14997/driver/results/ae_4f1c55addcff_django__django-14997/pilot_result.json",
+      "sha256": "389e9655c95729d96c3979177d782a5b60d961fcdbb11bf3113eff13cc41e74f"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/matplotlib__matplotlib-23964/driver/results/ae_29e3e44cd391_matplotlib__matplotlib-23964/pilot_result.json",
+      "sha256": "51ba28428349c70dd230b291ff6b44f6a0e3f13f030bdb02fb8d38029920e30b"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/matplotlib__matplotlib-26020/driver/results/ae_6cfbf2c94a27_matplotlib__matplotlib-26020/pilot_result.json",
+      "sha256": "9fbb7b8129b4fb6c066a3fc6251d3046fbc7c1603e297896a568009a54123979"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/psf__requests-863/driver/results/ae_e50ae282fba8_psf__requests-863/pilot_result.json",
+      "sha256": "3d1d1f9ce3f02b6ad3269a5c59944e2b563c46ac45fbd88e80fa91a3f761705b"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/pylint-dev__pylint-7080/driver/results/ae_67e25452490e_pylint-dev__pylint-7080/pilot_result.json",
+      "sha256": "c3ea3e2e49be40c82ad7b9bbca01753d0c6471b6e4683950faa64b0ba6cd4250"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/pylint-dev__pylint-7228/driver/results/ae_a2b2fd2d5602_pylint-dev__pylint-7228/pilot_result.json",
+      "sha256": "fd34fa9bf8b03f6816b239fbebf5e4f7248628012a8d75f96e07cb86ade67157"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/sympy__sympy-17630/driver/results/ae_8256cc1e8d0b_sympy__sympy-17630/pilot_result.json",
+      "sha256": "9fc0815e3240d4973ba9aaab75dbd54ff42161a8875cc62e16b7d364b0f8ebff"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/fc-reflink-20261109/l1-results/formal/results/sympy__sympy-22840/driver/results/ae_9483321fd5c5_sympy__sympy-22840/pilot_result.json",
+      "sha256": "545479b4d7dc91b08cf22a2de2ca21b48d35f319521f98d3e4ad641386cfecf5"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/astropy__astropy-7746/driver/results/ae_b1619860f2e4_astropy__astropy-7746/pilot_result.json",
+      "sha256": "3da806eda12cb5eeb0638c317b3d21e4bec3b6761f183423079bbc6f2b7b6e97"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/astropy__astropy-14182/driver/results/ae_7c904d6d0ea9_astropy__astropy-14182/pilot_result.json",
+      "sha256": "9728749389e810bd22d4acd841d834bc7b0bf3a70e7eb012151efb0173ff332d"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/django__django-14997/driver/results/ae_7ab8e110bb50_django__django-14997/pilot_result.json",
+      "sha256": "e24baf6a01d80de89a19dc7f3b69f59421ce30868183730c34fca330d6620ea0"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/pylint-dev__pylint-7228/driver/results/ae_6deb6bc49da1_pylint-dev__pylint-7228/pilot_result.json",
+      "sha256": "5adbbbf41da8e0dd441949495be01cb6d60b453651988f5a1dabf79544c97c07"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/django__django-14672/driver/results/ae_74b9538ed45e_django__django-14672/pilot_result.json",
+      "sha256": "db8bbbcb94b9c2ffb5a4720578e99344c274beb8ec48f95e5a1d785281fb6493"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/astropy__astropy-13453/driver/results/ae_3c58f6819930_astropy__astropy-13453/pilot_result.json",
+      "sha256": "20d6e08d3637c64b4586b621cb0ad41bfaa986a800f853db10c2d963d07355a6"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/matplotlib__matplotlib-23964/driver/results/ae_09a1f82ccf78_matplotlib__matplotlib-23964/pilot_result.json",
+      "sha256": "bc81d84e911cbf2f2824d66410936943e50157b37085a867acd4e692612b442b"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7/pylint-dev__pylint-7080/driver/results/ae_e9261f9d19bd_pylint-dev__pylint-7080/pilot_result.json",
+      "sha256": "f913eb6e7c688519921dee0db8a3966fdf89ce760a051592e2aba032d9abcdfe"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7c/psf__requests-863/driver/results/ae_b8a9786856e2_psf__requests-863/pilot_result.json",
+      "sha256": "a2b2c54be53aac07cbf3ae1000b235f7524b5df9037b2dcbec536c5bc1bbbe70"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7c/matplotlib__matplotlib-26020/driver/results/ae_279103d1fbd4_matplotlib__matplotlib-26020/pilot_result.json",
+      "sha256": "bb5517d33a01b9e21629fd2734d2bcefa56a242bf8749c9db36c81a38fb6e71d"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7c/sympy__sympy-22840/driver/results/ae_2ccc6ccce37f_sympy__sympy-22840/pilot_result.json",
+      "sha256": "00d8d1920db6640f3378f886995ea8c793652cc48a5bad74fc098034827154f5"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/remaining-three/l1-evidence/results/nested-criu/criu-e7c/sympy__sympy-17630/driver/results/ae_8b2014d20804_sympy__sympy-17630/pilot_result.json",
+      "sha256": "fa0aca3aab5557cb1c459cd1577fc119ea801f43d67437fdcde056167e8d3bc3"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/django__django-14997/restores.csv",
+      "sha256": "51fbdb663749f0d0ee6ca117d7b6718c52c258a12ad1c149240e3bb383bbd931"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/django__django-14672/restores.csv",
+      "sha256": "edfd86bdb72b8453f6c2d4b8ea79cc13799d18a6618f8c45ee558782407444fb"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/sympy__sympy-17630/restores.csv",
+      "sha256": "5a619b930accf1fbf18e8214346c142f6fc1fc68418bc9b85291b6b5a872c512"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/sympy__sympy-22840/restores.csv",
+      "sha256": "6e19711f2694f1ce8d75293cbcb142fc2d7968144cab74ba218511ab9dcc91d5"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/matplotlib__matplotlib-23964/restores.csv",
+      "sha256": "0fec1577e3b1d83fe7dc9d0d34d8bef074a703d041ebb2f8a543616fb1f0d965"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/matplotlib__matplotlib-26020/restores.csv",
+      "sha256": "ab65e15937c51ad6b8481d4000fdb551b588fe84f2d54f191b5ec8d093147533"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/astropy__astropy-7746/restores.csv",
+      "sha256": "c477c43f3bed1339a352b2882e3ccfd19528e090aeac6a3be3b878201b115487"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/astropy__astropy-14182/restores.csv",
+      "sha256": "d15b0d4384a2511a74c8bbf3818cd3a61cb7352b0ffe58f81c6e19e3518d509e"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/astropy__astropy-13453/restores.csv",
+      "sha256": "b578611fa1141d3b64e18d77eaadfb89b4e1f985b3ba52d019e8381e4ca7f8e0"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/pylint-dev__pylint-7228/restores.csv",
+      "sha256": "c6d03652547fbd3b78b6e9755d0e65613d081f75ba5a389b784ec6eba077023f"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/pylint-dev__pylint-7080/restores.csv",
+      "sha256": "c6cb770b50952b8ce224d93357e7263a98368c81cc8885f29e54b2bde36940d8"
+    },
+    {
+      "path": "ae/evidence/table2-unified12-20261107/nested-full-audit-20261108/raw/nested-replay-host/replay12/psf__requests-863/restores.csv",
+      "sha256": "fc9a5546c8eab6520641bc4976bcaa5166a80a42838daade17a83b1ac13faa54"
+    }
+  ],
+  "semantics": {
+    "E2B restore": "recorded blocking_ms plus synchronous old-sandbox termination",
+    "Replay checkpoint": "one initial pristine repository copy per trace, 12 observations",
+    "Replay restore": "rmtree + copytree + full replay process, 334 observations",
+    "selection": "317 schedule checkpoint nodes; exclude 43 additional expansion snapshots; all 334 restore targets match"
+  },
+  "Table3_CRIU_remaining_wait": {
+    "n": 305,
+    "mean_ms": 91.13962161967213,
+    "terminal_checkpoints_excluded": 12
+  },
+  "status": "passed"
+}

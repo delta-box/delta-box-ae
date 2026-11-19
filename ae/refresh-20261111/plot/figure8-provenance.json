@@ -1,0 +1,84 @@
+{
+  "accepted_preview": "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/fig8a-clean-complete-20261109/fig8a-clean-complete-acceptance-preview-data.json",
+  "accepted_preview_sha256": "21e62cb51c5320deaa415d03c15b78d17b570850070fac26b0fe286684ab01f5",
+  "source_record": {
+    "series_ms": {
+      "DeltaBox": {
+        "x": [
+          1,
+          4,
+          16,
+          64
+        ],
+        "y": [
+          34.064746,
+          41.134539,
+          91.333042,
+          368.778136
+        ]
+      },
+      "CubeSandbox": {
+        "x": [
+          1,
+          4,
+          16,
+          64
+        ],
+        "y": [
+          444.06839150190353,
+          599.6244060024619,
+          2251.8469069972634,
+          8943.254409998655
+        ]
+      },
+      "E2B": {
+        "x": [
+          1,
+          4,
+          16,
+          64
+        ],
+        "y": [
+          750.6690239980817,
+          838.9730040058494,
+          1538.4288020133972,
+          3843.7263689935207
+        ]
+      }
+    },
+    "N64_source": "E2B N64 is the previously recorded single acceptance success requested by user; not the new batch mean or median.",
+    "other_points": "Cube N1/4/16 four-round medians, N64 one successful run with same current client-reuse code per user stopping rule. E2B N1/N4 four-round medians, N16 median of three successes with one retained failure, N64 user-selected earlier acceptance success. DeltaBox unchanged. Counts/statistics kept outside image per user request; not a claim of uniformly four successful rounds.",
+    "inputs": {
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/available-summary.json": "588e75155cb0a84002a43d499210c7525009bcbf1d1a3d20f57a84d06027c73b",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/summary.json": "1cfcdc6e11c44fba1e72cb6236a1da7a7e94f21fd0ba69498cf0bac65947a903",
+      "/Users/bytedance/Desktop/dddd/sigopsatc2026-9/plot/figure8-data.json": "7585adb2f2ee33c0b458c09fefad4b75a9e8b5a1f2c526c3d4ad05a41651c2a6",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round1/01-measured-reuse-n1.json": "e0f31967d196d277109e4e4b32cd982f5eabe4a459475bd5d33d4e541a377196",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round2/03-measured-reuse-n1.json": "094588ebc9bc0985eb744bb28e2a7abb27a0fa53f376e231057eb8d305eb74ea",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round3/02-measured-reuse-n1.json": "b6185d8184570c20ad4dbdbb1725447c528f41f92ebde2ede2bc69c290f7213f",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round4/01-measured-reuse-n1.json": "f5d2ab71991b3c5810f7abea5758e85beb223ace71c5e7161e105347b166b4c1",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round1/measured-n1.json": "2b9b776d9e84b5f85d13330709292acdcc73ec5428e0b51edce06d6bc2fadd13",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round2/measured-n1.json": "d4d4fdfe1532912f183fbe83680485689287ca551d81eb35ef68733c6fda5020",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round3/measured-n1.json": "0e115c7dd30623294c71a2befa91ac107d35a7f6c9ca9ec6bd1f3d7f1a9aeff3",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round4/measured-n1.json": "777eb373f0b2848db95cdc7274b0bf01f54df43504a214a177d87e617ce01449",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round1/02-measured-reuse-n4.json": "f3f6e45978806098db6823e1b78d1a1fbd821283dd6db82404da70559f3e4ca3",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round2/01-measured-reuse-n4.json": "c03bb35c17343d7d50a33193f1e1b5e1ca1a1c8a0984baafdf2a44ebfd5a2ed0",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round3/03-measured-reuse-n4.json": "cad00ad5f01c6771789e42d88e337ed7e38bfad178d865fc8f28aa0fcef09825",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round4/03-measured-reuse-n4.json": "6449c5612cc616ace7cd37e8eee27fae450ef2bb37778ecb9c42fcbbdce059a3",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round1/measured-n4.json": "e16550bc19ecb5c56b2526915f3260f6424da2c0c86bde747913ce1218684ebd",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round2/measured-n4.json": "c7fc0eebed93cc501172ee37b8c2efeaa5f1d66fad0e65d045aca8be2bb9ecd0",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round3/measured-n4.json": "fb0b595fb359de3589e133cf4cdabb018d1fe42e8200887b179b8518a1d36c7f",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/../n1-4-16-final-n4/l1-results/results/round4/measured-n4.json": "c68a254b9596dca9d28efa2c90580f8462b444d89f1c41fc94841ac098be00e9",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round1/03-measured-reuse-n16.json": "04c94e48baea866eb4727a95ae66da2e44d175360cc8473cde9709972fda5705",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round2/02-measured-reuse-n16.json": "5096605a417df5022d7568c075560bc5ee443f299d767a883034253a5b57d01c",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round3/01-measured-reuse-n16.json": "13df092ea55d9d3f260eff5771e5b1c3930f035a12b8bd2587ac00aaaa7d3746",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-20261109/l1-results/results/round4/02-measured-reuse-n16.json": "040504fe8884ab776f4412d4ded85cf901008652adaf886fd147961e48abe977",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round1/measured-n16.json": "5a1236d8b47e24edffc415c11e3869a5824076de7b4c06ab001f5ea897ee6c4f",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round2/measured-n16.json": "710d60c3bf7e158e934954af4d85c7b245e8f53fa32a55a1bd3bd50dd4774612",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/n1-4-16/l1-results/results/round3/measured-n16.json": "0aac772c04a8774a49d9c2a2cf8396b1e69e503ef371e2a083c8df0d26cae7f0",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-n64-20261109/summary.json": "0fbc068a88abca178021407fbfa1e46249ac2fc99ecc9d085110c8bafd8170ac",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/cube-client-reuse-n64-20261109/l1-results/results/n64/01-measured-reuse-n64.json": "0441d7bf366634a316fc33b24500f5a4942043a7c5927f48d3361e6c37946230",
+      "/Users/bytedance/Desktop/delta/ae/evidence/figure8-refresh-20261108/e2b-2m-full-20261109/l1-results/results/acceptance/acceptance-n64.json": "ee2a7d78fc2d0ee5b015448a4ea378b757ddd3281bc2a6ae8a3da3276081bdc3"
+    },
+    "paper_changed": false
+  }
+}

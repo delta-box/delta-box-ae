@@ -1,0 +1,605 @@
+{
+  "scope": "Actual measured drivers retained inside the L1 image; not a source rebuild of all third-party binaries",
+  "files": [
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/PLAN.md",
+      "sha256": "02856e63e84ee8db3dce3f2f9d6e9c748eace67c12eb4280f959de09824f12ee",
+      "size": 4628
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/audit.py",
+      "sha256": "9696246084a2a78039cc268d72441f75a9338a6d0210f040d8dd0f70553c2b7e",
+      "size": 2849
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/config.json",
+      "sha256": "de9bfc5432a9cdab311e795df184d192517aad83b187ac7649cb4ea0595f6ec0",
+      "size": 465
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/inputs.json",
+      "sha256": "9d2dd28f15002ec8f7a63405aef220aab03d9e99e5027e0faaecf52dcf06abde",
+      "size": 26126
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/mock_trace_hook.py",
+      "sha256": "5031db77efdceb1b999a9440acc540938329e28e43ff901700231c2cec15d4d4",
+      "size": 621
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/overlap_worker.py",
+      "sha256": "af30e0cd22a184eb2cdc11d0557f570422b6472c64b43ec06e1c6f439efbd0fd",
+      "size": 3503
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/probe_base.py",
+      "sha256": "ae1124ce930ed709b40c1410b06c1ad7798a8c72e8e7f8a42001a46d16d3bd74",
+      "size": 3690
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/run_host.py",
+      "sha256": "16236098e6980de0fb82de829122aa86c29de7c0348fcde8784f81d3db120761",
+      "size": 4696
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/run_l1.py",
+      "sha256": "0e911ea580af022472a5702bfc71a5956de67c30380fb4ef6089bf1c775cd781",
+      "size": 5005
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/run_trace.py",
+      "sha256": "4db07ca8786ff8e0165395fd0c77bbd547f6ac6d122ed39ceae57e69e6f2c14c",
+      "size": 13193
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/source-lock.json",
+      "sha256": "47d03eeea3715b39225f006938c6cf66a2532090d8811f6cc474a7822366843b",
+      "size": 2473
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/criu/criu_copytree_pilot.py",
+      "sha256": "d8bc2437e49e3afa7063a5cb36988538b9e24d9dff0f9e950b3562081e8feb92",
+      "size": 34881
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/criu/criu_sandbox_server.py",
+      "sha256": "1736815ab1977dc399b0c42fa068bde2abd93a49e7c76c0fb42a81e48f6d5330",
+      "size": 16689
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/criu/criu_worker.py",
+      "sha256": "ec5ffba03cbb74e4aebd662b06224e7a71549931624cf3dfcd2023ad995775fa",
+      "size": 12664
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/baseline_audit.py",
+      "sha256": "50628b4b1ea953c783315967044faef34cf7a082af7ddd47da068968f8c90e67",
+      "size": 4258
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/baseline_runtime.py",
+      "sha256": "4ff579f482051ebcc2768e066ecd562abc926222760a8432186499141297815f",
+      "size": 14370
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/mock_llm_server.py",
+      "sha256": "ca2d0682dc6012626e4442cbd629dd51097d0fbb4a9314fe6d751b2b4fe04b9b",
+      "size": 28892
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/protocol.py",
+      "sha256": "77333d4f4d92b1f6ba1c5ff9e8e2043c16a865aa544733e4ad94a2e8241f408d",
+      "size": 2144
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/replay_driver.py",
+      "sha256": "2664e6d461b1c9dacbbd597a32b4c463b899f2969fd270f7f3b7502650c597d1",
+      "size": 21490
+    },
+    {
+      "path": "deferred-nested-20261107/criu-overlap-20261109/vendor/spr_payload/trajectory_index.py",
+      "sha256": "47fd5de1f49bf353ab60f5d2f5f94e71b85b7196105aa3632966ac7ea4cab152",
+      "size": 13043
+    },
+    {
+      "path": "deferred-nested-20261107/cube_cold_full.py",
+      "sha256": "b597c4db4014dc54dfe7842dee80171fc84c714e164363a1f0fa879281e159d8",
+      "size": 20081
+    },
+    {
+      "path": "deferred-nested-20261107/e2b_cold_full.py",
+      "sha256": "c6200ecb6c03830d7d4e9fdf92811ba8f63e5e765441960d7a2b1eb9e2037e20",
+      "size": 16720
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/PLAN.md",
+      "sha256": "a13c0fe8ff21476571121b3b599f85e3185135c9e378cce8cd7fb5c402a08ad1",
+      "size": 7521
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/README.md",
+      "sha256": "f76246ae12a4d80ec0afb61b044a1e681f4b5d65d77e160337fcde651cde7b62",
+      "size": 611
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/accept_pilot_prefix.py",
+      "sha256": "5ba37a0186c22f587fb6d15b7af92ef2999b251fbc77a79927361ce781008627",
+      "size": 1971
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/ae_baseline_shim.py",
+      "sha256": "6b3e334e2791f4eabc909a25302a633e5c20a17dbd379842b651b6d384ed1ea1",
+      "size": 687
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/analyze.py",
+      "sha256": "d53db4ca860ac2f72defc1a16d01d41b08824ab472b13a6c19c2b88a671f96c6",
+      "size": 3099
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/audit_result.py",
+      "sha256": "42ad772ff72d9a9d604b09a12c28ba988ccabaf69923f1bbeea9dc014307fcc0",
+      "size": 2923
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/config-fc-diff.json",
+      "sha256": "a0c755a7834d7ca2435ba654ce2099cdffc727c2c284bea54984a592e0ce178c",
+      "size": 3782
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/framework-lock.json",
+      "sha256": "396ab6e54b48e4350d872809455c242213658b40de0eebb1c3ec2821ca3db0d8",
+      "size": 490
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/inputs.json",
+      "sha256": "ee2e9dc729e0341a897d3cf00c57045b3f5b09a77a29bce7aa63514f1c58b82d",
+      "size": 20168
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/queue_after_fig7.py",
+      "sha256": "5e219a48e3ae9d67a69361d54834bcb672487759ea964d5118c4336953701bf5",
+      "size": 8490
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/resource_barrier.py",
+      "sha256": "f4f44d604b8781918894795d7d72832242a99c0a4242ad3c9da92fef0005b00f",
+      "size": 3057
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/run_batch_l1.py",
+      "sha256": "3d6d5cbbd78f95a86bbfabbd8cdfb817c62dacb82531ee080578b97cfae54197",
+      "size": 4755
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/run_l1.py",
+      "sha256": "08e2a37bd836a68f38ee684e299e42aba90b34770f7bb3348503cab9910e7d62",
+      "size": 11507
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/source-lock.json",
+      "sha256": "5ef13bc8619f8ddaaabb1ee137731c634b22af6656c5dff36650f21a9ba86782",
+      "size": 3935
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/test_continuous_timing.py",
+      "sha256": "67eb3e0486749b14b14540b38d7e5d0f7b41b573f1471631b29a95d76d70f83b",
+      "size": 4248
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/test_reflink.py",
+      "sha256": "dbda40bc468238365d86235fc709cf7e91faf1aeb70be879ec93eec1ed044daf",
+      "size": 1790
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/test_socket_spawn.py",
+      "sha256": "8525150f74d7505bfb57ce5487896886a3f9d825681d48ce2ab434267d6fd409",
+      "size": 1231
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/continuous_timing.py",
+      "sha256": "461c8a8a992de6bfeb23f614df474f9970d786c1a5b865cd91bfdff522cf2ad2",
+      "size": 2688
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/fc_capacity.py",
+      "sha256": "332b723d365e15b47c7c93668cd10e4432a8e3d8a9b165c8c313717cafd50555",
+      "size": 3020
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/fc_dm_controller_pilot.py",
+      "sha256": "8c524532eee97f116c9ca8cf911832ed05cf398ae38e5e2e058511074bcb4762",
+      "size": 19321
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/fc_dm_pilot.py",
+      "sha256": "a88ea56e2e8a5d3b1694458c0d5b4d596bcd8c3c4582a913ad7a80e000d3ba70",
+      "size": 32457
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/guest_controller_driver.py",
+      "sha256": "8ac41eecf4b9724aafa723c477158b4c266b530917b125755446ceb451946656",
+      "size": 10877
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/guest_moatless_pause_driver.py",
+      "sha256": "c6a9f0c193e43cc6fb108ae7798dc4cd53f5cce172e16f292d58fae376459255",
+      "size": 11290
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/reference_merger.py",
+      "sha256": "8495e6c3344e6699529b6107e610c86760d5ba9e7e07118943e78120ded14b07",
+      "size": 4325
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/reflink_merger.py",
+      "sha256": "168f63f6b527b85c6d11544f0baa977e4d5c2e64425c66720dd33d2a430cc101",
+      "size": 3494
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/fc_diff_dm/snapshot-editor-v1.6.0-x86_64",
+      "sha256": "dacb9305f0a4adb8a99ab9b3e5434b22e52b84437810f028baf94853ce7baf0d",
+      "size": 1153640
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/replay_copytree/real_replay_driver.py",
+      "sha256": "586110d58f0450879051aa7334bfce7aac775487894123348e2965a3f347d659",
+      "size": 6514
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/replay_copytree/real_trace_runner.py",
+      "sha256": "e1e792fd5aa6430cf0e961bd717500fbeced326130a84e6be7d21bcfb319a422",
+      "size": 15597
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/finalbench/replay_copytree/walker.py",
+      "sha256": "0b7ba09af2dc9b64859e521bc2d0353e3c69624dffd26e790cbb07d8ec7f25f4",
+      "size": 9768
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/baseline_audit.py",
+      "sha256": "50628b4b1ea953c783315967044faef34cf7a082af7ddd47da068968f8c90e67",
+      "size": 4258
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/baseline_runtime.py",
+      "sha256": "4ff579f482051ebcc2768e066ecd562abc926222760a8432186499141297815f",
+      "size": 14370
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/mock_llm_server.py",
+      "sha256": "ca2d0682dc6012626e4442cbd629dd51097d0fbb4a9314fe6d751b2b4fe04b9b",
+      "size": 28892
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/protocol.py",
+      "sha256": "77333d4f4d92b1f6ba1c5ff9e8e2043c16a865aa544733e4ad94a2e8241f408d",
+      "size": 2144
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/replay_driver.py",
+      "sha256": "2664e6d461b1c9dacbbd597a32b4c463b899f2969fd270f7f3b7502650c597d1",
+      "size": 21490
+    },
+    {
+      "path": "deferred-nested-20261107/fc-reflink-20261109/vendor/spr_payload/trajectory_index.py",
+      "sha256": "47fd5de1f49bf353ab60f5d2f5f94e71b85b7196105aa3632966ac7ea4cab152",
+      "size": 13043
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/PLAN.md",
+      "sha256": "047699afa2cfe118aaf13f7ae977d5e6b59c1ae3459e3d11e50efbbcb038da67",
+      "size": 3018
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/bench_fanout.py",
+      "sha256": "5611d06b73d3c33edc63b062dd94f0a579718668f02f492356b2d6bbbd3d2b74",
+      "size": 24065
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/client_mode.py",
+      "sha256": "28292478d5f1100699851c6f033b0e799a721d2a3cc94d20fffedbc144d7748f",
+      "size": 2824
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/control_gate.py",
+      "sha256": "18d4bfc931790807ff559093985ed0162f24c6653dddf1ca6da1a8b4cadc6b39",
+      "size": 1814
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/db_read.py",
+      "sha256": "7c0ac3825ee9b3692f2f286c5ab00a5d2f3d0333f7b909a6a42ce5897dfccf14",
+      "size": 681
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/environment_cube.py",
+      "sha256": "cacbcf2ae155ab27112b43202158cf92424349a215ea5966417a88ee78338633",
+      "size": 4621
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/log_capture.py",
+      "sha256": "e76a682aad996e2d0c1fbfc6197b0054951ed130b36d8f995e11b6c48a27227d",
+      "size": 1213
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/postflight.py",
+      "sha256": "4139b3ed0f982c93076c5d3dcaf592388b7f5f4252865453d7aa465cb9188d15",
+      "size": 2721
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/preflight.py",
+      "sha256": "7dca969b7ca251125a1c87d1cf554a0e79ba78041d6db08f68bd9f09b785e8c5",
+      "size": 1995
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/run_backend.py",
+      "sha256": "ff85d4695fc247d25d3a5751cec4d02e691aed53e21185b4b91e97f949272dc9",
+      "size": 2879
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/run_host_cube.py",
+      "sha256": "174ebeb5f04cc41c98820df7f06d1f1cbed6785908d8dfbad7339ad8b117429d",
+      "size": 4830
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/run_trial.py",
+      "sha256": "2c2bfe6bc589009e7bd5351e7f149e380396106ea5f31fdc94888a26b69e3d48",
+      "size": 2061
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-20261109/verify_state.c",
+      "sha256": "72f7f945902e4f90a53057f027cceb31242bc597608e3a7042e16c67fb130904",
+      "size": 4998
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/PLAN.md",
+      "sha256": "4beaa6136712cc120b91618b4682d401cf42ae951070310f943fd2da49dc149c",
+      "size": 2836
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/bench_fanout.py",
+      "sha256": "5611d06b73d3c33edc63b062dd94f0a579718668f02f492356b2d6bbbd3d2b74",
+      "size": 24065
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/client_mode.py",
+      "sha256": "28292478d5f1100699851c6f033b0e799a721d2a3cc94d20fffedbc144d7748f",
+      "size": 2824
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/db_read.py",
+      "sha256": "7c0ac3825ee9b3692f2f286c5ab00a5d2f3d0333f7b909a6a42ce5897dfccf14",
+      "size": 681
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/environment_cube.py",
+      "sha256": "cacbcf2ae155ab27112b43202158cf92424349a215ea5966417a88ee78338633",
+      "size": 4621
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/log_capture.py",
+      "sha256": "e76a682aad996e2d0c1fbfc6197b0054951ed130b36d8f995e11b6c48a27227d",
+      "size": 1213
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/postflight.py",
+      "sha256": "c36167ba788c9bdc8fa89ab7a14dccb6cac699ceca01feb4d21073f40ba016bc",
+      "size": 2714
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/preflight.py",
+      "sha256": "68163c00ef09558cf8ecf1c3067b98003fbdc0d9f00ba81d44d48927446ae58e",
+      "size": 2914
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/run_backend.py",
+      "sha256": "2c5e7b077c3d26cd7526503e9dfe25b878252ee25608d5b129cb75e8f41c491c",
+      "size": 3582
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/run_host_cube.py",
+      "sha256": "6eb5d781d5c58d2395216f528b2aca998cdcfc2dec6a0cc60ac6d8d0e6857fba",
+      "size": 4920
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/run_trial.py",
+      "sha256": "2c2bfe6bc589009e7bd5351e7f149e380396106ea5f31fdc94888a26b69e3d48",
+      "size": 2061
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/cube-client-reuse-n64-20261109/verify_state.c",
+      "sha256": "72f7f945902e4f90a53057f027cceb31242bc597608e3a7042e16c67fb130904",
+      "size": 4998
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/PLAN.md",
+      "sha256": "7daa837e8a0ad7ab990aef63e537d00ad2dc8569baf2fd9f1d07508266776110",
+      "size": 6440
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/analyze.py",
+      "sha256": "e44e1870e7a9f8ecaa54c9430d274759c1470fee46e32d791aa4edc8e16102e4",
+      "size": 3824
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/bench_fanout.py",
+      "sha256": "5611d06b73d3c33edc63b062dd94f0a579718668f02f492356b2d6bbbd3d2b74",
+      "size": 24065
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/deployment.py",
+      "sha256": "321e5d2419ac921fd2a395bbf5ced4985f8b37d8efb6d50256898baf564729ed",
+      "size": 5361
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/launch_configured.py",
+      "sha256": "d3b4e217fe397245258fad15e0377516f49b8d0420866f31b71bcf325b7e8165",
+      "size": 427
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/nbd_capacity.py",
+      "sha256": "1084531961f1a5e95a07cd09b05c8e2d8eed2a391dadf54239c3c7bdfb58da28",
+      "size": 2309
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/preflight.py",
+      "sha256": "40a4d17fd799e699b6f4599f81b8df9ba2ba2b0407e00d4721ab83ba1f28d048",
+      "size": 840
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/quota.py",
+      "sha256": "cb673e21b21176761ca42fc2cd765c2e94f9af8480afea334285e2fe100a61ad",
+      "size": 3067
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/run_backend.py",
+      "sha256": "e9ac6d5b0a6e5b68dc09048c9b1a76380f4573f10b4c18ca9d99b2224ccbdd35",
+      "size": 4566
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/run_host.py",
+      "sha256": "dc5a9c4af7d2ca57747299b3844a46eebbe010b3d3d2d7483290f3e2cabea794",
+      "size": 4660
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/run_trial.py",
+      "sha256": "1955fcaf20d22bc7b1b6e33bd0edd3a1a3e7f35224069933c4932545416c10b0",
+      "size": 2121
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/source-lock.json",
+      "sha256": "f3335f27047f79db35c24bfe7f51ea76f925b67eb06cdb10b248b3edb187f729",
+      "size": 467
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/template.json",
+      "sha256": "436b18526476052a7a985024c7ec809fcc812b9f4129518e46f9da1d7fe4baef",
+      "size": 173
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/template_setup.py",
+      "sha256": "a134be2a410ecf20fbdc70ef02e5112be08ba0530556f3b03c3b15c4f72d6638",
+      "size": 5211
+    },
+    {
+      "path": "deferred-nested-20261107/figure8-refresh-20261108/e2b-2m-full-20261109/verify_template_closure.py",
+      "sha256": "fe12bfa5ca1454e2cda7a5fd243d8c162133b66891386943f070328aa2fbe1da",
+      "size": 4903
+    },
+    {
+      "path": "table2-unified12-20261107/ae_baseline_shim.py",
+      "sha256": "6b3e334e2791f4eabc909a25302a633e5c20a17dbd379842b651b6d384ed1ea1",
+      "size": 687
+    },
+    {
+      "path": "table2-unified12-20261107/config-criu.json",
+      "sha256": "ce59f988f021f64e6863183be43285034d5f5f6430b3b328fd44c6b914aba0de",
+      "size": 4125
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/criu_copytree/criu_copytree_pilot.py",
+      "sha256": "d8bc2437e49e3afa7063a5cb36988538b9e24d9dff0f9e950b3562081e8feb92",
+      "size": 34881
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/criu_copytree/criu_copytree_pilot.py.before-e7",
+      "sha256": "16afb5d92471a60585706a29d945dd4536f388b328a7ef4da8a6b0767a32fc3c",
+      "size": 28518
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/criu_copytree/criu_sandbox_server.py",
+      "sha256": "1736815ab1977dc399b0c42fa068bde2abd93a49e7c76c0fb42a81e48f6d5330",
+      "size": 16689
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/criu_copytree/criu_worker.py",
+      "sha256": "ec5ffba03cbb74e4aebd662b06224e7a71549931624cf3dfcd2023ad995775fa",
+      "size": 12664
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/criu_copytree/criu_worker.py.before-e7",
+      "sha256": "1ace23914b7bc078f58f325ff6efb2a0d4d9c5bf18cf207f9691d80e52e036e4",
+      "size": 12610
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/fc_capacity.py",
+      "sha256": "332b723d365e15b47c7c93668cd10e4432a8e3d8a9b165c8c313717cafd50555",
+      "size": 3020
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/fc_dm_controller_pilot.py",
+      "sha256": "245083f49640bf2ccad99228f3129d21ae4c99ec27b490b224d9e521fcad3161",
+      "size": 20015
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/fc_dm_controller_pilot.py.before-fc-timing",
+      "sha256": "e2498deb15a43b32f5ea373280a15667a27fcf1c2d4d9a582a64d63af71fead3",
+      "size": 19473
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/fc_dm_pilot.py",
+      "sha256": "9de6c53ac7dd0c257eaf11c4a92b1d6f864f1299f88dd20eee62ab71731fc28d",
+      "size": 32232
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/fc_dm_pilot.py.before-fc-timing",
+      "sha256": "54812d9aa2c1aad9a31f75e15ced56d130301a3743e9dce175b64772b602779e",
+      "size": 31932
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/guest_controller_driver.py",
+      "sha256": "8ac41eecf4b9724aafa723c477158b4c266b530917b125755446ceb451946656",
+      "size": 10877
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/fc_diff_dm/guest_moatless_pause_driver.py",
+      "sha256": "c6a9f0c193e43cc6fb108ae7798dc4cd53f5cce172e16f292d58fae376459255",
+      "size": 11290
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/replay_copytree/real_replay_driver.py",
+      "sha256": "586110d58f0450879051aa7334bfce7aac775487894123348e2965a3f347d659",
+      "size": 6514
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/replay_copytree/real_trace_runner.py",
+      "sha256": "e1e792fd5aa6430cf0e961bd717500fbeced326130a84e6be7d21bcfb319a422",
+      "size": 15597
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/finalbench/replay_copytree/walker.py",
+      "sha256": "0b7ba09af2dc9b64859e521bc2d0353e3c69624dffd26e790cbb07d8ec7f25f4",
+      "size": 9768
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/baseline_audit.py",
+      "sha256": "50628b4b1ea953c783315967044faef34cf7a082af7ddd47da068968f8c90e67",
+      "size": 4258
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/baseline_runtime.py",
+      "sha256": "4ff579f482051ebcc2768e066ecd562abc926222760a8432186499141297815f",
+      "size": 14370
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/mock_llm_server.py",
+      "sha256": "ca2d0682dc6012626e4442cbd629dd51097d0fbb4a9314fe6d751b2b4fe04b9b",
+      "size": 28892
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/protocol.py",
+      "sha256": "77333d4f4d92b1f6ba1c5ff9e8e2043c16a865aa544733e4ad94a2e8241f408d",
+      "size": 2144
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/replay_driver.py",
+      "sha256": "2664e6d461b1c9dacbbd597a32b4c463b899f2969fd270f7f3b7502650c597d1",
+      "size": 21490
+    },
+    {
+      "path": "table2-unified12-20261107/vendor/spr_payload/trajectory_index.py",
+      "sha256": "47fd5de1f49bf353ab60f5d2f5f94e71b85b7196105aa3632966ac7ea4cab152",
+      "size": 13043
+    }
+  ]
+}

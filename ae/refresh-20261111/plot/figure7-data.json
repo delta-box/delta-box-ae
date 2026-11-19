@@ -1,0 +1,219 @@
+{
+  "groups": [
+    "Django",
+    "SymPy",
+    "Scientific",
+    "Tools/Small"
+  ],
+  "data": {
+    "Django": {
+      "deltabox": {
+        "floor_s": 90.5,
+        "wall_s": 91.3,
+        "ratio": 1.008
+      },
+      "e2b": {
+        "denominator_ms": 94782.71852699999,
+        "recorded_llm_ms": 54734.26225299999,
+        "action_ms": 40048.456274000004,
+        "ck_ms": 53300.02408401924,
+        "rs_ms": 22628.97707700904,
+        "traces": 2,
+        "raw_ck": 60,
+        "aligned_ck": 53,
+        "rs": 54,
+        "ratio": 1.8010848637919052,
+        "numerator_ms": 170711.71968802827,
+        "cr_share": 0.4447790772642135,
+        "raw_ck_ms": 60193.67770300596,
+        "included_ck": 53,
+        "excluded_ck": 7,
+        "excluded_ck_ms": 6893.653618986718,
+        "ck_share_of_cr": 0.7019718851691716
+      },
+      "cube": {
+        "denominator_ms": 97925.542885,
+        "recorded_llm_ms": 54734.26225299999,
+        "action_ms": 43191.280631999995,
+        "ck_ms": 40401.613375986926,
+        "rs_ms": 32102.49467099493,
+        "traces": 2,
+        "raw_ck": 60,
+        "aligned_ck": 53,
+        "rs": 54,
+        "ratio": 1.7404003685956368,
+        "numerator_ms": 170429.65093198186,
+        "cr_share": 0.4254195654951972,
+        "raw_ck_ms": 44352.56768498948,
+        "included_ck": 53,
+        "excluded_ck": 7,
+        "excluded_ck_ms": 3950.9543090025545,
+        "ck_share_of_cr": 0.5572320584898048
+      }
+    },
+    "SymPy": {
+      "deltabox": {
+        "floor_s": 70.1,
+        "wall_s": 70.9,
+        "ratio": 1.011
+      },
+      "e2b": {
+        "denominator_ms": 131377.542019,
+        "recorded_llm_ms": 61311.206789,
+        "action_ms": 70066.33523,
+        "ck_ms": 61309.10011098604,
+        "rs_ms": 22187.74878896511,
+        "traces": 2,
+        "raw_ck": 60,
+        "aligned_ck": 54,
+        "rs": 56,
+        "ratio": 1.6355488740067592,
+        "numerator_ms": 214874.39091895113,
+        "cr_share": 0.38858445877547815,
+        "raw_ck_ms": 68831.70005698776,
+        "included_ck": 54,
+        "excluded_ck": 6,
+        "excluded_ck_ms": 7522.599946001719,
+        "ck_share_of_cr": 0.7342684295122173
+      },
+      "cube": {
+        "denominator_ms": 105739.319413,
+        "recorded_llm_ms": 61311.206789,
+        "action_ms": 44428.112623999994,
+        "ck_ms": 53059.61900098191,
+        "rs_ms": 34574.753259024874,
+        "traces": 2,
+        "raw_ck": 60,
+        "aligned_ck": 54,
+        "rs": 56,
+        "ratio": 1.8287775327711508,
+        "numerator_ms": 193373.6916730068,
+        "cr_share": 0.4531866331030993,
+        "raw_ck_ms": 57916.83756597922,
+        "included_ck": 54,
+        "excluded_ck": 6,
+        "excluded_ck_ms": 4857.218564997311,
+        "ck_share_of_cr": 0.6054658421419016
+      }
+    },
+    "Scientific": {
+      "deltabox": {
+        "floor_s": 83.1,
+        "wall_s": 84.8,
+        "ratio": 1.02
+      },
+      "e2b": {
+        "denominator_ms": 284500.34956400003,
+        "recorded_llm_ms": 107649.510303,
+        "action_ms": 176850.83926100002,
+        "ck_ms": 131567.26734399854,
+        "rs_ms": 54287.62396102684,
+        "traces": 5,
+        "raw_ck": 150,
+        "aligned_ck": 130,
+        "rs": 140,
+        "ratio": 1.6532677080708338,
+        "numerator_ms": 470355.24086902535,
+        "cr_share": 0.39513728168871054,
+        "raw_ck_ms": 148108.82719499932,
+        "included_ck": 130,
+        "excluded_ck": 20,
+        "excluded_ck_ms": 16541.559851000784,
+        "ck_share_of_cr": 0.707903173385252
+      },
+      "cube": {
+        "denominator_ms": 201250.752866,
+        "recorded_llm_ms": 107649.510303,
+        "action_ms": 93601.24256299999,
+        "ck_ms": 92842.75442996295,
+        "rs_ms": 79599.1091580072,
+        "traces": 5,
+        "raw_ck": 150,
+        "aligned_ck": 130,
+        "rs": 140,
+        "ratio": 1.8568507751262335,
+        "numerator_ms": 373692.61645397014,
+        "cr_share": 0.46145376171544134,
+        "raw_ck_ms": 106952.82947396481,
+        "included_ck": 130,
+        "excluded_ck": 20,
+        "excluded_ck_ms": 14110.07504400186,
+        "ck_share_of_cr": 0.5384003193783614
+      }
+    },
+    "Tools/Small": {
+      "deltabox": {
+        "floor_s": 36.2,
+        "wall_s": 37.1,
+        "ratio": 1.024
+      },
+      "e2b": {
+        "denominator_ms": 117223.01492900001,
+        "recorded_llm_ms": 44630.086165999994,
+        "action_ms": 72592.928763,
+        "ck_ms": 69624.660261994,
+        "rs_ms": 30821.039391008526,
+        "traces": 3,
+        "raw_ck": 90,
+        "aligned_ck": 80,
+        "rs": 84,
+        "ratio": 1.856876951286748,
+        "numerator_ms": 217668.7145820025,
+        "cr_share": 0.4614613535339344,
+        "raw_ck_ms": 76563.11364499197,
+        "included_ck": 80,
+        "excluded_ck": 10,
+        "excluded_ck_ms": 6938.453382997977,
+        "ck_share_of_cr": 0.693157203369759
+      },
+      "cube": {
+        "denominator_ms": 93975.50650999999,
+        "recorded_llm_ms": 44630.086165999994,
+        "action_ms": 49345.420344,
+        "ck_ms": 48420.70547005278,
+        "rs_ms": 49433.238902987796,
+        "traces": 3,
+        "raw_ck": 90,
+        "aligned_ck": 80,
+        "rs": 84,
+        "ratio": 2.041270731141288,
+        "numerator_ms": 191829.45088304055,
+        "cr_share": 0.5101090782598479,
+        "raw_ck_ms": 53383.83974407043,
+        "included_ck": 80,
+        "excluded_ck": 10,
+        "excluded_ck_ms": 4963.134274017648,
+        "ck_share_of_cr": 0.49482630240700864
+      }
+    }
+  },
+  "metric": "llm_action_plus_cr",
+  "normalization": "Group sum of (recorded consumed LLM + measured action excluding nested LLM + 317 scheduled CK + all 334 RS) / group sum of (recorded consumed LLM + measured action excluding nested LLM).",
+  "timing": "Component sum using the DeltaBox schedule: 317 CK and 334 RS per baseline. The 43 other executed CK are excluded from the plotted sum; all original 360-event records are retained. RS includes E2B synchronous old-sandbox termination. DeltaBox inputs, action/LLM timing and RS are unchanged.",
+  "sources": [
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/table2-unified12-20261107/figure7-e2b-cube-20261109/summary.json",
+      "sha256": "dd394a063d91436669c79bc8fead5e48a4ba70c4518af3bd447b6517dfc34d0d"
+    },
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/table2-unified12-20261107/figure7-e2b-cube-20261109/independent-review.json",
+      "sha256": "d872ebe7a9c761bacc716c7615591556891cdd64eb42283f2304b6de637f4c97"
+    },
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/table2-unified12-20261107/figure7-e2b-cube-20261109/formula-audit.json",
+      "sha256": "27a15c2406e71c6bb6089cdb83b765a9ef6e88f8f90714c3085b4c003faa3c3d"
+    },
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/table2-unified12-20261107/figure7-e2b-cube-20261109/audit_formula.py",
+      "sha256": "147e1bf18fcc31cb643a7661b4f17fdbf6269a5ab5c98f926a150bd4cb379b13"
+    },
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/all-figures-tables-audit-20261104/end2end_2sys.json",
+      "sha256": "f3ce43224e6fe9a12475382fbb1249e011782147bbca21a2ecf9f0d148a92a64"
+    },
+    {
+      "path": "/Users/bytedance/Desktop/delta/ae/evidence/table2-unified12-20261107/figure7-e2b-cube-20261109/aligned317-summary.json",
+      "sha256": "3a89b8f07bc60f2f20e9bbef5f64c12413dfbfc38849ecb605edea7954f08046"
+    }
+  ]
+}
