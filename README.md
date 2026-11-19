@@ -1,5 +1,7 @@
 # DeltaBox — ATC 2026 artifact
 
+> **Release status (2026-11-19):** The new DeltaBox boot layer has passed functional acceptance, but Zenodo v4 is not published yet: Zenodo has restricted upload access. [Published v3](https://zenodo.org/records/24136571) remains available. The v4 downloader and direct-boot commands below require the pending layer. For the published baseline image, use `python3 ae/appliance/download_appliance.py --output-dir ../images --extract`.
+
 DeltaBox checkpoints, restores, and branches an agent sandbox's filesystem and process state. This repository provides its runtime, a prebuilt DeltaFS kernel, experiment drivers, and analysis scripts. The [v4 Zenodo archive](https://zenodo.org/records/24358847) provides the experiment images and recorded inputs/results.
 
 The environment has two boot profiles. DeltaBox runs directly inside a 4-vCPU/8-GiB VM with the supplied DeltaFS kernel. The baseline profile starts the preconfigured services for E2B, CubeSandbox, FC-Diff+dm, CRIU+cp, and copy+replay. Both profiles use the same downloaded base disk. A small qcow2 layer adds the DeltaBox boot entry and functional checks.

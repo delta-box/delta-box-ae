@@ -1,5 +1,7 @@
 # DeltaBox — ATC 2026 实验材料
 
+> **发布状态（2026-11-19）：** 新增 DeltaBox 启动层已通过功能验收，但 Zenodo 限制了上传访问，v4 尚未发布。[已发布的 v3](https://zenodo.org/records/24136571) 仍可使用。下文的 v4 下载器和 DeltaBox 直接启动命令需要待发布的镜像层；当前基线镜像可用 `python3 ae/appliance/download_appliance.py --output-dir ../images --extract` 下载。
+
 DeltaBox 为 agent 沙箱提供文件系统与进程状态的 checkpoint、restore 和分支功能。本仓库包含运行时代码、预编译 DeltaFS 内核、实验驱动和分析脚本。[Zenodo v4](https://zenodo.org/records/24358847) 提供实验镜像及录制输入、原始结果。
 
 环境有两种启动配置。DeltaBox 使用随附的 DeltaFS 内核，在 4 vCPU / 8 GiB 虚拟机中直接运行。基线配置启动 E2B、CubeSandbox、FC-Diff+dm、CRIU+cp 和 copy+replay 所需的服务。两种配置共用下载的基础磁盘，小型 qcow2 补充层提供 DeltaBox 启动入口和功能检查。
